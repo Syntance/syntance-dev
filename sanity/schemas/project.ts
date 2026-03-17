@@ -15,9 +15,15 @@ export const project = defineType({
       name: "slug",
       title: "Slug (subdomena)",
       type: "slug",
-      description: "Subdomena klienta, np. 'mojafirma' → mojafirma.syntance.dev",
+      description: "Subdomena do portalu klienta, np. 'mojafirma' → mojafirma.syntance.dev",
       options: { source: "name", maxLength: 48 },
       validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: "clientDomain",
+      title: "Domena klienta",
+      type: "string",
+      description: "Domena docelowa strony klienta, np. 'syntance.com' (wyświetlana w dashboardzie)",
     }),
     defineField({
       name: "previewUrl",
@@ -53,10 +59,10 @@ export const project = defineType({
   preview: {
     select: {
       title: "name",
-      slug: "slug.current",
+      clientDomain: "clientDomain",
       status: "status",
     },
-    prepare({ title, slug, status }) {
+    prepare({ title, clientDomain, status }) {
       const statusMap: Record<string, string> = {
         design: "🎨 Projektowanie",
         development: "💻 Development",
@@ -66,7 +72,7 @@ export const project = defineType({
       };
       return {
         title,
-        subtitle: `${slug}.syntance.dev — ${statusMap[status] || status}`,
+        subtitle: `${clientDomain || "brak domeny"} — ${statusMap[status] || status}`,
       };
     },
   },
