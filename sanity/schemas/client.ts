@@ -35,6 +35,13 @@ export const client = defineType({
         "Ustaw hasło startowe. Przy pierwszym logowaniu konto zostanie aktywowane.",
     }),
     defineField({
+      name: "projects",
+      title: "Przypisane projekty",
+      type: "array",
+      of: [{ type: "reference", to: [{ type: "project" }] }],
+      description: "Wybierz projekty, do których klient ma dostęp",
+    }),
+    defineField({
       name: "isAdmin",
       title: "Admin",
       type: "boolean",

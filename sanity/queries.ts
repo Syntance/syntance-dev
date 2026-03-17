@@ -7,15 +7,13 @@ export interface SanityClient {
   company: string | null;
   password: string | null;
   isAdmin: boolean;
+  projects: SanityProject[];
 }
 
 export interface SanityProject {
   _id: string;
   name: string;
   slug: string;
-  clientId: string | null;
-  clientName: string | null;
-  clientEmail: string | null;
   previewUrl: string;
   status: string;
   description: string | null;
@@ -23,27 +21,25 @@ export interface SanityProject {
   _updatedAt: string;
 }
 
+const PROJECT_FIELDS = `
+  _id,
+  name,
+  "slug": slug.current,
+  previewUrl,
+  status,
+  description,
+  _createdAt,
+  _updatedAt
+`;
+
 const CLIENT_FIELDS = `
   _id,
   name,
   email,
   company,
   password,
-  isAdmin
-`;
-
-const PROJECT_FIELDS = `
-  _id,
-  name,
-  "slug": slug.current,
-  "clientId": client._ref,
-  "clientName": client->name,
-  "clientEmail": client->email,
-  previewUrl,
-  status,
-  description,
-  _createdAt,
-  _updatedAt
+  isAdmin,
+  "projects": projects[]->{ ${PROJECT_FIELDS} }
 `;
 
 export async function getClientByEmail(
@@ -61,15 +57,6 @@ export async function getProjectBySlug(
   return sanityClient.fetch(
     `*[_type == "project" && slug.current == $slug][0]{ ${PROJECT_FIELDS} }`,
     { slug }
-  );
-}
-
-export async function getProjectsByClientId(
-  clientId: string
-): Promise<SanityProject[]> {
-  return sanityClient.fetch(
-    `*[_type == "project" && client._ref == $clientId] | order(_createdAt desc) { ${PROJECT_FIELDS} }`,
-    { clientId }
   );
 }
 
@@ -93,6 +80,6 @@ export async function getProjectsForUser(
     return { projects, isAdmin: true, client };
   }
   
-  const projects = await getProjectsByClientId(client._id);
+  const projects = client.projects || [];
   return { projects, isAdmin: false, client };
 }
