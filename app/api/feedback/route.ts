@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getClientSession } from "@/lib/auth";
-import { getProjectsByEmail } from "@/sanity/queries";
+import { getProjectsForUser } from "@/sanity/queries";
 
 export async function POST(req: NextRequest) {
   const session = await getClientSession();
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   let slug = projectSlug;
   if (!slug) {
-    const projects = await getProjectsByEmail(session.email);
+    const { projects } = await getProjectsForUser(session.email);
     slug = projects[0]?.slug;
   }
 
@@ -47,7 +47,7 @@ export async function GET() {
     return NextResponse.json({ error: "Brak autoryzacji" }, { status: 401 });
   }
 
-  const projects = await getProjectsByEmail(session.email);
+  const { projects } = await getProjectsForUser(session.email);
   const slugs = projects.map((p) => p.slug);
 
   const feedbacks = await prisma.feedback.findMany({
