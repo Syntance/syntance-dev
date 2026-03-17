@@ -8,7 +8,7 @@ export function SyntanceLogo({ className = "" }: { className?: string }) {
         alt="Syntance"
         width={160}
         height={40}
-        className="h-10 w-auto"
+        className="h-10 w-auto mix-blend-lighten"
       />
     </div>
   );
