@@ -77,11 +77,8 @@ export default async function ProjectsPage() {
               >
                 <div className="mb-4 flex items-center justify-between">
                   <div
-                    className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${STATUS_COLORS[project.status]} bg-opacity-20 text-white`}
+                    className={`inline-flex items-center justify-center rounded-full px-4 py-1.5 text-xs font-medium ${STATUS_COLORS[project.status]} text-white`}
                   >
-                    <div
-                      className={`h-2 w-2 rounded-full ${STATUS_COLORS[project.status]}`}
-                    />
                     {STATUS_LABELS[project.status] || project.status}
                   </div>
                   <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
