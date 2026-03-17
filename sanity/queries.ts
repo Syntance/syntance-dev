@@ -10,6 +10,7 @@ export interface SanityProject {
   previewUrl: string;
   status: string;
   description: string | null;
+  isAdmin: boolean;
   _createdAt: string;
   _updatedAt: string;
 }
@@ -24,6 +25,7 @@ const PROJECT_FIELDS = `
   previewUrl,
   status,
   description,
+  isAdmin,
   _createdAt,
   _updatedAt
 `;
@@ -50,4 +52,26 @@ export async function getAllProjects(): Promise<SanityProject[]> {
   return sanityClient.fetch(
     `*[_type == "project"] | order(_createdAt desc) { ${PROJECT_FIELDS} }`
   );
+}
+
+export async function isEmailAdmin(email: string): Promise<boolean> {
+  const result = await sanityClient.fetch(
+    `count(*[_type == "project" && clientEmail == $email && isAdmin == true]) > 0`,
+    { email }
+  );
+  return result;
+}
+
+export async function getProjectsForUser(
+  email: string
+): Promise<{ projects: SanityProject[]; isAdmin: boolean }> {
+  const adminCheck = await isEmailAdmin(email);
+  
+  if (adminCheck) {
+    const projects = await getAllProjects();
+    return { projects, isAdmin: true };
+  }
+  
+  const projects = await getProjectsByEmail(email);
+  return { projects, isAdmin: false };
 }

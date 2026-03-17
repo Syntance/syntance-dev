@@ -67,6 +67,14 @@ export const project = defineType({
         "Ustaw hasło startowe dla klienta. Przy pierwszym logowaniu konto zostanie aktywowane automatycznie.",
     }),
     defineField({
+      name: "isAdmin",
+      title: "Admin",
+      type: "boolean",
+      description:
+        "Zaznacz, jeśli klient ma mieć dostęp do wszystkich projektów Syntance (rola admina).",
+      initialValue: false,
+    }),
+    defineField({
       name: "description",
       title: "Opis projektu",
       type: "text",
