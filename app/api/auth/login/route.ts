@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { signToken, verifyPassword, hashPassword } from "@/lib/auth";
-import { getProjectsByEmail } from "@/sanity/queries";
+import { getClientByEmail, getProjectsForUser } from "@/sanity/queries";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -48,35 +48,43 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const projects = await getProjectsByEmail(email);
-  if (projects.length === 0) {
+  const sanityClient = await getClientByEmail(email);
+  if (!sanityClient) {
     return NextResponse.json(
-      { error: "Brak przypisanych projektów do tego adresu email" },
+      { error: "Nie znaleziono konta z tym adresem email" },
       { status: 401 }
     );
   }
 
-  let client = await prisma.clientUser.findUnique({ where: { email } });
+  const { projects } = await getProjectsForUser(email);
+  if (projects.length === 0 && !sanityClient.isAdmin) {
+    return NextResponse.json(
+      { error: "Brak przypisanych projektów do tego konta" },
+      { status: 401 }
+    );
+  }
 
-  if (!client || !client.passwordHash) {
-    const sanityPassword = projects[0].clientPassword;
+  let localClient = await prisma.clientUser.findUnique({ where: { email } });
+
+  if (!localClient || !localClient.passwordHash) {
+    const sanityPassword = sanityClient.password;
 
     if (sanityPassword && password === sanityPassword) {
       const passwordHash = await hashPassword(password);
 
-      if (client) {
-        client = await prisma.clientUser.update({
+      if (localClient) {
+        localClient = await prisma.clientUser.update({
           where: { email },
           data: {
             passwordHash,
-            name: projects[0].clientName || client.name,
+            name: sanityClient.name || localClient.name,
           },
         });
       } else {
-        client = await prisma.clientUser.create({
+        localClient = await prisma.clientUser.create({
           data: {
             email,
-            name: projects[0].clientName,
+            name: sanityClient.name,
             passwordHash,
           },
         });
@@ -97,7 +105,7 @@ export async function POST(req: NextRequest) {
       );
     }
   } else {
-    if (!(await verifyPassword(password, client.passwordHash))) {
+    if (!(await verifyPassword(password, localClient.passwordHash))) {
       return NextResponse.json(
         { error: "Nieprawidłowe hasło" },
         { status: 401 }
@@ -106,14 +114,14 @@ export async function POST(req: NextRequest) {
   }
 
   const token = signToken({
-    userId: client.id,
-    email: client.email,
+    userId: localClient.id,
+    email: localClient.email,
     type: "client",
   });
 
   const response = NextResponse.json({
     success: true,
-    slug: projects[0].slug,
+    slug: projects[0]?.slug || null,
   });
   response.cookies.set("session", token, {
     httpOnly: true,

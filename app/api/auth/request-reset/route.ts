@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { generateResetToken } from "@/lib/auth";
 import { sendPasswordResetEmail } from "@/lib/email";
-import { getProjectsByEmail } from "@/sanity/queries";
+import { getProjectsForUser } from "@/sanity/queries";
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json();
@@ -14,8 +14,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const client = await prisma.clientUser.findUnique({ where: { email } });
-  if (!client || !client.passwordHash) {
+  const localClient = await prisma.clientUser.findUnique({ where: { email } });
+  if (!localClient || !localClient.passwordHash) {
     return NextResponse.json({ success: true });
   }
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const projects = await getProjectsByEmail(email);
+  const { projects } = await getProjectsForUser(email);
   await sendPasswordResetEmail(email, token, projects[0]?.slug);
 
   return NextResponse.json({ success: true });

@@ -20,20 +20,11 @@ export const project = defineType({
       validation: (rule) => rule.required(),
     }),
     defineField({
-      name: "clientEmail",
-      title: "Email klienta",
-      type: "string",
-      description: "Email przypisanego klienta — używany do logowania w portalu",
-      validation: (rule) =>
-        rule.required().regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, {
-          name: "email",
-          invert: false,
-        }),
-    }),
-    defineField({
-      name: "clientName",
-      title: "Nazwa klienta",
-      type: "string",
+      name: "client",
+      title: "Przypisany klient",
+      type: "reference",
+      to: [{ type: "client" }],
+      description: "Wybierz klienta, który ma dostęp do tego projektu",
     }),
     defineField({
       name: "previewUrl",
@@ -60,21 +51,6 @@ export const project = defineType({
       validation: (rule) => rule.required(),
     }),
     defineField({
-      name: "clientPassword",
-      title: "Hasło klienta",
-      type: "string",
-      description:
-        "Ustaw hasło startowe dla klienta. Przy pierwszym logowaniu konto zostanie aktywowane automatycznie.",
-    }),
-    defineField({
-      name: "isAdmin",
-      title: "Admin",
-      type: "boolean",
-      description:
-        "Zaznacz, jeśli klient ma mieć dostęp do wszystkich projektów Syntance (rola admina).",
-      initialValue: false,
-    }),
-    defineField({
       name: "description",
       title: "Opis projektu",
       type: "text",
@@ -84,10 +60,10 @@ export const project = defineType({
   preview: {
     select: {
       title: "name",
-      subtitle: "clientEmail",
+      clientName: "client.name",
       status: "status",
     },
-    prepare({ title, subtitle, status }) {
+    prepare({ title, clientName, status }) {
       const statusMap: Record<string, string> = {
         design: "🎨 Projektowanie",
         development: "💻 Development",
@@ -97,7 +73,7 @@ export const project = defineType({
       };
       return {
         title,
-        subtitle: `${subtitle} — ${statusMap[status] || status}`,
+        subtitle: `${clientName || "Brak klienta"} — ${statusMap[status] || status}`,
       };
     },
   },

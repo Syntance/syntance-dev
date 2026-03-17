@@ -16,11 +16,13 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const { projects, isAdmin, currentProject } = await getUserProjectsInfo();
+  const { projects, isAdmin, currentProject, client } = await getUserProjectsInfo();
 
-  if (!currentProject) {
+  if (!client) {
     redirect("/login");
   }
+
+  const showProjectSelector = projects.length > 1 && currentProject;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -29,16 +31,23 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-6">
             <SyntanceLogo />
             <div className="h-6 w-px bg-border" />
-            {isAdmin && projects.length > 1 ? (
+            {showProjectSelector ? (
               <ProjectSelector
                 projects={projects}
                 currentSlug={currentProject.slug}
               />
-            ) : (
+            ) : currentProject ? (
               <div>
                 <p className="text-sm font-medium">{currentProject.name}</p>
                 <p className="text-xs text-muted-foreground">
                   {currentProject.slug}.syntance.dev
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm font-medium">{client.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  Brak projektów
                 </p>
               </div>
             )}
@@ -49,7 +58,7 @@ export default async function DashboardLayout({
             )}
           </div>
           <div className="flex items-center gap-4">
-            <DashboardNav />
+            {currentProject && <DashboardNav />}
             <LogoutButton />
           </div>
         </div>
