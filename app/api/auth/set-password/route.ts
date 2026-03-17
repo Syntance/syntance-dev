@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hashPassword, signToken } from "@/lib/auth";
-import { getProjectsByEmail } from "@/sanity/queries";
+import { getProjectsForUser } from "@/sanity/queries";
 
 export async function POST(req: NextRequest) {
   const { token, password } = await req.json();
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const projects = await getProjectsByEmail(client.email);
+  const { projects } = await getProjectsForUser(client.email);
 
   const sessionToken = signToken({
     userId: client.id,
