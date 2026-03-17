@@ -60,6 +60,13 @@ export const project = defineType({
       validation: (rule) => rule.required(),
     }),
     defineField({
+      name: "clientPassword",
+      title: "Hasło klienta",
+      type: "string",
+      description:
+        "Ustaw hasło startowe dla klienta. Przy pierwszym logowaniu konto zostanie aktywowane automatycznie.",
+    }),
+    defineField({
       name: "description",
       title: "Opis projektu",
       type: "text",

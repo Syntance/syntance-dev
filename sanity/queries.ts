@@ -6,6 +6,7 @@ export interface SanityProject {
   slug: string;
   clientEmail: string;
   clientName: string | null;
+  clientPassword: string | null;
   previewUrl: string;
   status: string;
   description: string | null;
@@ -19,6 +20,7 @@ const PROJECT_FIELDS = `
   "slug": slug.current,
   clientEmail,
   clientName,
+  clientPassword,
   previewUrl,
   status,
   description,
