@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { SyntanceLogo } from "@/components/logo";
@@ -88,9 +88,6 @@ function SetPasswordForm() {
   if (success) {
     return (
       <div className="w-full max-w-sm">
-        <div className="mb-10 flex justify-center">
-          <SyntanceLogo />
-        </div>
         <div className="rounded-xl border border-border bg-card p-8 text-center">
           <CheckCircle className="mx-auto mb-4 h-12 w-12 text-success" />
           <h1 className="mb-2 text-lg font-semibold">Sprawdź email</h1>
@@ -108,10 +105,6 @@ function SetPasswordForm() {
 
   return (
     <div className="w-full max-w-sm">
-      <div className="mb-10 flex justify-center">
-        <SyntanceLogo />
-      </div>
-
       <div className="rounded-xl border border-border bg-card p-8">
         <h1 className="mb-2 text-center text-lg font-semibold">
           {step === "request" ? "Ustaw hasło" : "Nowe hasło"}
@@ -213,14 +206,20 @@ function SetPasswordForm() {
 
 export default function SetPasswordPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-8">
-      <Suspense
-        fallback={
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        }
-      >
-        <SetPasswordForm />
-      </Suspense>
+    <div className="min-h-screen">
+      <div className="absolute left-6 top-6">
+        <SyntanceLogo />
+      </div>
+
+      <div className="flex min-h-screen flex-col items-center justify-center p-8">
+        <Suspense
+          fallback={
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          }
+        >
+          <SetPasswordForm />
+        </Suspense>
+      </div>
     </div>
   );
 }

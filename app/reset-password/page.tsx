@@ -19,9 +19,6 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <div className="w-full max-w-sm">
-        <div className="mb-10 flex justify-center">
-          <SyntanceLogo />
-        </div>
         <div className="rounded-xl border border-border bg-card p-8 text-center">
           <AlertCircle className="mx-auto mb-4 h-12 w-12 text-destructive" />
           <h1 className="mb-2 text-lg font-semibold">Brak tokenu</h1>
@@ -72,14 +69,8 @@ function ResetPasswordForm() {
 
   return (
     <div className="w-full max-w-sm">
-      <div className="mb-10 flex justify-center">
-        <SyntanceLogo />
-      </div>
-
       <div className="rounded-xl border border-border bg-card p-8">
-        <h1 className="mb-2 text-center text-lg font-semibold">
-          Nowe hasło
-        </h1>
+        <h1 className="mb-2 text-center text-lg font-semibold">Nowe hasło</h1>
         <p className="mb-6 text-center text-sm text-muted-foreground">
           Ustaw nowe hasło do swojego konta
         </p>
@@ -146,14 +137,20 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-8">
-      <Suspense
-        fallback={
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        }
-      >
-        <ResetPasswordForm />
-      </Suspense>
+    <div className="min-h-screen">
+      <div className="absolute left-6 top-6">
+        <SyntanceLogo />
+      </div>
+
+      <div className="flex min-h-screen flex-col items-center justify-center p-8">
+        <Suspense
+          fallback={
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          }
+        >
+          <ResetPasswordForm />
+        </Suspense>
+      </div>
     </div>
   );
 }
