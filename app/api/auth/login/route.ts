@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { signToken, verifyPassword } from "@/lib/auth";
+import { signToken, verifyPassword, hashPassword } from "@/lib/auth";
 import { getProjectsByEmail } from "@/sanity/queries";
 
 export async function POST(req: NextRequest) {
@@ -56,22 +56,53 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const client = await prisma.clientUser.findUnique({ where: { email } });
-  if (!client || !client.passwordHash) {
-    return NextResponse.json(
-      {
-        error: "Konto nie ma ustawionego hasła. Użyj opcji 'Ustaw hasło'.",
-        code: "NO_PASSWORD",
-      },
-      { status: 401 }
-    );
-  }
+  let client = await prisma.clientUser.findUnique({ where: { email } });
 
-  if (!(await verifyPassword(password, client.passwordHash))) {
-    return NextResponse.json(
-      { error: "Nieprawidłowe hasło" },
-      { status: 401 }
-    );
+  if (!client || !client.passwordHash) {
+    const sanityPassword = projects[0].clientPassword;
+
+    if (sanityPassword && password === sanityPassword) {
+      const passwordHash = await hashPassword(password);
+
+      if (client) {
+        client = await prisma.clientUser.update({
+          where: { email },
+          data: {
+            passwordHash,
+            name: projects[0].clientName || client.name,
+          },
+        });
+      } else {
+        client = await prisma.clientUser.create({
+          data: {
+            email,
+            name: projects[0].clientName,
+            passwordHash,
+          },
+        });
+      }
+    } else if (sanityPassword) {
+      return NextResponse.json(
+        { error: "Nieprawidłowe hasło" },
+        { status: 401 }
+      );
+    } else {
+      return NextResponse.json(
+        {
+          error:
+            "Konto nie ma ustawionego hasła. Użyj opcji 'Ustaw hasło' lub poproś admina o ustawienie hasła w Sanity.",
+          code: "NO_PASSWORD",
+        },
+        { status: 401 }
+      );
+    }
+  } else {
+    if (!(await verifyPassword(password, client.passwordHash))) {
+      return NextResponse.json(
+        { error: "Nieprawidłowe hasło" },
+        { status: 401 }
+      );
+    }
   }
 
   const token = signToken({
