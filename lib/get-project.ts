@@ -19,7 +19,8 @@ export async function getCurrentProject(): Promise<SanityProject | null> {
   if (slug) {
     const project = await getProjectBySlug(slug);
     if (project) {
-      if (isAdmin || project.clientEmail === session.email) {
+      const hasAccess = isAdmin || projects.some((p) => p._id === project._id);
+      if (hasAccess) {
         return project;
       }
     }

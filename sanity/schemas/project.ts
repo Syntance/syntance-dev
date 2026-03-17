@@ -20,13 +20,6 @@ export const project = defineType({
       validation: (rule) => rule.required(),
     }),
     defineField({
-      name: "client",
-      title: "Przypisany klient",
-      type: "reference",
-      to: [{ type: "client" }],
-      description: "Wybierz klienta, który ma dostęp do tego projektu",
-    }),
-    defineField({
       name: "previewUrl",
       title: "Preview URL",
       type: "url",
@@ -60,10 +53,10 @@ export const project = defineType({
   preview: {
     select: {
       title: "name",
-      clientName: "client.name",
+      slug: "slug.current",
       status: "status",
     },
-    prepare({ title, clientName, status }) {
+    prepare({ title, slug, status }) {
       const statusMap: Record<string, string> = {
         design: "🎨 Projektowanie",
         development: "💻 Development",
@@ -73,7 +66,7 @@ export const project = defineType({
       };
       return {
         title,
-        subtitle: `${clientName || "Brak klienta"} — ${statusMap[status] || status}`,
+        subtitle: `${slug}.syntance.dev — ${statusMap[status] || status}`,
       };
     },
   },
