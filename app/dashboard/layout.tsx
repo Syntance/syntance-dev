@@ -1,10 +1,10 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getClientSession } from "@/lib/auth";
-import { getProjectBySlug, getProjectsByEmail } from "@/sanity/queries";
+import { getUserProjectsInfo } from "@/lib/get-project";
 import { SyntanceLogo } from "@/components/logo";
 import { DashboardNav } from "./nav";
 import { LogoutButton } from "./logout-button";
+import { ProjectSelector } from "./project-selector";
 
 export default async function DashboardLayout({
   children,
@@ -16,20 +16,9 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const headersList = await headers();
-  const slug = headersList.get("x-project-slug");
+  const { projects, isAdmin, currentProject } = await getUserProjectsInfo();
 
-  let project;
-  if (slug) {
-    project = await getProjectBySlug(slug);
-  }
-
-  if (!project) {
-    const projects = await getProjectsByEmail(session.email);
-    project = projects[0];
-  }
-
-  if (!project) {
+  if (!currentProject) {
     redirect("/login");
   }
 
@@ -40,12 +29,24 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-6">
             <SyntanceLogo />
             <div className="h-6 w-px bg-border" />
-            <div>
-              <p className="text-sm font-medium">{project.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {project.slug}.syntance.dev
-              </p>
-            </div>
+            {isAdmin && projects.length > 1 ? (
+              <ProjectSelector
+                projects={projects}
+                currentSlug={currentProject.slug}
+              />
+            ) : (
+              <div>
+                <p className="text-sm font-medium">{currentProject.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {currentProject.slug}.syntance.dev
+                </p>
+              </div>
+            )}
+            {isAdmin && (
+              <span className="rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent-light">
+                Admin
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <DashboardNav />
