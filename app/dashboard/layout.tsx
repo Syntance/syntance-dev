@@ -45,7 +45,7 @@ export default async function DashboardLayout({
                 <div>
                   <p className="text-sm font-medium">{currentProject.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {currentProject.slug}.syntance.dev
+                    {currentProject.clientDomain || `${currentProject.slug}.syntance.dev`}
                   </p>
                 </div>
               </>

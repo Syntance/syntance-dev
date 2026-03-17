@@ -14,6 +14,7 @@ export interface SanityProject {
   _id: string;
   name: string;
   slug: string;
+  clientDomain: string | null;
   previewUrl: string;
   status: string;
   description: string | null;
@@ -25,6 +26,7 @@ const PROJECT_FIELDS = `
   _id,
   name,
   "slug": slug.current,
+  clientDomain,
   previewUrl,
   status,
   description,
