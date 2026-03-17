@@ -30,7 +30,7 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        router.push("/dashboard");
+        router.push("/projects");
       } else {
         if (data.code === "NO_PASSWORD") {
           setNoPassword(true);

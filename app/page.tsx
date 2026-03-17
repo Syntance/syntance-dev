@@ -7,13 +7,17 @@ import Link from "next/link";
 export default async function HomePage() {
   const headersList = await headers();
   const slug = headersList.get("x-project-slug");
+  const session = await getSession();
 
   if (slug) {
-    const session = await getSession();
     if (session && session.type === "client") {
       redirect("/dashboard");
     }
     redirect("/login");
+  }
+
+  if (session && session.type === "client") {
+    redirect("/projects");
   }
 
   return (

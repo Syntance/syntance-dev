@@ -74,7 +74,7 @@ function SetPasswordForm() {
       const data = await res.json();
 
       if (res.ok) {
-        router.push("/dashboard");
+        router.push("/projects");
       } else {
         setError(data.error || "Wystąpił błąd");
       }

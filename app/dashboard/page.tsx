@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getUserProjectsInfo } from "@/lib/get-project";
 import { StatusBar } from "@/components/status-bar";
-import { ExternalLink, FolderOpen } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   design: "Projektowanie",
@@ -11,93 +11,25 @@ const STATUS_LABELS: Record<string, string> = {
   live: "Live",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  design: "bg-purple-500",
-  development: "bg-blue-500",
-  qa: "bg-yellow-500",
-  review: "bg-orange-500",
-  live: "bg-green-500",
-};
-
 export default async function DashboardPage() {
-  const { projects, isAdmin, currentProject, client } = await getUserProjectsInfo();
+  const { currentProject, client } = await getUserProjectsInfo();
   
   if (!client) redirect("/login");
-
-  const clientName = client.name;
-  const showProjectsGrid = projects.length > 1;
-
-  if (!currentProject && projects.length === 0) {
-    return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Witaj{clientName ? `, ${clientName}` : ""}
-            {isAdmin && " (Admin)"}
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Nie masz jeszcze przypisanych projektów.
-          </p>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-12 text-center">
-          <FolderOpen className="mx-auto h-12 w-12 text-muted-foreground/50" />
-          <p className="mt-4 text-muted-foreground">
-            Brak projektów do wyświetlenia
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!currentProject) redirect("/login");
+  if (!currentProject) redirect("/projects");
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Witaj{clientName ? `, ${clientName}` : ""}
-          {isAdmin && " (Admin)"}
+          {currentProject.name}
         </h1>
-        {currentProject && (
-          <p className="mt-1 text-muted-foreground">
-            Aktualny etap:{" "}
-            <span className="font-medium text-accent-light">
-              {STATUS_LABELS[currentProject.status] || currentProject.status}
-            </span>
-          </p>
-        )}
+        <p className="mt-1 text-muted-foreground">
+          Aktualny etap:{" "}
+          <span className="font-medium text-accent-light">
+            {STATUS_LABELS[currentProject.status] || currentProject.status}
+          </span>
+        </p>
       </div>
-
-      {showProjectsGrid && (
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h2 className="mb-4 text-sm font-medium text-muted-foreground">
-            {isAdmin ? "Wszystkie projekty" : "Twoje projekty"} ({projects.length})
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => (
-              <a
-                key={project.slug}
-                href={`https://${project.slug}.syntance.dev/dashboard`}
-                className={`flex items-center gap-3 rounded-lg border p-4 transition-colors hover:bg-background/50 ${
-                  project.slug === currentProject?.slug
-                    ? "border-accent-light bg-accent/10"
-                    : "border-border"
-                }`}
-              >
-                <div
-                  className={`h-3 w-3 rounded-full ${STATUS_COLORS[project.status] || "bg-gray-500"}`}
-                />
-                <div className="flex-1 overflow-hidden">
-                  <p className="truncate text-sm font-medium">{project.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {STATUS_LABELS[project.status] || project.status}
-                  </p>
-                </div>
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="rounded-xl border border-border bg-card p-6">
         <h2 className="mb-6 text-sm font-medium text-muted-foreground">
