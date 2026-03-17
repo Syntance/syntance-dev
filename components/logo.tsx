@@ -1,11 +1,15 @@
+import Image from "next/image";
+
 export function SyntanceLogo({ className = "" }: { className?: string }) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <div className="relative h-8 w-8">
-        <div className="absolute inset-0 rounded-lg bg-accent" />
-        <div className="absolute inset-[3px] rounded-[5px] bg-background" />
-        <div className="absolute inset-[6px] rounded-[3px] bg-accent-light" />
-      </div>
+      <Image
+        src="/logo.png"
+        alt="Syntance"
+        width={32}
+        height={32}
+        className="h-8 w-8 invert"
+      />
       <span className="text-xl font-semibold tracking-tight">Syntance</span>
     </div>
   );
