@@ -32,20 +32,12 @@ export default async function HomePage() {
             feedback — wszystko w jednym miejscu.
           </p>
         </div>
-        <div className="flex gap-4">
-          <Link
-            href="/login"
-            className="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-light"
-          >
-            Zaloguj się
-          </Link>
-          <Link
-            href="/admin"
-            className="rounded-lg border border-border px-6 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-          >
-            Panel admina
-          </Link>
-        </div>
+        <Link
+          href="/login"
+          className="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent-light"
+        >
+          Zaloguj się
+        </Link>
       </div>
     </div>
   );
