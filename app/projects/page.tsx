@@ -56,9 +56,7 @@ export default async function ProjectsPage() {
             Witaj{client.name ? `, ${client.name}` : ""}!
           </h1>
           <p className="mt-1 text-muted-foreground">
-            {isAdmin
-              ? "Wszystkie projekty Syntance"
-              : "Wybierz projekt, aby zobaczyć szczegóły"}
+            Wybierz projekt, aby zobaczyć szczegóły
           </p>
         </div>
 
