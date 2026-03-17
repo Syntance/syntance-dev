@@ -5,6 +5,8 @@ import bcrypt from "bcryptjs";
 const adapter = new PrismaPg({
   connectionString:
     process.env.DATABASE_URL ||
+    process.env.Database_POSTGRES_PRISMA_URL ||
+    process.env.Database_DATABASE_URL_UNPOOLED ||
     "postgresql://postgres:postgres@localhost:5432/syntance_dev",
 });
 const prisma = new PrismaClient({ adapter });
