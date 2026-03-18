@@ -15,7 +15,7 @@ export const project = defineType({
       name: "slug",
       title: "Slug (subdomena)",
       type: "slug",
-      description: "Subdomena do portalu klienta, np. 'mojafirma' → mojafirma.syntance.dev",
+      description: "Identyfikator projektu, np. 'mojafirma'",
       options: { source: "name", maxLength: 48 },
       validation: (rule) => rule.required(),
     }),
@@ -29,7 +29,7 @@ export const project = defineType({
       name: "previewUrl",
       title: "Preview URL",
       type: "url",
-      description: "URL do live preview strony (np. Vercel preview deployment)",
+      description: "URL strony klienta — otwiera się po kliknięciu kafelka w portalu",
       validation: (rule) => rule.required(),
     }),
     defineField({

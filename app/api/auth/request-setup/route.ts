@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { generateResetToken } from "@/lib/auth";
 import { sendPasswordSetupEmail } from "@/lib/email";
-import { getClientByEmail, getProjectsForUser } from "@/sanity/queries";
+import { getClientByEmail } from "@/sanity/queries";
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json();
@@ -50,8 +50,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const { projects } = await getProjectsForUser(email);
-  await sendPasswordSetupEmail(email, token, projects[0]?.slug);
+  await sendPasswordSetupEmail(email, token);
 
   return NextResponse.json({ success: true });
 }

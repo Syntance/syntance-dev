@@ -1,20 +1,10 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { SyntanceLogo } from "@/components/logo";
 import Link from "next/link";
 
 export default async function HomePage() {
-  const headersList = await headers();
-  const slug = headersList.get("x-project-slug");
   const session = await getSession();
-
-  if (slug) {
-    if (session && session.type === "client") {
-      redirect("/dashboard");
-    }
-    redirect("/login");
-  }
 
   if (session && session.type === "client") {
     redirect("/projects");
@@ -32,8 +22,8 @@ export default async function HomePage() {
             Client Portal
           </h1>
           <p className="text-muted-foreground">
-            Śledź postęp swojego projektu, przeglądaj live preview i zostaw
-            feedback — wszystko w jednym miejscu.
+            Śledź postęp swojego projektu i przeglądaj live preview
+            — wszystko w jednym miejscu.
           </p>
         </div>
         <Link
