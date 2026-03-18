@@ -7,12 +7,9 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://syntance.dev";
 
 export async function sendPasswordSetupEmail(
   email: string,
-  token: string,
-  projectSlug?: string
+  token: string
 ) {
-  const url = projectSlug
-    ? `https://${projectSlug}.syntance.dev/set-password?token=${token}`
-    : `${BASE_URL}/set-password?token=${token}`;
+  const url = `${BASE_URL}/set-password?token=${token}`;
 
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
@@ -48,12 +45,9 @@ export async function sendPasswordSetupEmail(
 
 export async function sendPasswordResetEmail(
   email: string,
-  token: string,
-  projectSlug?: string
+  token: string
 ) {
-  const url = projectSlug
-    ? `https://${projectSlug}.syntance.dev/reset-password?token=${token}`
-    : `${BASE_URL}/reset-password?token=${token}`;
+  const url = `${BASE_URL}/reset-password?token=${token}`;
 
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,

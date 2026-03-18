@@ -25,14 +25,6 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
 }
 
-model Feedback {
-  id          String   @id @default(cuid())
-  projectSlug String
-  email       String
-  message     String
-  createdAt   DateTime @default(now())
-}
-
 model AdminUser {
   id           String @id @default(cuid())
   email        String @unique

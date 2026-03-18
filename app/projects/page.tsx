@@ -2,9 +2,8 @@ import { redirect } from "next/navigation";
 import { getClientSession } from "@/lib/auth";
 import { getProjectsForUser } from "@/sanity/queries";
 import { SyntanceLogo } from "@/components/logo";
-import { LogoutButton } from "@/app/dashboard/logout-button";
+import { LogoutButton } from "@/components/logout-button";
 import { FolderOpen, ExternalLink } from "lucide-react";
-import Link from "next/link";
 
 const STATUS_LABELS: Record<string, string> = {
   design: "Projektowanie",
@@ -21,6 +20,27 @@ const STATUS_COLORS: Record<string, string> = {
   review: "bg-orange-500",
   live: "bg-green-500",
 };
+
+const STATUSES = ["design", "development", "qa", "review", "live"];
+
+function MiniStatusBar({ currentStatus }: { currentStatus: string }) {
+  const currentIndex = STATUSES.indexOf(currentStatus);
+
+  return (
+    <div className="flex items-center gap-1">
+      {STATUSES.map((status, index) => (
+        <div
+          key={status}
+          className={`h-1.5 flex-1 rounded-full transition-all ${
+            index <= currentIndex
+              ? STATUS_COLORS[currentStatus] || "bg-accent-light"
+              : "bg-border"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
 
 export default async function ProjectsPage() {
   const session = await getClientSession();
@@ -56,7 +76,7 @@ export default async function ProjectsPage() {
             Witaj{client.name ? `, ${client.name}` : ""}!
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Wybierz projekt, aby zobaczyć szczegóły
+            Wybierz projekt, aby zobaczyć stronę
           </p>
         </div>
 
@@ -72,7 +92,9 @@ export default async function ProjectsPage() {
             {projects.map((project) => (
               <a
                 key={project._id}
-                href={`https://${project.slug}.syntance.dev/dashboard`}
+                href={project.previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="group rounded-xl border border-border bg-card p-6 transition-all hover:border-accent-light hover:bg-card/80"
               >
                 <div className="mb-4 flex items-center justify-between">
@@ -83,15 +105,21 @@ export default async function ProjectsPage() {
                   </div>
                   <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                 </div>
+
                 <h2 className="mb-1 text-lg font-semibold">{project.name}</h2>
                 <p className="text-sm text-muted-foreground">
-                  {project.clientDomain || `${project.slug}.syntance.dev`}
+                  {project.clientDomain || project.previewUrl.replace(/^https?:\/\//, "")}
                 </p>
+
                 {project.description && (
                   <p className="mt-3 line-clamp-2 text-sm text-muted-foreground/70">
                     {project.description}
                   </p>
                 )}
+
+                <div className="mt-4">
+                  <MiniStatusBar currentStatus={project.status} />
+                </div>
               </a>
             ))}
           </div>

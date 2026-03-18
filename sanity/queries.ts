@@ -53,15 +53,6 @@ export async function getClientByEmail(
   );
 }
 
-export async function getProjectBySlug(
-  slug: string
-): Promise<SanityProject | null> {
-  return sanityClient.fetch(
-    `*[_type == "project" && slug.current == $slug][0]{ ${PROJECT_FIELDS} }`,
-    { slug }
-  );
-}
-
 export async function getAllProjects(): Promise<SanityProject[]> {
   return sanityClient.fetch(
     `*[_type == "project"] | order(_createdAt desc) { ${PROJECT_FIELDS} }`
