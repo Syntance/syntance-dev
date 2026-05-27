@@ -27,6 +27,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
+import { useProject, useProjectIdFromPath } from "@/components/strategy-hub/project-context";
 
 const navItems = [
   {
@@ -60,13 +61,13 @@ const strategyItems = (projectId: string) => [
   },
 ];
 
-interface NavSidebarProps {
-  projectId?: string;
-  projectName?: string;
-}
-
-export function NavSidebar({ projectId, projectName }: NavSidebarProps) {
+export function NavSidebar() {
   const pathname = usePathname();
+  const projectFromContext = useProject();
+  const projectIdFromPath = useProjectIdFromPath();
+
+  const projectId = projectFromContext?.id ?? projectIdFromPath;
+  const projectName = projectFromContext?.name ?? "Projekt";
 
   const isActive = (href: string, exact = false) => {
     if (exact) return pathname === href;

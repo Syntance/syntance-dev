@@ -1,11 +1,9 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
+import { getDatabaseUrl } from "@/lib/strategy-hub/db-url";
 
-const connectionString = process.env.DATABASE_URL!;
-
-// Disable prefetch for Supabase Transaction pooler
-const client = postgres(connectionString, { prepare: false });
+const client = postgres(getDatabaseUrl(), { prepare: false });
 
 export const db = drizzle(client, { schema });
 
