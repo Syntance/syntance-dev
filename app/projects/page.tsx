@@ -54,6 +54,14 @@ export default async function ProjectsPage() {
     redirect("/login");
   }
 
+  if (isAdmin) {
+    redirect("/strategy-hub");
+  }
+
+  if (projects.length === 1) {
+    redirect(`/projects/${projects[0].slug}`);
+  }
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">

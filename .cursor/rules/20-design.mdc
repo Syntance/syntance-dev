@@ -1,0 +1,75 @@
+---
+description: Design system — paleta, typografia, spacing, shadow, ikony
+globs:
+  - "src/**/*.tsx"
+  - "src/styles/**/*.css"
+  - "src/app/globals.css"
+---
+
+## Paleta (OKLCH, nie HSL)
+- 1 surface, 1 ink, 1 akcent, 2 neutrale, 1 success, 1 error.
+- Surface i ink lekko tonowane: `oklch(0.98 0.01 80)` / `oklch(0.15 0.02 260)`.
+- Akcent max 5% powierzchni (tylko primary CTA, active, alert).
+- Cienie kolorowe: `0 24px 48px -16px oklch(0.2 0.05 260 / 0.3)`. Nigdy `rgb(0,0,0,...)`.
+- Dark/light: tokeny per mode. Motion między modami (np. HDRi 3D cross-fade 300ms).
+
+## Gradienty
+- ZAWSZE w OKLCH: `linear-gradient(in oklch, oklch(...), oklch(...), oklch(...))`.
+- Min. 3 color stopy (start / mid / end) — inaczej w środku szarzeje.
+- Animowane: **ShaderGradient** (shadergradient.co) lub custom shader (OGL). Nie CSS `background-position`.
+
+## Typografia
+- Display: PP Neue Montreal, Söhne, Editorial New, Migra, Monument Grotesk, PP Editorial New, PP Supply Mono.
+- Body: Geist, Inter (z justyfikacją axes), General Sans.
+- Mono: JetBrains Mono, Berkeley Mono, PP Supply Mono.
+- Max 2 rodziny + 1 mono.
+- **Variable fonts**: jeśli oś `wght` dostępna — użyj dynamicznie (hover scrub axes, np. 400→700 na hover 200ms).
+- Skala fluid: `clamp()`. Hero: `clamp(64px, 12vw, 240px)`. Body: `clamp(16px, 1.1vw, 18px)`.
+- Display > 48px: `letter-spacing: -0.02em`, `text-wrap: balance`, `font-feature-settings: "ss01","ss02","liga","kern"`.
+- Liczby / ceny / meta: `font-variant-numeric: tabular-nums`.
+- `text-rendering: optimizeLegibility` globalnie.
+
+## Spacing (4pt grid)
+- Steps: 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 160, 240.
+- Padding-block sekcji: `clamp(96px, 15vw, 240px)`.
+- Max-width content 1440px, narrow text 64ch, heading 24ch.
+- Zakazane: `p-[17px]`, `mt-[23px]`. Trzymaj się skali.
+
+## Radius
+- 3 wartości: 6px (input, chip, small tag), 12px (card, button large), 24px (modal, feature card, hero CTA).
+- Circles: `rounded-full`. Nic pomiędzy.
+
+## Shadow / elevation (5 stopni, OKLCH)
+- `--shadow-sm`: `0 1px 2px -0.5px oklch(0.2 0.05 260 / 0.1)`
+- `--shadow-md`: `0 8px 16px -4px oklch(0.2 0.05 260 / 0.12)`
+- `--shadow-lg`: `0 24px 48px -16px oklch(0.2 0.05 260 / 0.18)`
+- `--shadow-xl`: `0 48px 96px -32px oklch(0.2 0.05 260 / 0.25)`
+- `--shadow-glow`: `0 0 64px oklch(<akcent> / 0.4)` — tylko hero / CTA primary.
+
+## Ikony
+- Default set: **Iconsax** (iconsax.io — 6000+ ikon, 6 styles). Import tylko używane ikony.
+- Alt: custom SVG set ≥ 12 ikon z tego samego DNA co typografia (grubość, optical size, radius).
+- **Zakazane**: Lucide / Heroicons w hero / nav bez override (`stroke-width: 1`, custom size).
+- SVG sprite (`/public/icons/sprite.svg`) z `<symbol>` + `<use>`. Nie inline każda.
+- Optymalizacja: `svgo` z preset-default.
+
+## Tekstura
+- Grain overlay SVG noise: `opacity: 0.05–0.08`, `mix-blend-mode: overlay`, `pointer-events: none`, `position: fixed; inset: 0`.
+- Vignette radial: `opacity: 0.1`, fixed.
+- Backdrop-blur: fallback dla `prefers-reduced-transparency`.
+
+## Fotografia
+- Grading spec per projekt (LUT lub contrast curve + color cast).
+- Format: AVIF primary, WebP fallback. Nigdy plain JPG.
+- Produkty: **Flair.ai** / **Magic Animator** / **Rotato** przed kodem.
+- Zawsze blur placeholder (next/image `placeholder="blur"`).
+
+## Kompozycja
+- Asymmetric balance. Rule of thirds.
+- Jeden kierunek ruchu oka per sekcja.
+- Oddech > kompresja. Nie żałuj `margin-top: 240px`.
+
+## Accessibility tryby
+- `@media (forced-colors: active)` — fallback bez gradientów, `SystemColor` tokens.
+- `@media (prefers-reduced-transparency)` — backdrop-blur → plain bg.
+- `@media (prefers-contrast: more)` — zwiększ kontrast ink vs surface.

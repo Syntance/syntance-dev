@@ -1,0 +1,233 @@
+[
+  {
+    "fields": [
+      {
+        "validation": [
+          {
+            "level": "error",
+            "rules": [
+              {
+                "flag": "presence",
+                "constraint": "required"
+              }
+            ]
+          }
+        ],
+        "name": "name",
+        "type": "string",
+        "title": "Imię i nazwisko"
+      },
+      {
+        "validation": [
+          {
+            "level": "error",
+            "rules": [
+              {
+                "flag": "presence",
+                "constraint": "required"
+              },
+              {
+                "flag": "regex",
+                "constraint": {
+                  "pattern": "/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/",
+                  "name": "email",
+                  "invert": false
+                }
+              }
+            ]
+          }
+        ],
+        "description": "Email używany do logowania w portalu",
+        "name": "email",
+        "type": "string"
+      },
+      {
+        "name": "company",
+        "type": "string",
+        "title": "Firma"
+      },
+      {
+        "description": "Ustaw hasło startowe. Przy pierwszym logowaniu konto zostanie aktywowane.",
+        "name": "password",
+        "type": "string",
+        "title": "Hasło startowe"
+      },
+      {
+        "description": "Wybierz projekty, do których klient ma dostęp",
+        "of": [
+          {
+            "to": [
+              {
+                "type": "project"
+              }
+            ],
+            "type": "reference",
+            "title": "Reference to projekt"
+          }
+        ],
+        "name": "projects",
+        "type": "array",
+        "title": "Przypisane projekty"
+      },
+      {
+        "initialValue": false,
+        "description": "Admin widzi wszystkie projekty Syntance i może nimi zarządzać.",
+        "name": "isAdmin",
+        "type": "boolean",
+        "title": "Admin"
+      },
+      {
+        "rows": 3,
+        "description": "Wewnętrzne notatki o kliencie (niewidoczne dla klienta)",
+        "name": "notes",
+        "type": "text",
+        "title": "Notatki"
+      }
+    ],
+    "name": "client",
+    "type": "document",
+    "title": "Klient"
+  },
+  {
+    "fields": [
+      {
+        "validation": [
+          {
+            "level": "error",
+            "rules": [
+              {
+                "flag": "presence",
+                "constraint": "required"
+              }
+            ]
+          }
+        ],
+        "name": "name",
+        "type": "string",
+        "title": "Nazwa projektu"
+      },
+      {
+        "options": {
+          "source": "name",
+          "maxLength": 48
+        },
+        "validation": [
+          {
+            "level": "error",
+            "rules": [
+              {
+                "flag": "custom"
+              },
+              {
+                "flag": "presence",
+                "constraint": "required"
+              }
+            ]
+          }
+        ],
+        "description": "Identyfikator projektu, np. 'mojafirma'",
+        "name": "slug",
+        "type": "slug",
+        "title": "Slug (subdomena)"
+      },
+      {
+        "description": "Domena docelowa strony klienta, np. 'syntance.com' (wyświetlana w dashboardzie)",
+        "name": "clientDomain",
+        "type": "string",
+        "title": "Domena klienta"
+      },
+      {
+        "validation": [
+          {
+            "level": "error",
+            "rules": [
+              {
+                "flag": "uri",
+                "constraint": {
+                  "options": {
+                    "scheme": [
+                      "/^http$/",
+                      "/^https$/"
+                    ],
+                    "allowRelative": false,
+                    "relativeOnly": false,
+                    "allowCredentials": false
+                  }
+                }
+              },
+              {
+                "flag": "presence",
+                "constraint": "required"
+              }
+            ]
+          }
+        ],
+        "description": "URL strony klienta — otwiera się po kliknięciu kafelka w portalu",
+        "name": "previewUrl",
+        "type": "url",
+        "title": "Preview URL"
+      },
+      {
+        "options": {
+          "list": [
+            {
+              "title": "Projektowanie",
+              "value": "design"
+            },
+            {
+              "title": "Development",
+              "value": "development"
+            },
+            {
+              "title": "Testowanie",
+              "value": "qa"
+            },
+            {
+              "title": "Review",
+              "value": "review"
+            },
+            {
+              "title": "Live",
+              "value": "live"
+            }
+          ],
+          "layout": "radio"
+        },
+        "initialValue": "design",
+        "validation": [
+          {
+            "level": "error",
+            "rules": [
+              {
+                "flag": "valid",
+                "constraint": [
+                  "design",
+                  "development",
+                  "qa",
+                  "review",
+                  "live"
+                ]
+              },
+              {
+                "flag": "presence",
+                "constraint": "required"
+              }
+            ]
+          }
+        ],
+        "name": "status",
+        "type": "string",
+        "title": "Status projektu"
+      },
+      {
+        "rows": 3,
+        "name": "description",
+        "type": "text",
+        "title": "Opis projektu"
+      }
+    ],
+    "name": "project",
+    "type": "document",
+    "title": "Projekt"
+  }
+]

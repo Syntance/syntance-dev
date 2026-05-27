@@ -50,6 +50,20 @@ export async function POST(req: NextRequest) {
 
   const sanityClient = await getClientByEmail(email);
   if (!sanityClient) {
+    // Sprawdź czy to konto admina
+    const admin = await prisma.adminUser.findUnique({ where: { email } });
+    if (admin && (await verifyPassword(password, admin.passwordHash))) {
+      const token = signToken({ adminId: admin.id, email: admin.email, type: "admin" });
+      const response = NextResponse.json({ success: true, isAdmin: true });
+      response.cookies.set("session", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7,
+        path: "/",
+      });
+      return response;
+    }
     return NextResponse.json(
       { error: "Nie znaleziono konta z tym adresem email" },
       { status: 401 }
@@ -122,6 +136,7 @@ export async function POST(req: NextRequest) {
   const response = NextResponse.json({
     success: true,
     slug: projects[0]?.slug || null,
+    isAdmin: sanityClient.isAdmin === true,
   });
   response.cookies.set("session", token, {
     httpOnly: true,

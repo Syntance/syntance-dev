@@ -1,0 +1,21 @@
+{
+  "createdAt": "2026-03-26T09:12:46.425Z",
+  "studioVersion": "5.16.0",
+  "version": 3,
+  "workspaces": [
+    {
+      "basePath": "/studio",
+      "dataset": "production",
+      "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\"><rect width=\"32\" height=\"32\" rx=\"2\" fill=\"#18e2e2\"></rect><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" alignment-baseline=\"middle\" fill=\"hsla(180, 81%, 9%, 1)\" style=\"font-family:Inter, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, &quot;Liberation Sans&quot;, Helvetica, Arial, system-ui, sans-serif;font-weight:500;font-size:13px;transform:translateY(1px)\">SS</text></svg>",
+      "mediaLibrary": {
+        "enabled": false,
+        "__internal": {}
+      },
+      "name": "syntance-studio",
+      "projectId": "zu1eqlft",
+      "schema": "f0e0fa5b.create-schema.json",
+      "title": "Syntance Studio",
+      "tools": "ef87c8fe.create-tools.json"
+    }
+  ]
+}

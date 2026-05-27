@@ -1,0 +1,72 @@
+---
+description: Wymagania prawne PL/EU — EAA, GDPR, DSA, prawa konsumenta
+alwaysApply: true
+---
+
+## EAA — European Accessibility Act (obowiązkowy od 28.06.2025)
+- **Scope**: wszystkie B2C digital products w UE (sklepy, banki, ebook, transport, komunikacja).
+- **Wymóg**: **WCAG 2.2 AA** minimum. Kara w PL do 10× przeciętne wynagrodzenie (~80 000 PLN) + blokada sprzedaży.
+- **Deklaracja dostępności** (`/deklaracja-dostepnosci`) — obowiązkowa strona:
+  - Status zgodności (pełna / częściowa / brak).
+  - Data publikacji + data ostatniego przeglądu.
+  - Metoda oceny (external audit / self-audit).
+  - Kontakt koordynatora dostępności (email + telefon).
+  - Link do UODO / Rzecznika Praw Obywatelskich (procedura skargowa).
+- **Przycisk „Zgłoś problem z dostępnością"** w stopce → formularz + email.
+- Audit raz w roku: axe DevTools + Wave + manual screen reader. Fix critical w 30 dni.
+
+## GDPR — Data Subject Rights (DSR)
+Każdy user w UE ma prawo do:
+- **Dostępu** (art. 15): eksport danych JSON / CSV, 30 dni max.
+- **Sprostowania** (art. 16): edit profile + audit log zmian.
+- **Usunięcia** (art. 17, „prawo do bycia zapomnianym"): hard delete w 30 dni (z wyjątkami retention).
+- **Ograniczenia** (art. 18): flag `processing_restricted: true` → wyłącz analytics / marketing.
+- **Przenoszenia** (art. 20): strukturalny export JSON, importowalny gdzie indziej.
+- **Sprzeciwu** (art. 21): opt-out marketing / profiling jednym klikiem.
+
+**Implementacja**: `/moje-konto/prywatnosc` z 4 CTA (download / delete / restrict / export) + webhook do wszystkich processorów (Sentry, PostHog, MailerLite, Resend) → delete by user ID / email.
+
+**Retention exceptions**: faktury 5 lat (PL tax — Ordynacja art. 70), logi bezpieczeństwa 12 miesięcy (uzasadniony interes — fraud / chargeback).
+
+## GDPR — Breach notification (72h)
+- Wykrycie → ocena ryzyka w 24h (czy PII, czy large scale).
+- UODO notification w 72h przez [uodo.gov.pl](https://uodo.gov.pl/pl/p/zgloszenie-naruszenia-ochrony-danych) (oficjalny formularz).
+- Komunikacja userów gdy ryzyko wysokie: email + banner in-app.
+- Runbook `docs/runbook/data-breach.md` z template notyfikacji + kontaktami (UODO, prawnik, DPO).
+
+## Ustawa o prawach konsumenta (PL, B2C)
+- **Prawo odstąpienia 14 dni** (art. 27): bez podania przyczyny, od dostawy. Formularz + email po `fulfillment.shipped`.
+- **Informacja o przedsiębiorcy** (art. 8): nazwa + forma prawna, adres, NIP, REGON, KRS (jeśli spółka), email, telefon. Stopka + `/kontakt`.
+- **Regulamin** + **Polityka prywatności** — linki w stopce + checkbox przed submit w checkoucie.
+- **Ustawa omnibus** 2023 (ceny): „Najniższa cena z 30 dni przed obniżką" przy każdej promocji.
+
+## Prawo telekomunikacyjne art. 173 — cookies
+- Zgoda **opt-in** (aktywna), nie pre-checked.
+- Trzy przyciski równoważne: **Akceptuj / Odrzuć / Dostosuj**. NIGDY tylko „Akceptuj" + małe „Dostosuj".
+- UODO stanowisko 2023: dark patterns (ukryte „Odrzuć", kolorowy „Akceptuj") = kara.
+- Banner NIE blokuje scroll — content dostępny od razu.
+
+## DSA — Digital Services Act (EU, od 17.02.2024)
+- **Punkt kontaktowy** dla userów + dla władz (email w stopce).
+- **Regulamin** w prostym języku, nie prawniczym żargonie.
+- **Transparency report** roczny jeśli masz UGC / komentarze / reviews.
+- **Trusted flaggers**: procedura zgłaszania nielegalnych treści.
+- Zakaz **dark patterns** w designie: fałszywe timery, fake urgency („Zostało 2 min!"), ukryte subskrypcje, confirmshaming.
+
+## Ustawa o świadczeniu usług drogą elektroniczną (PL)
+- **Regulamin** obowiązkowy — udostępniony nieodpłatnie + możliwy do pobrania (PDF).
+- **Zgoda marketingowa** osobno od regulaminu (nie „pakiet" — UODO traktuje jako dark pattern).
+- **Reklamacje**: procedura w regulaminie + formularz `/reklamacje` + odpowiedź w 14 dni.
+
+## Kontrakty z processorami (DPA — Data Processing Agreement)
+**Przed produkcją** podpisane z: Vercel, Railway / Neon, Sentry, PostHog, Resend / Postmark, MailerLite, Fakturownia, Stripe, InPost, Cloudflare.
+- Storage: `docs/dpa/<processor>.pdf` w repo (nie sensitive).
+- Audit yearly: recertyfikacja SOC2 / ISO 27001 processorów — jeśli wygasa, search alternatywy.
+
+## Impressum / stopka minimum PL
+- Nazwa firmy + forma prawna (sp. z o.o. / JDG).
+- Adres siedziby.
+- NIP + REGON + KRS (jeśli spółka).
+- Email kontaktowy + telefon (opcjonalny, ale zwiększa trust i zgodność z ust. o prawach konsumenta).
+- Linki: regulamin, polityka prywatności, deklaracja dostępności, cookies settings (re-open).
+- Rok + prawa autorskie.

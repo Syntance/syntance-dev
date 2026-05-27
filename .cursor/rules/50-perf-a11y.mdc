@@ -1,0 +1,102 @@
+---
+description: Performance, a11y (WCAG 2.2), SEO, security
+alwaysApply: true
+---
+
+## Core Web Vitals (hard limits)
+- LCP < 2.0s (target 1.5s).
+- CLS < 0.05.
+- INP < 200ms (target 100ms).
+- FCP < 1.5s.
+- TTFB < 500ms.
+
+## Performance — reguły
+- Initial JS < 200 KB gz per route. Sprawdź: `@next/bundle-analyzer`.
+- LCP image ≤ 120 KB AVIF przez next/image z `fetchPriority="high"`, `sizes`, `priority`.
+- Fonts: next/font, `display: "swap"`, `preload: true` tylko display (body lazy OK).
+- Animacje: tylko `transform` i `opacity` w keyframes. Nie `left / top / width / height`.
+- `will-change`: tylko gdy aktywne, cleanup po animacji.
+
+## Preconnect / dns-prefetch
+- `<link rel="preconnect" href="https://res.cloudinary.com" crossorigin>` — do każdego CDN.
+- `dns-prefetch` dla pozostałych third-party.
+- W Next.js przez `app/layout.tsx` metadata / `<head>`.
+
+## INP debugging
+- Long Tasks API: `PerformanceObserver` z `longtask` entry → log do Sentry.
+- `scheduler.yield()` w heavy computation (breaks long task).
+- Break hydration: `<Suspense>` boundaries dla ciężkich sekcji.
+- Defer non-critical: `dynamic(() => ..., { ssr: false, loading: () => null })`.
+
+## Third-party hygiene
+- **Partytown** dla GA, Meta Pixel, Hotjar, Clarity — w web workerze, nie main thread.
+- PostHog: `autocapture: false` + manual `capture()` tylko konkretne eventy.
+- Sentry: `tracesSampleRate: 0.1` w prod, nie 1.0.
+
+## RUM (Real User Monitoring)
+- **Vercel Speed Insights** + **PostHog Web Vitals**.
+- Mierzysz na prod, nie tylko Lighthouse w dev.
+- Alert gdy p75 LCP > 2.5s albo INP p75 > 300ms.
+
+## HTTP headers (`next.config.ts`)
+- **CSP** (nonce-based): `default-src 'self'; script-src 'self' 'nonce-...'`.
+- **HSTS**: `max-age=63072000; includeSubDomains; preload`.
+- **Permissions-Policy**: `camera=(), microphone=(), geolocation=(), interest-cohort=()`.
+- **Cross-Origin-Opener-Policy**: `same-origin`.
+- **X-Content-Type-Options**: `nosniff`.
+- **Referrer-Policy**: `strict-origin-when-cross-origin`.
+
+## A11y — WCAG 2.2 (AA)
+- Jeden `<h1>` per route.
+- Landmarks: `<header>`, `<nav>`, `<main>`, `<footer>` z aria-label gdy multiple.
+- **Skip link**: `<a href="#main">Skip to content</a>` jako pierwszy focusable.
+- Focus visible ZAWSZE (outline lub custom ring z offset 2px).
+- **Target size ≥ 24×24 CSS px** (WCAG 2.2 — nowość 2023).
+- **Focus not obscured** (WCAG 2.2) — sticky header nie zakrywa focused element.
+- Kontrast: 4.5:1 tekst normal, 3:1 tekst large + UI.
+- Keyboard nav: Tab przechodzi wszystko, Escape zamyka modale, Arrow keys w grupach radio / tab.
+- `aria-current="page"` w nav.
+- `aria-live="polite"` dla toast / form status, `aria-live="assertive"` dla błędów.
+- `role="status"` dla loaderów z aria-label.
+- Focus trap w modalach (Radix / Headless UI handluje automatycznie).
+- `prefers-reduced-motion: reduce` → wyłącz scroll animacje, parallax, auto-rotate 3D.
+- `prefers-reduced-transparency` → fallback bez backdrop-blur.
+- `forced-colors: active` → usable layout bez custom kolorów.
+- SplitText: aria-label z pełnym tekstem, spans aria-hidden.
+- Alt texty: dekoracyjne `alt=""`, znaczące opisują intencję (nie wygląd).
+
+## Screen reader test matrix (per release)
+- **VoiceOver** na macOS (Safari).
+- **NVDA** na Windows (Firefox).
+- **TalkBack** na Android (Chrome).
+- Test scenariusz: hero headline read, nav, forms, modale, dynamic content (toast).
+
+## SEO
+- Metadata API w każdym `page.tsx` / `layout.tsx`.
+- OG image 1200×630 przez `opengraph-image.tsx` (Satori).
+- Twitter card: `summary_large_image`.
+- JSON-LD: Organization, WebSite, Product (jeśli), BreadcrumbList, Article (jeśli blog).
+- Sitemap + robots z App Router (`app/sitemap.ts`, `app/robots.ts`).
+- Canonical tags na wszystkich stronach.
+
+## Secrets
+- Nigdy w repo, nawet `.env.local`.
+- Doppler / Vercel ENV only.
+- GitHub secret scanning + Dependabot ON.
+
+## GDPR / Cookie consent (EU)
+- **Klaro** (self-hosted, open-source) lub **Cookiebot** (paid, 14 lang). Klaro default.
+- Zgoda PRZED ładowaniem GA / Meta Pixel / PostHog / Hotjar. **Partytown + consent gate** — scripts nie odpalają się bez `consent.analytics === true`.
+- Baner: widoczny przy pierwszej wizycie, ukryty po wyborze (localStorage). Trzy przyciski: **Accept / Reject / Customize**. NIGDY „X" jako dismiss (ciemny wzorzec, zakazany przez UODO).
+- Kategorie: Necessary (zawsze), Analytics, Marketing, Preferences.
+- Privacy policy: `/polityka-prywatnosci` z datą ostatniej aktualizacji. Zmiana = nowa data + email do zapisanych userów (jeśli istotna).
+- **Data retention**: GA max 14 miesięcy, PostHog 12, Sentry 90 dni — konfiguruj explicite.
+- **DPA** (Data Processing Agreement) z każdym processorem (Vercel, Railway, Sentry, PostHog, Resend) — podpisane PRZED produkcją.
+
+## i18n a11y (gdy > 1 język)
+- `<html lang="pl">` default. Dynamiczne per locale (App Router `generateStaticParams` + `[locale]` segment).
+- Content mix-language: `<span lang="en">word</span>` — screen reader przełącza głos.
+- RTL (arabski / hebrajski): `dir="rtl"` + Tailwind `rtl:` modifier. Logical properties (`ms-4` zamiast `ml-4`, `ps-4` zamiast `pl-4`).
+- Date/number: `Intl.DateTimeFormat(locale)`, `Intl.NumberFormat(locale)`. Nigdy hardcoded format.
+- `hreflang` tags w `<head>` dla każdej wersji językowej (SEO + signal dla Google).
+- Przełącznik języka w `<header>` jako `<button aria-label="Zmień język na angielski">` — flaga + kod ISO (EN, PL), nie sama flaga (niejednoznaczna dla VoiceOver).

@@ -1,0 +1,78 @@
+---
+description: R3F, shadery, asset pipeline, postprocessing
+globs:
+  - "src/components/3d/**"
+  - "src/**/*.tsx"
+  - "src/**/*.glsl"
+---
+
+## Setup
+- Sceny ZAWSZE lazy: `dynamic(() => import('./Scene'), { ssr: false, loading: Placeholder })`.
+- Canvas: `dpr={[1, 2]}`, `gl={GL_OPTS}`, `frameloop="demand"` lub `"never"` + manual `invalidate()`.
+- `GL_OPTS = { antialias: true, toneMapping: ACESFilmicToneMapping, powerPreference: "high-performance", stencil: false, depth: true }`.
+- Placeholder: PNG poster niskiej rozdzielczości (screen-grab sceny, 80 KB max).
+- Mobile < 768px lub `navigator.deviceMemory < 4` → zamiast sceny PNG poster + CSS animacja.
+
+## Asset pipeline
+- Modele: `.glb` max 1.5 MB, max 20–50k tris, jeden materiał per obiekt.
+- Kompresja: `gltf-transform optimize in.glb out.glb --compress meshopt --texture-compress ktx2 --simplify`.
+- Textury: **KTX2 / Basis** — 70% mniejsze niż PNG, GPU-decoded. `useKTX2()` z drei.
+- **Draco** (geometria) + **Meshopt** (animacje) — oba.
+- HDR: **Gainmap** (`.jpg` + gainmap) zamiast klasycznego `.hdr` — 70% mniejsze, iOS friendly.
+- HDRi 1–2K z polyhaven.com / Gainmap generator: `<Environment files="/hdr/studio-gainmap.jpg" />`.
+
+## Spline workflow (spline.design)
+- Design sceny w Spline → **Export → .glb** → pipeline (`gltf-transform`).
+- Spline React runtime (`@splinetool/react-spline`) — tylko gdy potrzebujesz natywnych interakcji Spline (states, events). Inaczej `.glb` + drei jest lżejszy i bardziej kontrolowalny.
+- Spline embed (iframe) — NIGDY w produkcji. Tylko dla prototypów / moodboardów.
+
+## Materiały (agency must-have)
+- **MeshTransmissionMaterial** (drei) — glass moment. Zawsze z `backside` + `transmissionSampler`.
+- **MeshDistortMaterial** — liquid / blob aesthetic.
+- **MeshReflectorMaterial** — podłogi z odbiciem.
+- Custom shader: GLSL w osobnym pliku `.glsl` z `vite-plugin-glsl`. Nie inline template string.
+
+## Instancing + LOD
+- > 50 obiektów → obowiązkowo `<Instances>` + `<Instance>`. Bez tego 60fps → 20fps.
+- Interakcje w dystansie → `<Detailed distances={[0, 10, 20]}>` z 3 wersjami mesh.
+
+## Kamera
+- **CameraControls** (yomotsu/camera-controls) > OrbitControls. Built-in damping, smooth, screen-space orbit.
+- Scripted moves → Theatre.js (nie ręczny `useFrame` z `lerp`).
+- FOV: 35–50° (cinematic). 60°+ tylko dla VR / wide establishing.
+- Near / far: `near: 0.1`, `far: 100` default. Dalej = z-fighting.
+
+## Postprocessing (@react-three/postprocessing)
+- Max 3 efekty naraz. Kolejność: Noise → Bloom → ChromaticAberration → DoF → Vignette.
+- **Bloom**: intensity 0.3–0.5, luminanceThreshold 0.9.
+- **DoF**: focalLength 0.05, bokehScale 3–5, focusDistance z `useFrame` follow target.
+- **Vignette**: offset 0.3, darkness 0.5–0.7.
+- **Noise**: opacity 0.04–0.06, blendFunction OVERLAY.
+- **ChromaticAberration**: offset [0.0005, 0.0005]. Max, inaczej taniec.
+
+## Światło
+- Key + fill (HDR) + rim — zawsze trzy warstwy.
+- Key: kierunkowe, `shadow-mapSize: [2048, 2048]`, `shadow.bias: -0.0001`, PCFSoftShadowMap.
+- Fill: HDRi environment.
+- Rim: point light z tyłu obiektu, kolor akcentu.
+- `toneMappingExposure` tweaked per scena (0.8–1.4).
+
+## Performance
+- `useFrame` tylko gdy konieczny. Inaczej `frameloop="demand"` + `invalidate()` na zdarzenia.
+- `useMemo` na geometry / materials.
+- `dispose()` w cleanup (drei `<Dispose />` helper).
+- Profiluj: `r3f-perf` package w dev.
+
+## When NOT to use 3D (restraint)
+- Produkt można pokazać zdjęciem + motion → użyj zdjęcia + Framer. Zawsze lżej.
+- Hero ma być indexowalny przez Google → 3D scena nie jest. Static render jako fallback/poster.
+- Target device mobile < 4 GB RAM (`navigator.deviceMemory < 4`) → PNG poster, nie scena.
+- Content CMS-driven → 3D nie skaluje się. Użyj static assetów.
+- Budget < 200 KB initial JS → 3D sam zjada 150 KB (three + r3f). Skip.
+- Brak hero momentu, który 3D naprawdę wzmacnia → nie dodawaj dla „wow". To rani.
+
+## Budget mobile vs desktop (osobne limity)
+- Draw calls: desktop ≤ 100, mobile ≤ 30.
+- Triangles: desktop ≤ 500k, mobile ≤ 100k.
+- Textury: desktop 2K, mobile 1K (automatycznie przez KTX2 mipmap).
+- FPS target: desktop 60, mobile 30. Fallback na PNG gdy FPS < 24 przez 2s (monitor przez `useFrame` + sliding window).

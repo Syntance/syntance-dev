@@ -81,3 +81,49 @@ export async function sendPasswordResetEmail(
     throw new Error("Nie udało się wysłać emaila");
   }
 }
+
+/**
+ * Powiadomienie do klienta o aktualizacji strategii projektu.
+ * Wywoływane przez Strategy Hub po zapisie strategii biznesowej / marketingowej.
+ */
+export async function sendStrategyUpdatedEmail(params: {
+  to: string;
+  projectName: string;
+  projectSlug: string;
+  section: string;
+  changedBy?: string;
+}) {
+  const url = `${BASE_URL}/projects/${params.projectSlug}/strategy/business`;
+
+  const { error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    to: params.to,
+    subject: `Aktualizacja strategii — ${params.projectName}`,
+    html: `
+      <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h1 style="font-size: 24px; font-weight: 700; color: #fafafa; margin: 0;">Syntance</h1>
+        </div>
+        <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 32px;">
+          <h2 style="font-size: 18px; font-weight: 600; color: #fafafa; margin: 0 0 12px;">
+            Strategia projektu została zaktualizowana
+          </h2>
+          <p style="font-size: 14px; color: #a1a1aa; margin: 0 0 8px; line-height: 1.6;">
+            <strong style="color:#fafafa;">${params.projectName}</strong> — sekcja <em>${params.section}</em>.
+          </p>
+          ${params.changedBy ? `<p style="font-size:12px;color:#71717a;margin:0 0 24px;">Edytujący: ${params.changedBy}</p>` : ""}
+          <a href="${url}" style="display: inline-block; background: #6d28d9; color: #ffffff; font-size: 14px; font-weight: 500; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 16px;">
+            Zobacz strategię
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #52525b; text-align: center; margin-top: 24px;">
+          Otrzymujesz to powiadomienie, bo masz dostęp do projektu w portalu Syntance.
+        </p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    console.error("Failed to send strategy update email:", error);
+  }
+}

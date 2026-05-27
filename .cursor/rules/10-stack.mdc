@@ -1,0 +1,70 @@
+---
+description: Biblioteki i skąd kopiować
+alwaysApply: true
+---
+
+## Core stack
+- Next.js 16 + React 19 + TS 5.9+ strict + Tailwind v4 + Shadcn.
+- **Framer Motion** (Motion) — UI spring, layout, gestures, AnimatePresence.
+- **GSAP** + ScrollTrigger + SplitText — timeline, scroll-scrub, pin, split.
+- **Lenis** — smooth scroll (`ReactLenis` z `lenis/react`).
+- **React Three Fiber** + **drei** + **@react-three/postprocessing** — 3D.
+- **Theatre.js** (`@theatre/core` + `@theatre/studio`) — scripted camera, cinematic sequences, audio-sync.
+- **Howler.js** — dźwięk UI, default OFF z toggle.
+- **React Hook Form** + **Zod** + **@hookform/resolvers** — formularze.
+- **nuqs** — URL state (filtry, galerie, tabs).
+- **Zustand** (lub Jotai) — client state gdy Context nie wystarcza.
+
+## Animacje wektorowe
+- **Rive** (`@rive-app/react-canvas`) — interaktywne wektory z state machines. Pierwszy wybór gdy ilustracja ma reagować.
+- **Lottie** (`lottie-react`) — tylko gdy asset już istnieje (After Effects export). Dla nowych: Rive.
+- **Unicorn.studio** — no-code motion do embedu (iframe lub export). Dobre dla szybkich hero bg bez kodu.
+- **Anime.js** — lekka alternatywa (17 KB vs GSAP 150 KB) gdy cały GSAP to overkill. NIE do scroll-scrub — tam zawsze GSAP.
+
+## Shadery i gradienty
+- **ShaderGradient** (shadergradient.co) — animowane shader gradients, export React code. Hero bg w 5 min.
+- **OGL** — lightweight WebGL gdy Three.js to overkill (sam shader na tle, bez sceny).
+
+## Page transitions
+- **View Transitions API** — `document.startViewTransition()` na route change. Native, żadnej Barba.js.
+
+## OG / meta
+- **@vercel/og** + **Satori** — dynamic OG images per page.
+
+## Third-party hygiene
+- **Partytown** (`@builder.io/partytown`) — GA / Meta / PostHog w web workerze. INP ratuje.
+
+## Gesty
+- **@use-gesture/react** — drag / pinch / wheel gdy Framer drag nie wystarcza (custom sliders, carouselki).
+
+## Skąd brać animowane komponenty (kolejność)
+1. **Aceternity UI** — ui.aceternity.com. Kopiuj do `src/components/aceternity/`.
+2. **Magic UI** — magicui.design. `pnpm dlx shadcn@latest add "https://magicui.design/r/<nazwa>.json"`.
+3. **21st.dev** przez Magic MCP — `/ui "opis"` w czacie.
+4. **Motion Primitives** — motion-primitives.com.
+5. **React Bits** — reactbits.dev.
+6. **Codrops** — tympanus.net/codrops (laboratorium efektów).
+
+## Kiedy czego używać
+- Hover / focus / transitions < 300ms → CSS / Tailwind.
+- Spring, layout, presence, gestures → Framer Motion.
+- Scroll-scrub, pin, horizontal scroll, SplitText → GSAP.
+- Scripted camera / cinematic sequence → Theatre.js.
+- 3D (modele .glb, sceny, shadery) → R3F + drei.
+- Interaktywna ilustracja → Rive.
+- Gradient animowany na tle → ShaderGradient lub custom shader (OGL).
+- Lekka prosta animacja bez scroll → Anime.js dopuszczalne.
+
+## Naming
+- Komponenty: PascalCase, default export dla page/layout, named dla reszty.
+- Sekcje: `src/components/sections/<kebab>/index.tsx`.
+- Shadcn primitives: `src/components/ui/`.
+- 3D sceny: `src/components/3d/<Scene>/index.tsx` + `Scene.glsl`.
+- Hooks: `use` + camelCase.
+
+## CMS — kiedy co
+- **Sanity** — klient/copywriter edytuje sam. Studio embedowane w `/studio` Next.js. Schema w TS, visual editing, live preview. Default dla portfoliów + content-heavy sites.
+- **Payload CMS** — dev kontroluje schema, self-hosted (ten sam deploy co app). Default dla aplikacji z auth + custom logiką admina.
+- **MDX** — dev-only blog/docs. Commit = publish. Tylko gdy content pisze dev.
+- **Nigdy**: WordPress headless (legacy), Strapi (community fragmented), Contentful (drogie bez wartości dodanej).
+- Brief pod CMS: kto edytuje (copy / dev / klient), jak często, czy potrzebuje preview, czy rich media.

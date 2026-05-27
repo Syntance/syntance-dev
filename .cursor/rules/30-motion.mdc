@@ -1,0 +1,102 @@
+---
+description: Motion vocabulary — animacje, scroll, transitions
+globs:
+  - "src/**/*.tsx"
+  - "src/lib/gsap.ts"
+  - "src/lib/theatre.ts"
+---
+
+## Hierarchia (kiedy czego)
+1. CSS / Tailwind transitions dla hover / focus < 300ms.
+2. Framer Motion (Motion) dla UI, spring, layout, AnimatePresence, gesturami.
+3. GSAP + ScrollTrigger dla timeline, scrub, pin, SplitText.
+4. Theatre.js dla scripted cinematics (audio-sync, multi-timeline).
+5. R3F dla 3D.
+
+## Easingi
+- UI reveal: `power3.out` / `cubic-bezier(0.22, 1, 0.36, 1)`.
+- Spring (Motion): `type: spring, stiffness: 170, damping: 22, mass: 0.9`.
+- Heavy: `expo.out`. Bounce: `back.out(1.4)`. Elastic: `elastic.out(1, 0.3)`.
+- **Zakazane**: `ease-in-out` bez uzasadnienia, `linear` w UI (tylko loop / marquee), `ease` (default przeglądarki).
+
+## Timingi
+- Micro: 150–250ms.
+- Reveal: 400–600ms.
+- Hero moment: 800–1400ms.
+- Page transition: 400–800ms.
+- Nigdy > 1800ms bez pauzy / anticipation.
+
+## Page transitions (View Transitions API)
+- `document.startViewTransition()` na każdym route change.
+- `::view-transition-old(root)` + `::view-transition-new(root)` choreography — nie tylko fade, minimum mask-reveal albo slide + scale.
+- `viewTransitionName` na wspólnych elementach (hero image → product detail) — native FLIP.
+
+## Preloader (3-aktowa)
+1. 0–300ms: brand mark appear (mask-reveal, nie opacity).
+2. 300–1200ms: progress indicator (numeric counter albo line-growth). Min. 800ms nawet gdy cache.
+3. 1200–1800ms: exit z mask-reveal → hero enter.
+- **NIGDY** spinner / generic loader / skeleton UI jako hero loader.
+
+## Custom cursor
+- 2 warstwy: dot (8px) + ring (32px), lerp 0.15.
+- Stany: default / link (ring expand 48px) / drag / disabled / media (expand 80px z labelką, np. „View case").
+- Desktop only (`@media (pointer: fine)`). Hide na keyboard-first (pierwszy Tab wyłącza).
+- CSS `cursor: none` na elementach z custom cursor (inaczej dwa kursory).
+
+## Magnetic hover
+- Damping 0.15, max offset 24px (8% szerokości elementu).
+- Tylko CTA primary + karty feature. NIE każdy button.
+- Cleanup on `mouseleave` ze springiem (nie snap).
+
+## Text effects (agency vocabulary)
+- **SplitText**: stagger 0.06–0.08s, delay per linia 0.1s, y:40 + opacity 0 → y:0 + opacity 1.
+- **Mask-reveal**: `clip-path: inset(0 0 100% 0)` → `inset(0 0 0 0)`, 800ms `power3.out`.
+- **Scramble**: przy reveal losowe glify przez 120ms przed ustaleniem (jak Locomotive / Resn).
+- **Marquee infinite**: `transform: translateX` w requestAnimationFrame (nie CSS `animation`), pauza on hover.
+- **Aria**: aria-label z pełnym tekstem na containerze, spanów per litera aria-hidden.
+
+## ScrollTrigger + Lenis
+- Proxy tylko raz w LenisProvider. Sync `ScrollTrigger.update` z `lenis.on('scroll', ...)`.
+- Każdy trigger: `invalidateOnRefresh: true`, `fastScrollEnd: true`.
+- ZAWSZE `gsap.matchMedia()` dla breakpointów + `(prefers-reduced-motion: no-preference)`.
+- Cleanup: `gsap.context(() => ..., scope)` + `return () => ctx.revert()`.
+- `scrub: 1` (smooth), nie `true` (1:1).
+- Max 1 pinned section na stronę.
+- Max 1 parallax warstwa na sekcję.
+
+## FLIP / layout animations
+- Framer Motion `layoutId` dla hero → detail page morph.
+- Shared elements między routes — `viewTransitionName` CSS + fallback `layoutId`.
+
+## Stagger
+- Listy: 0.04–0.08s per item.
+- Grid: stagger po diagonal (`staggerFrom: "start"` z `grid`).
+- Max 12 elementów — inaczej trwa za długo, user zasypia.
+
+## Cursor-reactive backgrounds
+- Distorsja shaderem (OGL) albo Three.js plane.
+- `lerp(current, target, 0.05)` — smooth follow.
+- Wyłącz na `prefers-reduced-motion`.
+
+## Theatre.js workflow
+- Sekwencja cinematic (hero entrance, product showcase) → `@theatre/studio` w dev, `@theatre/core` w prod.
+- Project state w JSON (`theatre-state.json`), commitowane do repo.
+- Audio-sync: custom hook z `<audio>` + `currentTime` → `obj.value = ...` w `useFrame`.
+
+## Prefers-reduced-motion
+- Alternatywa obowiązkowa dla każdego motion (nie `display: none`, tylko uproszczone).
+- Parallax → static. Scroll scrub → jump. Preloader → skip. Ambient → off. Auto-rotate 3D → still.
+
+## Sound design (gdy projekt ma audio)
+- Default OFF. Toggle w nav (persist w localStorage).
+- Sync z motion: click / hover / page transition — 1:1 z animacją, nie delay.
+- **Howler.js** + sprite sheet (`/audio/ui-sprite.webm` + `.mp3` fallback). Jeden plik, wszystkie SFX.
+- Ambient bg: max -20dB, fade in 2s przy enable, fade out 1s przy disable.
+- Hard limit: total audio weight < 200 KB.
+- `prefers-reduced-motion: reduce` → sound OFF.
+
+## GPU layer management
+- `will-change: transform, opacity` TYLKO podczas aktywnej animacji. Dodaj w `onStart`, usuń w `onComplete`.
+- `transform: translate3d(0,0,0)` jako layer hint dla stałych elementów (hero headline, sticky nav) — max 5 na stronę.
+- Lighthouse → „Avoid non-composited animations" = regression → fix przed merge.
+- DevTools → Rendering → Layer Borders — max 10 warstw aktywnie, inaczej memory spike na mobile.

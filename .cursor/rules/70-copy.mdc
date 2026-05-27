@@ -1,0 +1,68 @@
+---
+description: Copy discipline — voice, hierarchia, CTA
+globs:
+  - "src/**/*.tsx"
+  - "src/**/*.mdx"
+  - "content/**/*"
+---
+
+## Voice
+- Briefowo: 3 słowa dotyku + 3 zakazane.
+- Przykład: „precyzyjny / kameralny / rzetelny" + zakaz „innowacyjny / ekspert / pasja".
+- Test każdego headline: „czy brzmi jak szablon czy jak brief".
+
+## Hierarchia copy (per sekcja)
+- **Eyebrow** (12ch max) — kategoria / tag, np. „Case study · 2025".
+- **Headline** (48ch max, 1–2 linie) — jedna myśl, bez lania wody.
+- **Sublede** (96ch max, 2–3 linie) — kontekst + dowód.
+- **Body** (64ch wide max) — szczegóły, proof points.
+
+## Zasady
+- Liczby konkretne: „14 projektów" > „kilkanaście". „3.2s → 1.4s LCP" > „szybciej".
+- Czasownik w CTA zawsze 1 os. lub wynikiem: „Zobacz jak zbudowaliśmy X" > „Get Started".
+- **Zakazane**: „Nasza pasja", „Innowacyjne rozwiązania", „Synergia", „Next-gen", „Game-changing", „Disruptive", „Revolutionary".
+- **Zakazane CTA**: „Learn More", „Get Started", „Click Here", „Submit", „Sign Up" (bez kontekstu).
+- Każdy nagłówek odpowiada na: czemu to czytelnik ma czytać DALEJ.
+
+## Long-form (blog, case study)
+- Pierwszy akapit = teza + zakres (max 4 linie).
+- Podtytuły co 3–5 akapitów (attention span).
+- Każdy akapit 1 myśl, max 5 linii.
+- Listy — gdy 3+ pozycji. Inaczej zdanie.
+
+## Formularze
+- Labels zawsze, placeholders nie jako label.
+- Error messages konkretne: „Email musi mieć @" > „Invalid email".
+- Success message brand voice: „Gotowe. Odezwiemy się w 24h." > „Thank you".
+
+## Microcopy
+- Tooltips: jedno zdanie, max 80 znaków.
+- Loading states: brand voice („Mielimy..." > „Loading...").
+- Empty states: explain + next action („Brak projektów. Stwórz pierwszy →").
+- 404: nie „Page not found", tylko brand moment.
+
+## Język polski
+- „Ci" / „Ciebie" — wielką literą gdy do klienta bezpośrednio.
+- Pauza półdługa (–) nie myślnik (-). Pauza długa (—) w dialogach.
+- Cudzysłowy: „...", nie "...".
+- Liczby: spacja nierozdzielająca (`&nbsp;`) między liczbą a jednostką.
+
+## SEO meta (per route)
+- **Title**: 50–60 znaków. Format: `<Nazwa strony> — <Kategoria> | <Brand>`. Unikatowy per route.
+- **Meta description**: 140–155 znaków. Pierwsze 60 najważniejsze (mobile SERP obcina). Słowo kluczowe + value prop + CTA.
+- **OG title**: może być krótszy (25–40 znaków, share-friendly).
+- **OG description**: 60–90 znaków, hook na kliknięcie.
+- **Zakazane**: powtórzenie brand name w każdym title (Google filtruje), keyword stuffing, ALL CAPS, emoji w title (wygląda tanio w SERP).
+
+## Alt text
+- **Dekoracyjne** (grain, ozdobniki, shape): `alt=""` — screen reader pomija.
+- **Znaczące**: opisz INTENCJĘ, nie wygląd. Nie „Kobieta w czerwonym płaszczu na tle gór", tylko „Założycielka studia w plenerze — sesja portretowa 2025".
+- **Produkty**: nazwa + kluczowy atrybut. „Torba skórzana, cognac, kolekcja Zima 2026" > „Torba".
+- **Ikony z funkcją**: `aria-label` na przycisku, `alt=""` na SVG wewnątrz.
+- Max 125 znaków (screen reader tnie dłuższe).
+
+## Error copy — hierarchia
+- **Inline field error** (pod inputem): konkret + jak naprawić. „Email musi zawierać @. Przykład: jan@firma.pl".
+- **Toast**: dla akcji async, 5s auto-dismiss. „Zapisano zmiany".
+- **Modal**: tylko gdy user MUSI zdecydować (potwierdzenie usunięcia, utrata niezapisanych danych).
+- **Full-page** (`error.tsx`): gdy cała strona nie działa. CTA „Spróbuj ponownie" + link do home. NIE generyczne „Something went wrong".

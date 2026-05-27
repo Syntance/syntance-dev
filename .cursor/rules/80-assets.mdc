@@ -1,0 +1,83 @@
+---
+description: Asset pipeline — obrazy, video, fonty, 3D, ikony
+globs:
+  - "public/**"
+  - "src/**/*.tsx"
+---
+
+## Obrazy
+- Format: **AVIF** primary, **WebP** fallback, JPG tylko legacy.
+- LCP image: ≤ 120 KB AVIF.
+- Reszta: ≤ 80 KB AVIF.
+- Dostarczanie: next/image + Cloudinary (transform w URL) lub `opengraph-image.tsx` dla social.
+- Placeholder: `placeholder="blur"` z `blurDataURL` (10×10 base64).
+- Naming: `/public/images/<section>/<name>.avif`. Kebab-case.
+
+## Video
+- Format: **MP4 (H.265)** + **WebM (VP9)** fallback.
+- Max 2 MB loop, max 10 MB hero.
+- `poster` obowiązkowy (AVIF/JPG).
+- `preload="metadata"`, `muted`, `playsInline`, `loop` dla ambientu.
+- Autoplay tylko z `muted` i `prefers-reduced-motion: no-preference`.
+- Hosting: self-host dla < 5 MB, Cloudflare Stream / Mux dla większych.
+
+## Fonty
+- Format: **.woff2 only**.
+- Subset: `latin + latin-ext` (PL/EN), nigdy pełny Unicode.
+- Max 4 pliki: display regular, display bold, body regular, body bold (+ mono jeśli osobny).
+- Variable fonts: preferowane gdy axes dają wartość (wght range, opsz).
+- next/font z `display: "swap"`, `preload: true` tylko display.
+- Self-host przez next/font, nigdy external CDN (blokuje LCP).
+
+## Ikony
+- Primary set: **Iconsax** (iconsax.io — 6000 ikon, 6 styles). Import tylko używane.
+- Alt: custom SVG set ≥ 12 ikon z tego samego DNA co typografia.
+- **Zakazane**: Lucide / Heroicons w hero / nav bez override (`stroke-width: 1`).
+- SVG sprite (`/public/icons/sprite.svg`) z `<symbol>` + `<use>`. Nie inline każda.
+- Optymalizacja: `svgo` z preset-default.
+
+## 3D
+- Format: **.glb** (nie .gltf + osobne textury).
+- Max: 1.5 MB per model, 20–50k tris, 1 materiał per obiekt.
+- Pipeline: `gltf-transform optimize in.glb out.glb --compress meshopt --texture-compress ktx2 --simplify`.
+- Textury: **KTX2 / Basis** (70% mniejsze niż PNG, GPU-decoded).
+- HDR: **Gainmap** (.jpg + gainmap) zamiast klasycznego .hdr.
+- Źródło modeli: **Spline** (spline.design) → export .glb → pipeline.
+- Hosting: static `/public/3d/` lub Cloudflare R2 dla > 2 MB.
+
+## Źródła assetów (tools przed kodem)
+- **Spline** — 3D design + R3F/.glb export.
+- **Flair.ai** — AI product photography.
+- **Magic Animator** / **Rotato** — device mockups, motion design.
+- **Endless Tools** — textures, generative.
+- **Unicorn.studio** — no-code motion (embed lub export).
+- **Rive** — interaktywne wektory (.riv format).
+- **Polyhaven** — HDRi, textures, modele (free CC0).
+- **Quixel Bridge** — Megascans (darmowe z Epic ID).
+
+## Hard limits per route
+- Obrazy: max 1.5 MB sumarycznie (compressed).
+- Video: max 3 MB (poster + loop).
+- 3D: max 2 MB (model + HDR).
+- Fonty: max 150 KB (4 pliki).
+- Total initial: < 2.5 MB bez video, < 5 MB z video.
+
+## Licensing / attribution
+- `LICENSES.md` w repo — lista WSZYSTKICH niestandardowych assetów: licencja + źródło + data.
+- Format (wpis w `LICENSES.md`):
+
+  ### /public/hdr/studio.hdr
+  Source: https://polyhaven.com/a/studio_small_09
+  License: CC0 1.0
+  Downloaded: 2026-04-15
+
+- **CC0** (Polyhaven, Unsplash, Pexels) — free commercial, attribution nie wymagane ale dobra praktyka.
+- **CC-BY** — credits w stopce albo na `/credits`.
+- **Proprietary** (Iconsax Pro, Adobe Stock) — seat license + numer seryjny w Doppler (nie w repo).
+- **Fonts**: `font-license.txt` obok `.woff2` + entry w `LICENSES.md`.
+- **AI-generated** (Flair.ai, Midjourney): disclose w `/credits` jeśli istotny dla wartości wizualnej.
+
+## Asset versioning (cache-bust)
+- Filename z wersją: `hero-bg.v2.webp` gdy zmieniasz, NIE `hero-bg.webp` z query param `?v=2` (niektóre CDN ignorują).
+- `next/image` ma własny hash — ale custom assets (3D, video, HDR) wymagają manualnego versioningu.
+- Breaking change assetu (np. nowa geometria `.glb`) → zawsze nowy filename, nie replace.

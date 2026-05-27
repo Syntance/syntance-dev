@@ -76,3 +76,31 @@ export async function getProjectsForUser(
   const projects = client.projects || [];
   return { projects, isAdmin: false, client };
 }
+
+export async function getProjectBySlugForUser(
+  slug: string,
+  email: string
+): Promise<SanityProject | null> {
+  const { projects, isAdmin } = await getProjectsForUser(email);
+  
+  if (isAdmin) {
+    return sanityClient.fetch(
+      `*[_type == "project" && slug.current == $slug][0]{ ${PROJECT_FIELDS} }`,
+      { slug }
+    );
+  }
+  
+  return projects.find((p) => p.slug === slug) ?? null;
+}
+
+export async function getProjectClients(
+  slug: string
+): Promise<{ email: string; name?: string }[]> {
+  const result = await sanityClient.fetch<
+    { email: string; name?: string }[] | null
+  >(
+    `*[_type == "client" && count(projects[@._ref in *[_type=="project" && slug.current==$slug]._id]) > 0]{ email, name }`,
+    { slug }
+  );
+  return result ?? [];
+}

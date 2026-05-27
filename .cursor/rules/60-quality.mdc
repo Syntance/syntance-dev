@@ -1,0 +1,194 @@
+---
+description: Jakość kodu, testy, PR, observability
+alwaysApply: true
+---
+
+## Commits (Conventional Commits)
+- `feat:` / `fix:` / `chore:` / `refactor:` / `perf:` / `docs:` / `test:` / `style:`.
+- Tytuł < 72 znaki. Body: context + why + how to test (min. 3 linie).
+- Scope gdy monorepo: `feat(storefront):`, `fix(3d):`.
+
+## Branching
+- **Trunk-based**: `main` jest zawsze deployowalny.
+- Feature branch: `feat/short-name`, max 3 dni, max 400 linii zmian.
+- Hotfix: `fix/issue-XXX` z main, merge + cherry-pick do feature branches.
+
+## PR review — checklist
+- Opis: co / dlaczego / jak testować (min. 3 linie).
+- Screenshots / wideo (Kap, Loom, CleanShot) dla UI changes.
+- `pnpm typecheck && pnpm lint && pnpm test && pnpm build` passing.
+- **Chromatic** (albo Playwright screenshots) passing — visual regression.
+- Nie mergujesz w piątek po 15:00.
+- Single responsibility — jeden PR = jedna rzecz.
+- Max 400 linii zmiany per PR (excluding lockfile / generated).
+
+## Testing
+- **Vitest** — unit (pure functions, hooks) + integration (components z React Testing Library).
+- **Playwright** — smoke E2E krytycznych flow (landing → CTA → form submit).
+- **Chromatic** (lub Playwright screenshots) — visual regression na każdy PR.
+- **Storybook** (lub Ladle) — komponenty w izolacji z play functions.
+- Coverage: 60% na logic, 0% na prezentację. Nie goniuj 100%.
+
+## Code style
+- Funkcja > 50 linii → wyciągnij helpery.
+- Plik > 300 linii → split.
+- Komentarz tłumaczy DLACZEGO, nie CO.
+- Pełne nazwy zmiennych: `orderCount` > `cnt`, `customerEmail` > `email`.
+- Barrel exports (`index.ts`) tylko dla public API module, nie dla wygody.
+- Unikaj `default export` poza komponentami page / layout Next.js.
+
+## Dependency hygiene
+- Renovate / Dependabot PRs — review raz w tygodniu.
+- Major update krytycznych (React, Next, Tailwind, Medusa) — planowany, nie ad-hoc.
+- `pnpm why <package>` przed dodaniem.
+- **Knip** raz w kwartale — usuń martwe eksporty / dependencies.
+- Bundle analyzer raz w miesiącu — regresja > 10% = alert.
+
+## ADR (Architecture Decision Records)
+- Każda nietrywialna decyzja → `docs/adr/NNN-tytul.md`.
+- Template: Context / Decision / Consequences / Alternatives considered.
+- Przykłady: „Why Framer Motion nie tylko GSAP", „Why Zustand nie Context", „Why View Transitions nie Barba".
+
+## CHANGELOG
+- Automatyczny przez **Changesets** (`@changesets/cli`) lub **release-please**.
+- Każdy PR z user-facing change → changeset entry.
+- Release notes na prod deploy.
+
+## Environments
+- **Preview** (per PR): Vercel auto, custom subdomain.
+- **Staging** (merge do main): `staging.domain.com`, dedykowana baza.
+- **Prod** (per git tag / manual promote): `domain.com`, real traffic.
+- ENV variables per environment. Nigdy prod secrets w preview.
+
+## Observability (3 warstwy)
+- **Sentry**: errors + performance traces (`tracesSampleRate: 0.1`).
+- **PostHog**: product events, feature flags, session replay (sampled 10%).
+- **Vercel Analytics + Speed Insights**: Web Vitals RUM.
+- Alert matrix: 5xx > 1% / LCP p75 > 2.5s / INP p75 > 300ms → Slack / Discord.
+
+## Design↔code sync
+- Figma tokens → **Style Dictionary** → CSS vars.
+- Figma plugin **Tokens Studio** po stronie designu.
+- PR z token changes osobno (nie zmiksowane z feature).
+
+## Definition of Done
+- Kod na preview + przetestowany w incognito.
+- Lighthouse ≥ 90/95/100 na nowych stronach.
+- A11y manual: keyboard nav + min. 1 screen reader.
+- Visual regression Chromatic passing.
+- Code review od drugiej osoby (lub self-review po 24h dla solo).
+- ADR napisany jeśli decyzja nietrywialna.
+- Dokumentacja updated jeśli zmiana wpływa na DX / public API.
+- Changeset entry.
+
+## Monorepo — Turborepo (gdy > 1 app)
+- Tylko gdy > 1 app (storefront + admin + landing). 1 app = solo repo, nie komplikuj.
+- Struktura:
+  - `apps/storefront/` — Next.js sklep
+  - `apps/admin/` — Medusa Admin custom (jeśli)
+  - `apps/landing/` — marketing site
+  - `apps/docs/` — Nextra / MDX
+  - `packages/ui/` — shadcn + custom, shared
+  - `packages/types/` — TS shared (PaymentProvider, OrderStatus, User)
+  - `packages/config/` — eslint, tsconfig, tailwind presets
+  - `packages/lib/` — utils wspólne (format-money, slug, date)
+- `turbo.json`: `build` depends on `^build`, remote cache ON (Vercel Remote Cache lub Turborepo Cloud).
+- **ZAKAZ**: import z `apps/*` do `apps/*`. Wszystko shared → `packages/*`.
+- **ZAKAZ**: cykliczne deps między packages (Knip wykrywa).
+- `workspace:*` w `package.json` (pnpm workspace).
+- Lint: **Knip** + **depcheck** per package — nie globalnie.
+
+## Stabilność (nie sztuka ładne + szybkie, musi być stabilne)
+
+### Error boundaries
+- **Global** (`app/error.tsx`) — fallback dla całej aplikacji.
+- **Per segment** (`app/(shop)/error.tsx`, `app/checkout/error.tsx`) — krytyczne flow nie crashują reszty drzewa.
+- **Per component**: `<ErrorBoundary>` (react-error-boundary) wokół 3rd party heavy (3D, charts, embed, map).
+- Każdy fallback: user copy PL + retry button + Sentry autoreport.
+- NEVER globalny `try/catch` dookoła całego drzewa — łyka błędy bez fallbacku.
+
+### Timeouty (każdy external call, bez wyjątków)
+- `fetch(url, { signal: AbortSignal.timeout(5_000) })` — NEVER bez timeoutu.
+- External API: 5s default, 30s upload, 10s webhook outgoing.
+- DB query: 10s max (powyżej = brak indeksu, nie optymalizuj objawów).
+- Vercel function Pro: 60s hard limit — split na mniejsze chunki jeśli przekracza.
+
+### Retry / circuit breaker
+- Exponential backoff: 1s → 2s → 4s → fail. Max 3 próby.
+- Retry TYLKO idempotent: GET, PUT z ID, DELETE. NEVER retry POST bez idempotency key.
+- Circuit breaker: po 5 failures w 60s → open przez 30s (nie bombarduj padniętego API).
+- Libs: `p-retry` + `opossum`, lub Medusa workflow `retryPolicy`.
+
+### Graceful degradation
+- 3rd party pada → feature się wyłącza, nie cały site.
+- Analytics pada → app działa, eventy lecą do PostHog queue.
+- Maps API pada → static image + „Otwórz w Google Maps" link.
+- CMS pada → last cached content (`staleTimes.dynamic: 3600`).
+- Search pada → fallback filter po kategorii.
+- **Feature flags** (PostHog / Statsig) — risky feature za flagą, kill switch gdy pada.
+
+### Memory leaks — patterns
+- `useEffect` z subskrypcją → ZAWSZE cleanup function (`return () => unsubscribe()`).
+- `setInterval` / `setTimeout` → `return () => clearInterval(id)`.
+- Event listeners → `return () => el.removeEventListener(...)`.
+- GSAP → `ctx.revert()` w cleanup. Framer Motion → `controls.stop()`.
+- WebSocket / EventSource → `return () => socket.close()`.
+- Brak cleanup = memory leak + warning „Can't perform state update on unmounted component".
+
+### Zombie state (unmounted setState)
+- `AbortController` per fetch w `useEffect`: utwórz `ctrl = new AbortController()`, przekaż `signal: ctrl.signal`, w cleanup `ctrl.abort()`.
+- `useIsMounted` hook jako fallback dla 3rd party bez abort support.
+- React 19: `useActionState` + `useOptimistic` handlują dużo tego automatycznie.
+
+### Race conditions (client)
+- Stale closure w async `useEffect` → `useRef` lub re-fetch na deps change.
+- Parallel fetche na ten sam stan → trackuj request ID, ignore stale response.
+- Optimistic update + rollback on error: React 19 `useOptimistic`.
+
+### Health check endpoints
+- `/api/health` — simple 200 (server alive).
+- `/api/health/deep` — DB ping + Medusa ping + Redis ping. 200 all OK / 503 któryś pada.
+- Uptime monitoring (Better Uptime, UptimeRobot) → ping `/health/deep` co minutę.
+- NEVER secret data w response — tylko status.
+
+### Load testing (k6)
+- Skrypty w `tests/load/*.js`.
+- Scenariusze pre-release major:
+  - 100 concurrent na home / 5 min.
+  - 50 concurrent PDP / 5 min.
+  - 20 concurrent checkout flow (Stripe test mode).
+- Pass criteria: p95 < 2s, error rate < 0.1%, zero 5xx.
+- Run OBOWIĄZKOWO przed Black Friday / większymi promocjami.
+
+### Feature flags (kill switches)
+- **PostHog Feature Flags** (darmowe do 1M eval) lub **Statsig**.
+- Risky feature (nowa integracja, nowy payment provider, nowy AI) ZA FLAGĄ przy first deploy.
+- Progressive rollout: 1% → 10% → 50% → 100% przez tydzień.
+- Kill switch: flaga OFF = feature schowany bez deployu (rollback w 30s).
+
+### Canary / progressive deploy
+- Vercel „Skew Protection" — stare sesje dostają stary kod przez 24h (brak błędów podczas deploy).
+- NEVER instant 100% rollout dla: DB schema change, payment flow, checkout flow, auth flow.
+- Branch preview → manual promote → prod.
+
+### Dependency pinning
+- **Exact versions** dla krytycznych (`"next": "16.0.2"`, `"@medusajs/medusa": "2.3.0"`, `"stripe": "17.0.0"`).
+- Range OK dla dev deps (`"^2.0.0"` ESLint, Biome, Vitest).
+- Lockfile w repo + CI `--frozen-lockfile`.
+
+### SLO / SLA
+- **SLI** (Service Level Indicator): LCP p75, INP p75, error rate, uptime %.
+- **SLO target**: 99.9% uptime (43 min downtime/miesiąc), LCP p75 < 2.5s przez 95% czasu, error rate < 0.5%.
+- **SLA** (kontraktowy): tylko dla premium klientów — nie overpromise w standardowej umowie.
+- Monitoring: Vercel Analytics + Better Uptime, report miesięczny do klienta.
+
+### Incident severity matrix
+- **SEV1** (krytyczny): site down / checkout down / data breach. Response 15 min, rollback IMMEDIATELY.
+- **SEV2** (wysoki): feature broken (nie całość), performance regression > 30%. Response 1h, fix w 24h.
+- **SEV3** (średni): cosmetic bug, edge case. Response 1 dzień, fix w sprincie.
+- **SEV4** (niski): enhancement, nice-to-have. Backlog.
+
+### Chaos engineering (basics)
+- Raz w kwartale: celowo ubij staging DB → sprawdź czy site pokazuje graceful error + recovery.
+- DevTools throttle 2s na API calls → UI nie zwisa, loaders działają.
+- 3rd party fail simulation: zmień Stripe URL na `stripe-broken.com` w staging ENV → checkout pokazuje „chwilowo niedostępne".

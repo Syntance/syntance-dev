@@ -30,7 +30,13 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
-        router.push("/projects");
+        if (data.isAdmin) {
+          router.push("/strategy-hub");
+        } else if (data.slug) {
+          router.push(`/projects/${data.slug}`);
+        } else {
+          router.push("/projects");
+        }
       } else {
         if (data.code === "NO_PASSWORD") {
           setNoPassword(true);

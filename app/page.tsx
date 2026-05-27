@@ -1,12 +1,24 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { getProjectsForUser } from "@/sanity/queries";
 import { SyntanceLogo } from "@/components/logo";
 import Link from "next/link";
 
 export default async function HomePage() {
   const session = await getSession();
 
-  if (session && session.type === "client") {
+  if (session?.type === "admin") {
+    redirect("/strategy-hub");
+  }
+
+  if (session?.type === "client") {
+    const { isAdmin, projects } = await getProjectsForUser(session.email);
+    if (isAdmin) {
+      redirect("/strategy-hub");
+    }
+    if (projects.length === 1) {
+      redirect(`/projects/${projects[0].slug}`);
+    }
     redirect("/projects");
   }
 
