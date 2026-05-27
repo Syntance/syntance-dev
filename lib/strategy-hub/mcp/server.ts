@@ -174,7 +174,7 @@ export function createStrategyHubMcpServer() {
     "update_business_strategy",
     {
       description:
-        "Aktualizuje sekcję strategii biznesowej. section: goals | uvp | competitors | objections.",
+        "Aktualizuje sekcję strategii biznesowej. section: goals | uvp | competitors | objections. Dla goals/uvp/objections: JSON tablica [{\"text\":\"…\",\"note\":\"…\",\"weight\":1|2|3}] — 1=neutralne, 2=średnie, 3=ważne.",
       inputSchema: z.object({
         projectId: z.string().uuid(),
         section: z.enum(["goals", "uvp", "competitors", "objections"]),

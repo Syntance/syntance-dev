@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { TiptapEditor } from "@/components/strategy-hub/tiptap-editor";
+import dynamic from "next/dynamic";
+import { ListItemsEditor } from "@/components/strategy-hub/list-items-editor";
+import {
+  listItemsPreview,
+  parseStrategyListItems,
+} from "@/lib/strategy-hub/business-strategy-lists";
 import {
   Target,
   Sparkles,
@@ -14,6 +19,22 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+
+const TiptapEditor = dynamic(
+  () =>
+    import("@/components/strategy-hub/tiptap-editor").then((mod) => ({
+      default: mod.TiptapEditor,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex min-h-[200px] items-center justify-center gap-2 border-t border-border text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        Ładowanie edytora…
+      </div>
+    ),
+  }
+);
 
 interface Strategy {
   projectId: string;
@@ -29,46 +50,87 @@ interface Props {
   strategy: Strategy;
 }
 
-const SECTIONS = [
+type SectionKey = keyof Strategy;
+
+type SectionConfig = {
+  key: SectionKey;
+  label: string;
+  icon: typeof Target;
+  color: string;
+  bg: string;
+  editor: "list" | "markdown";
+  placeholder: string;
+  emptyHint?: string;
+  accent?: "violet" | "amber" | "rose";
+};
+
+const SECTIONS: SectionConfig[] = [
   {
-    key: "goalsMd" as const,
+    key: "goalsMd",
     label: "Cele projektu",
     icon: Target,
     color: "text-violet-400",
     bg: "bg-violet-500/10 border-violet-500/20",
-    placeholder:
-      "Jaki jest główny cel projektu? Co klient chce osiągnąć? (np. zwiększyć sprzedaż online o 30% w 12 miesiącach)",
+    editor: "list",
+    accent: "violet",
+    placeholder: "np. zwiększyć sprzedaż online o 30% w 12 miesiącach",
+    emptyHint: "Dodaj cele jako callouty — każdy z wagą i opcjonalną notatką.",
   },
   {
-    key: "uvpMd" as const,
+    key: "uvpMd",
     label: "UVP — Unikalna propozycja wartości",
     icon: Sparkles,
     color: "text-amber-400",
     bg: "bg-amber-500/10 border-amber-500/20",
-    placeholder:
-      "Co wyróżnia ten biznes na tle konkurencji? Dlaczego klient powinien wybrać właśnie to?",
+    editor: "list",
+    accent: "amber",
+    placeholder: "np. jedyny sklep z darmową personalizacją w 24h",
+    emptyHint: "Dodaj argumenty UVP jako callouty — każdy z wagą i notatką.",
   },
   {
-    key: "competitorsMd" as const,
+    key: "competitorsMd",
     label: "Analiza konkurencji",
     icon: Users,
     color: "text-blue-400",
     bg: "bg-blue-500/10 border-blue-500/20",
+    editor: "markdown",
     placeholder:
       "Kto jest konkurencją? Jakie mają mocne i słabe strony? Co możemy zrobić lepiej?",
   },
   {
-    key: "objectionsMd" as const,
+    key: "objectionsMd",
     label: "Obiekcje klientów",
     icon: MessageSquare,
     color: "text-rose-400",
     bg: "bg-rose-500/10 border-rose-500/20",
-    placeholder:
-      "Jakie główne obiekcje mają potencjalni klienci? Dlaczego nie kupują? Jak je zbijamy?",
+    editor: "list",
+    accent: "rose",
+    placeholder: "np. za drogo w porównaniu do konkurencji",
+    emptyHint:
+      "Dodaj obiekcje jako callouty — każda z wagą i opcjonalną notatką (np. jak ją zbijamy).",
   },
 ];
 
+function sectionIsFilled(section: SectionConfig, strategy: Strategy): boolean {
+  const content = strategy[section.key];
+  if (section.editor === "list") {
+    return parseStrategyListItems(content).length > 0;
+  }
+  return (content?.length ?? 0) > 0;
+}
+
+function sectionPreview(section: SectionConfig, strategy: Strategy): string {
+  const content = strategy[section.key];
+  if (section.editor === "list") {
+    return listItemsPreview(content);
+  }
+  if (!content) return "";
+  const stripped = content.replace(/#+\s/g, "");
+  return stripped.length > 80 ? `${stripped.substring(0, 80)}…` : stripped;
+}
+
 export function BusinessStrategyEditor({ projectId, projectName, strategy }: Props) {
+  const [localStrategy, setLocalStrategy] = useState(strategy);
   const [activeSection, setActiveSection] = useState<string | null>(
     SECTIONS[0].key
   );
@@ -83,6 +145,7 @@ export function BusinessStrategyEditor({ projectId, projectName, strategy }: Pro
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [key]: markdown }),
     });
+    setLocalStrategy((prev) => ({ ...prev, [key]: markdown }));
   };
 
   const handlePush = () => {
@@ -107,9 +170,7 @@ export function BusinessStrategyEditor({ projectId, projectName, strategy }: Pro
     });
   };
 
-  const filledCount = SECTIONS.filter(
-    (s) => (strategy[s.key]?.length ?? 0) > 0
-  ).length;
+  const filledCount = SECTIONS.filter((s) => sectionIsFilled(s, localStrategy)).length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -172,7 +233,8 @@ export function BusinessStrategyEditor({ projectId, projectName, strategy }: Pro
       <div className="space-y-4">
         {SECTIONS.map((section) => {
           const isOpen = activeSection === section.key;
-          const isFilled = (strategy[section.key]?.length ?? 0) > 0;
+          const isFilled = sectionIsFilled(section, localStrategy);
+          const preview = sectionPreview(section, localStrategy);
 
           return (
             <div
@@ -200,12 +262,9 @@ export function BusinessStrategyEditor({ projectId, projectName, strategy }: Pro
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm">{section.label}</div>
-                  {!isOpen && isFilled && (
+                  {!isOpen && isFilled && preview && (
                     <div className="text-xs text-muted-foreground truncate mt-0.5">
-                      {strategy[section.key]
-                        ?.replace(/#+\s/g, "")
-                        .substring(0, 80)}
-                      …
+                      {preview}
                     </div>
                   )}
                 </div>
@@ -228,12 +287,23 @@ export function BusinessStrategyEditor({ projectId, projectName, strategy }: Pro
 
               {isOpen && (
                 <div className="border-t border-border">
-                  <TiptapEditor
-                    initialContent={strategy[section.key] ?? ""}
-                    placeholder={section.placeholder}
-                    onSave={(md) => handleSave(section.key, md)}
-                    className="rounded-none border-0"
-                  />
+                  {section.editor === "list" ? (
+                    <ListItemsEditor
+                      initialContent={localStrategy[section.key]}
+                      placeholder={section.placeholder}
+                      emptyHint={section.emptyHint}
+                      accent={section.accent}
+                      onSave={(md) => handleSave(section.key, md)}
+                      className="rounded-none border-0"
+                    />
+                  ) : (
+                    <TiptapEditor
+                      initialContent={localStrategy[section.key] ?? ""}
+                      placeholder={section.placeholder}
+                      onSave={(md) => handleSave(section.key, md)}
+                      className="rounded-none border-0"
+                    />
+                  )}
                 </div>
               )}
             </div>

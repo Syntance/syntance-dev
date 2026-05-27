@@ -6,6 +6,8 @@ import { projects as dbProjects, businessStrategy } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 import { FileText, Target, Sparkles, Users, MessageSquare } from "lucide-react";
 import { trackVisit } from "@/lib/strategy-hub/tracking";
+import { StrategyItemCallout } from "@/components/strategy-hub/strategy-item-callout";
+import { parseStrategyListItems } from "@/lib/strategy-hub/business-strategy-lists";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -37,10 +39,15 @@ async function getStrategy(slug: string) {
 }
 
 const SECTIONS = [
-  { key: "goalsMd" as const, label: "Cele projektu", icon: Target },
-  { key: "uvpMd" as const, label: "Unikalna propozycja wartości", icon: Sparkles },
-  { key: "competitorsMd" as const, label: "Analiza konkurencji", icon: Users },
-  { key: "objectionsMd" as const, label: "Obiekcje klientów", icon: MessageSquare },
+  { key: "goalsMd" as const, label: "Cele projektu", icon: Target, list: true },
+  {
+    key: "uvpMd" as const,
+    label: "Unikalna propozycja wartości",
+    icon: Sparkles,
+    list: true,
+  },
+  { key: "competitorsMd" as const, label: "Analiza konkurencji", icon: Users, list: false },
+  { key: "objectionsMd" as const, label: "Obiekcje klientów", icon: MessageSquare, list: true },
 ];
 
 function markdownToHtml(md: string): string {
@@ -72,9 +79,11 @@ export default async function ClientBusinessStrategyPage({ params }: Props) {
 
   const strategy = await getStrategy(slug);
 
-  const hasContent = strategy && SECTIONS.some(
-    (s) => (strategy[s.key]?.length ?? 0) > 0
-  );
+  const hasContent = strategy && SECTIONS.some((s) => {
+    const content = strategy[s.key];
+    if (s.list) return parseStrategyListItems(content).length > 0;
+    return (content?.length ?? 0) > 0;
+  });
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -105,7 +114,14 @@ export default async function ClientBusinessStrategyPage({ params }: Props) {
         <div className="space-y-4">
           {SECTIONS.map((section) => {
             const content = strategy?.[section.key];
-            if (!content) return null;
+            const listItems = section.list
+              ? parseStrategyListItems(content)
+              : [];
+            const hasSection = section.list
+              ? listItems.length > 0
+              : Boolean(content);
+
+            if (!hasSection) return null;
 
             return (
               <div
@@ -116,12 +132,22 @@ export default async function ClientBusinessStrategyPage({ params }: Props) {
                   <section.icon className="size-4 text-brand" />
                   <h2 className="font-medium text-sm">{section.label}</h2>
                 </div>
-                <div
-                  className="text-sm text-foreground/90 leading-relaxed"
-                  dangerouslySetInnerHTML={{
-                    __html: markdownToHtml(content),
-                  }}
-                />
+                {section.list ? (
+                  <ul className="flex flex-col items-start gap-2">
+                    {listItems.map((item, index) => (
+                      <li key={item.id}>
+                        <StrategyItemCallout item={item} index={index} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div
+                    className="text-sm text-foreground/90 leading-relaxed"
+                    dangerouslySetInnerHTML={{
+                      __html: markdownToHtml(content ?? ""),
+                    }}
+                  />
+                )}
               </div>
             );
           })}

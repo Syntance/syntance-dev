@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { strategyListItemsToMarkdown } from "@/lib/strategy-hub/business-strategy-lists";
 import { db } from "@/db";
 import { businessStrategy, projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -133,10 +134,16 @@ export async function GET(
   const strategy = stratRows[0];
 
   const sections = [
-    { title: "Cele biznesowe", md: strategy?.goalsMd ?? "—" },
-    { title: "UVP", md: strategy?.uvpMd ?? "—" },
+    {
+      title: "Cele biznesowe",
+      md: strategyListItemsToMarkdown(strategy?.goalsMd),
+    },
+    { title: "UVP", md: strategyListItemsToMarkdown(strategy?.uvpMd) },
     { title: "Konkurencja", md: strategy?.competitorsMd ?? "—" },
-    { title: "Obiekcje klientów", md: strategy?.objectionsMd ?? "—" },
+    {
+      title: "Obiekcje klientów",
+      md: strategyListItemsToMarkdown(strategy?.objectionsMd),
+    },
   ];
 
   const buffer = await renderToBuffer(

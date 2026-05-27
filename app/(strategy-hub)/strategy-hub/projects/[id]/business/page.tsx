@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { projects, businessStrategy } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
-import { BusinessStrategyEditor } from "./business-strategy-editor";
+import { BusinessStrategyEditorLoader } from "./business-strategy-editor-loader";
 
 export const metadata = { title: "Strategia biznesowa" };
 
@@ -52,7 +52,7 @@ export default async function BusinessStrategyPage({ params }: Props) {
   if (!data) notFound();
 
   return (
-    <BusinessStrategyEditor
+    <BusinessStrategyEditorLoader
       projectId={id}
       projectName={data.project.name}
       strategy={data.strategy}

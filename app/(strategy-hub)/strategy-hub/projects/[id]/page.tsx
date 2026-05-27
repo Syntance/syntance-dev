@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { db } from "@/db";
 import { projects, businessStrategy, segments, kpis } from "@/db/schema";
+import { parseStrategyListItems } from "@/lib/strategy-hub/business-strategy-lists";
 import { eq, isNull, and, count } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,8 +92,8 @@ export default async function ProjectPage({ params }: Props) {
   const { project, strategy, segmentCount, kpiCount } = data;
 
   const strategyFilled =
-    (strategy?.goalsMd?.length ?? 0) > 0 ||
-    (strategy?.uvpMd?.length ?? 0) > 0;
+    parseStrategyListItems(strategy?.goalsMd).length > 0 ||
+    parseStrategyListItems(strategy?.uvpMd).length > 0;
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">

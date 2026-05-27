@@ -7,6 +7,7 @@ import {
   projects,
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { strategyListItemsToMarkdown } from "@/lib/strategy-hub/business-strategy-lists";
 
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
@@ -149,15 +150,15 @@ export async function pushBusinessStrategyToNotion(projectId: string) {
     if (!pageId) throw new Error("Nie udało się sparsować Notion page id");
 
     const sections: { title: string; md: string | null }[] = [
-      { title: "🎯 Cele biznesowe", md: strat.goalsMd },
-      { title: "✨ UVP", md: strat.uvpMd },
+      { title: "🎯 Cele biznesowe", md: strategyListItemsToMarkdown(strat.goalsMd) },
+      { title: "✨ UVP", md: strategyListItemsToMarkdown(strat.uvpMd) },
       { title: "🥊 Konkurencja", md: strat.competitorsMd },
-      { title: "💬 Obiekcje klientów", md: strat.objectionsMd },
+      { title: "💬 Obiekcje klientów", md: strategyListItemsToMarkdown(strat.objectionsMd) },
     ];
 
     let allBlocks: NotionBlock[] = [];
     for (const s of sections) {
-      if (!s.md || !s.md.trim()) continue;
+      if (!s.md || !s.md.trim() || s.md === "—") continue;
       allBlocks.push(headingBlock(2, s.title));
       allBlocks = allBlocks.concat(markdownToNotionBlocks(s.md));
     }
