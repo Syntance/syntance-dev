@@ -14,6 +14,7 @@ import {
   Filter,
   Megaphone,
   Gauge,
+  LayoutDashboard,
 } from "lucide-react";
 import { db } from "@/db";
 import { projects, businessStrategy, segments, kpis } from "@/db/schema";
@@ -210,6 +211,23 @@ export default async function ProjectPage({ params }: Props) {
           sub="wskaźników"
         />
       </div>
+
+      {/* Strategy Canvas CTA */}
+      <Link
+        href={`/strategy-hub/projects/${id}/canvas`}
+        className="group flex items-center gap-4 rounded-xl border border-brand/20 bg-brand/5 p-5 hover:border-brand/40 transition-colors"
+      >
+        <div className="size-10 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center">
+          <LayoutDashboard className="size-5 text-brand" />
+        </div>
+        <div className="flex-1">
+          <div className="font-medium text-sm">Strategy Canvas</div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Health score i kompletność wszystkich modułów w jednym widoku.
+          </div>
+        </div>
+        <ArrowRight className="size-4 text-brand/60 group-hover:text-brand transition-colors" />
+      </Link>
 
       {/* Moduły strategii */}
       <div>

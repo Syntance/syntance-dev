@@ -19,6 +19,7 @@ import {
   Filter,
   Megaphone,
   Gauge,
+  LayoutDashboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -46,6 +47,11 @@ const navItems = [
 ];
 
 const strategyItems = (projectId: string) => [
+  {
+    label: "Strategy Canvas",
+    href: `/strategy-hub/projects/${projectId}/canvas`,
+    icon: LayoutDashboard,
+  },
   {
     label: "Discovery",
     href: `/strategy-hub/projects/${projectId}/discovery`,

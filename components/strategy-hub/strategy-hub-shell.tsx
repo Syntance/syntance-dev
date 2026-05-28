@@ -5,6 +5,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { NavSidebar } from "@/components/strategy-hub/nav-sidebar";
 import { StrategyHubHeader } from "@/components/strategy-hub/hub-header";
 import { ThemeProvider } from "@/components/strategy-hub/theme-provider";
+import { HubOverlays } from "@/components/strategy-hub/hub-overlays";
 import {
   ProjectProvider,
   useProjectIdFromPath,
@@ -46,13 +47,15 @@ export function StrategyHubShell({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
       <ProjectMetaLoader>
-        <SidebarProvider>
-          <NavSidebar />
-          <div className="flex flex-1 flex-col min-h-screen min-w-0">
-            <StrategyHubHeader />
-            <main className="flex-1 p-6">{children}</main>
-          </div>
-        </SidebarProvider>
+        <HubOverlays>
+          <SidebarProvider>
+            <NavSidebar />
+            <div className="flex flex-1 flex-col min-h-screen min-w-0">
+              <StrategyHubHeader />
+              <main className="flex-1 p-6">{children}</main>
+            </div>
+          </SidebarProvider>
+        </HubOverlays>
       </ProjectMetaLoader>
     </ThemeProvider>
   );
