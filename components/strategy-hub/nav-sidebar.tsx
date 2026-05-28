@@ -18,6 +18,7 @@ import {
   Users,
   Filter,
   Megaphone,
+  Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -84,6 +85,11 @@ const strategyItems = (projectId: string) => [
     label: "Strona",
     href: `/strategy-hub/projects/${projectId}/website`,
     icon: Globe,
+  },
+  {
+    label: "KPI",
+    href: `/strategy-hub/projects/${projectId}/kpi`,
+    icon: Gauge,
   },
   {
     label: "Infrastruktura",

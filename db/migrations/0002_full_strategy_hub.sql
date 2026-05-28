@@ -477,3 +477,20 @@ CREATE TABLE IF NOT EXISTS "change_history" (
 ALTER TABLE "change_history" ADD CONSTRAINT "change_history_project_id_fk" FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE cascade;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "change_history_project_idx" ON "change_history" ("project_id");
+--> statement-breakpoint
+
+-- ── KPI: szereg czasowy (sparkline) ─────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS "kpi_snapshots" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"kpi_id" uuid NOT NULL,
+	"value" varchar(100) NOT NULL,
+	"recorded_at" timestamp DEFAULT now() NOT NULL,
+	"note" text,
+	"source" varchar(20) DEFAULT 'hub' NOT NULL,
+	"deleted_at" timestamp
+);
+--> statement-breakpoint
+ALTER TABLE "kpi_snapshots" ADD CONSTRAINT "kpi_snapshots_kpi_id_fk" FOREIGN KEY ("kpi_id") REFERENCES "kpis"("id") ON DELETE cascade;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "kpi_snapshots_kpi_idx" ON "kpi_snapshots" ("kpi_id");

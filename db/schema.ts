@@ -401,6 +401,22 @@ export const kpis = pgTable(
   (t) => [index("kpis_project_idx").on(t.projectId)]
 );
 
+export const kpiSnapshots = pgTable(
+  "kpi_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kpiId: uuid("kpi_id")
+      .notNull()
+      .references(() => kpis.id, { onDelete: "cascade" }),
+    value: varchar("value", { length: 100 }).notNull(),
+    recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+    note: text("note"),
+    source: varchar("source", { length: 20 }).notNull().default("hub"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("kpi_snapshots_kpi_idx").on(t.kpiId)]
+);
+
 // ─── Strategia strony ────────────────────────────────────────────────────────
 
 export const pages = pgTable(
@@ -1472,5 +1488,24 @@ export const changeHistoryRelations = relations(changeHistory, ({ one }) => ({
   project: one(projects, {
     fields: [changeHistory.projectId],
     references: [projects.id],
+  }),
+}));
+
+export const kpisRelations = relations(kpis, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [kpis.projectId],
+    references: [projects.id],
+  }),
+  segment: one(segments, {
+    fields: [kpis.segmentId],
+    references: [segments.id],
+  }),
+  snapshots: many(kpiSnapshots),
+}));
+
+export const kpiSnapshotsRelations = relations(kpiSnapshots, ({ one }) => ({
+  kpi: one(kpis, {
+    fields: [kpiSnapshots.kpiId],
+    references: [kpis.id],
   }),
 }));

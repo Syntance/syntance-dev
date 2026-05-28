@@ -27,6 +27,8 @@ import {
   siteAudits,
   siteAuditFindings,
   pageSections,
+  kpis,
+  kpiSnapshots,
 } from "@/db/schema";
 import { encryptSecret } from "@/lib/strategy-hub/crypto";
 
@@ -317,6 +319,26 @@ const findingCreate = z.object({
   orderIdx: z.number().int().optional(),
 });
 const findingPatch = findingCreate.partial();
+
+// ─── KPI: schematy ───────────────────────────────────────────────────────────
+
+const kpiCreate = z.object({
+  name: z.string().min(1).max(255),
+  target: z.string().max(100).nullable().optional(),
+  actual: z.string().max(100).nullable().optional(),
+  unit: z.string().max(50).nullable().optional(),
+  category: z.string().max(100).nullable().optional(),
+  segmentId: z.string().uuid().nullable().optional(),
+  deadline: z.coerce.date().nullable().optional(),
+});
+const kpiPatch = kpiCreate.partial();
+
+const snapshotCreate = z.object({
+  value: z.string().min(1).max(100),
+  recordedAt: z.coerce.date().optional(),
+  note: z.string().nullable().optional(),
+});
+const snapshotPatch = snapshotCreate.partial();
 
 // ─── Rejestr encji listowych ─────────────────────────────────────────────────
 
@@ -909,6 +931,82 @@ const listEntities: Record<string, ListEntityDef> = {
         .returning({ id: siteAudits.id })
         .then((r) => r.length > 0),
   }),
+
+  kpis: listDef({
+    kind: "list",
+    label: "KPI",
+    createSchema: kpiCreate,
+    patchSchema: kpiPatch,
+    list: (pid) =>
+      db
+        .select()
+        .from(kpis)
+        .where(and(eq(kpis.projectId, pid), isNull(kpis.deletedAt)))
+        .orderBy(asc(kpis.category), asc(kpis.name)),
+    create: (pid, data) =>
+      db
+        .insert(kpis)
+        .values({ projectId: pid, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(kpis)
+        .set(compact(data))
+        .where(and(eq(kpis.id, itemId), eq(kpis.projectId, pid)))
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(kpis)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(kpis.id, itemId), eq(kpis.projectId, pid)))
+        .returning({ id: kpis.id })
+        .then((r) => r.length > 0),
+  }),
+};
+
+// ─── Dzieci KPI (snapshoty, scoped po kpiId) ─────────────────────────────────
+
+const kpiChildEntities: Record<string, ListEntityDef> = {
+  snapshots: listDef({
+    kind: "list",
+    label: "Pomiar KPI",
+    createSchema: snapshotCreate,
+    patchSchema: snapshotPatch,
+    list: (kpiId) =>
+      db
+        .select()
+        .from(kpiSnapshots)
+        .where(
+          and(eq(kpiSnapshots.kpiId, kpiId), isNull(kpiSnapshots.deletedAt))
+        )
+        .orderBy(asc(kpiSnapshots.recordedAt)),
+    create: (kpiId, data) =>
+      db
+        .insert(kpiSnapshots)
+        .values({ kpiId, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (kpiId, itemId, data) =>
+      db
+        .update(kpiSnapshots)
+        .set(compact(data))
+        .where(
+          and(eq(kpiSnapshots.id, itemId), eq(kpiSnapshots.kpiId, kpiId))
+        )
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (kpiId, itemId) =>
+      db
+        .update(kpiSnapshots)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(eq(kpiSnapshots.id, itemId), eq(kpiSnapshots.kpiId, kpiId))
+        )
+        .returning({ id: kpiSnapshots.id })
+        .then((r) => r.length > 0),
+  }),
 };
 
 // ─── Dzieci strony (scoped po pageId) ────────────────────────────────────────
@@ -1310,6 +1408,10 @@ export function getPageChild(key: string): ListEntityDef | undefined {
 
 export function getAuditChild(key: string): ListEntityDef | undefined {
   return auditChildEntities[key];
+}
+
+export function getKpiChild(key: string): ListEntityDef | undefined {
+  return kpiChildEntities[key];
 }
 
 export function registerListEntities(entries: Record<string, ListEntityDef>) {

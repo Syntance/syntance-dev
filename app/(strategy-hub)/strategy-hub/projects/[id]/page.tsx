@@ -13,6 +13,7 @@ import {
   Gem,
   Filter,
   Megaphone,
+  Gauge,
 } from "lucide-react";
 import { db } from "@/db";
 import { projects, businessStrategy, segments, kpis } from "@/db/schema";
@@ -118,6 +119,14 @@ const modules = (id: string) => [
     description: "Podstrony, SEO, stack technologiczny",
     color: "text-emerald-400",
     bg: "bg-emerald-500/10 border-emerald-500/20",
+  },
+  {
+    href: `/strategy-hub/projects/${id}/kpi`,
+    icon: Gauge,
+    label: "KPI",
+    description: "Cele liczbowe, trend pomiarów, postęp",
+    color: "text-rose-400",
+    bg: "bg-rose-500/10 border-rose-500/20",
   },
 ];
 
