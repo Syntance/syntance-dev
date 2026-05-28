@@ -4,8 +4,9 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ─── Oryginalne tokeny Syntance (dark mode jako domyślny) ─────────────────── */
-:root {
+/* ─── Motyw ciemny (domyślny) ──────────────────────────────────────────────── */
+:root,
+html[data-theme="dark"] {
   --background: #09090b;
   --foreground: #fafafa;
   --card: #18181b;
@@ -23,19 +24,13 @@
   --ring: #6d28d9;
   --input: #27272a;
   --radius: 0.625rem;
-
-  /* shadcn primary (dla nowych komponentów) */
   --primary: #8b5cf6;
   --primary-foreground: #ffffff;
   --secondary: #27272a;
   --secondary-foreground: #fafafa;
-
-  /* brand */
   --brand: #6d28d9;
   --brand-light: #8b5cf6;
   --brand-glow: 0 0 48px rgb(109 40 217 / 0.4);
-
-  /* sidebar */
   --sidebar: #18181b;
   --sidebar-foreground: #fafafa;
   --sidebar-primary: #8b5cf6;
@@ -44,13 +39,135 @@
   --sidebar-accent-foreground: #fafafa;
   --sidebar-border: #27272a;
   --sidebar-ring: #6d28d9;
-
-  /* chart */
   --chart-1: #8b5cf6;
   --chart-2: #6d28d9;
   --chart-3: #22c55e;
   --chart-4: #f59e0b;
   --chart-5: #ef4444;
+}
+
+/* ─── Motyw jasny ──────────────────────────────────────────────────────────── */
+html[data-theme="light"] {
+  --background: #fafaf9;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --border: #e7e5e4;
+  --muted: #f5f5f4;
+  --muted-foreground: #78716c;
+  --accent: #7c3aed;
+  --accent-light: #8b5cf6;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --success: #16a34a;
+  --ring: #7c3aed;
+  --input: #e7e5e4;
+  --radius: 0.625rem;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f4;
+  --secondary-foreground: #1c1917;
+  --brand: #7c3aed;
+  --brand-light: #8b5cf6;
+  --brand-glow: 0 0 48px rgb(124 58 237 / 0.25);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1c1917;
+  --sidebar-primary: #7c3aed;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f5f5f4;
+  --sidebar-accent-foreground: #1c1917;
+  --sidebar-border: #e7e5e4;
+  --sidebar-ring: #7c3aed;
+  --chart-1: #7c3aed;
+  --chart-2: #6d28d9;
+  --chart-3: #16a34a;
+  --chart-4: #d97706;
+  --chart-5: #dc2626;
+}
+
+/* ─── Motyw ziemny ─────────────────────────────────────────────────────────── */
+html[data-theme="earth"] {
+  --background: #1a1610;
+  --foreground: #f0ebe0;
+  --card: #252018;
+  --card-foreground: #f0ebe0;
+  --popover: #252018;
+  --popover-foreground: #f0ebe0;
+  --border: #3d3628;
+  --muted: #2e2820;
+  --muted-foreground: #9c9080;
+  --accent: #b45309;
+  --accent-light: #d97706;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --success: #65a30d;
+  --ring: #b45309;
+  --input: #3d3628;
+  --radius: 0.625rem;
+  --primary: #d97706;
+  --primary-foreground: #1a1610;
+  --secondary: #2e2820;
+  --secondary-foreground: #f0ebe0;
+  --brand: #b45309;
+  --brand-light: #d97706;
+  --brand-glow: 0 0 48px rgb(180 83 9 / 0.4);
+  --sidebar: #201c14;
+  --sidebar-foreground: #f0ebe0;
+  --sidebar-primary: #d97706;
+  --sidebar-primary-foreground: #1a1610;
+  --sidebar-accent: #2e2820;
+  --sidebar-accent-foreground: #f0ebe0;
+  --sidebar-border: #3d3628;
+  --sidebar-ring: #b45309;
+  --chart-1: #d97706;
+  --chart-2: #b45309;
+  --chart-3: #65a30d;
+  --chart-4: #c2410c;
+  --chart-5: #dc2626;
+}
+
+/* ─── Motyw automatyczny — śledzi OS ──────────────────────────────────────── */
+@media (prefers-color-scheme: light) {
+  html[data-theme="auto"] {
+    --background: #fafaf9;
+    --foreground: #1c1917;
+    --card: #ffffff;
+    --card-foreground: #1c1917;
+    --popover: #ffffff;
+    --popover-foreground: #1c1917;
+    --border: #e7e5e4;
+    --muted: #f5f5f4;
+    --muted-foreground: #78716c;
+    --accent: #7c3aed;
+    --accent-light: #8b5cf6;
+    --accent-foreground: #ffffff;
+    --destructive: #dc2626;
+    --success: #16a34a;
+    --ring: #7c3aed;
+    --input: #e7e5e4;
+    --primary: #7c3aed;
+    --primary-foreground: #ffffff;
+    --secondary: #f5f5f4;
+    --secondary-foreground: #1c1917;
+    --brand: #7c3aed;
+    --brand-light: #8b5cf6;
+    --brand-glow: 0 0 48px rgb(124 58 237 / 0.25);
+    --sidebar: #ffffff;
+    --sidebar-foreground: #1c1917;
+    --sidebar-primary: #7c3aed;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #f5f5f4;
+    --sidebar-accent-foreground: #1c1917;
+    --sidebar-border: #e7e5e4;
+    --sidebar-ring: #7c3aed;
+    --chart-1: #7c3aed;
+    --chart-2: #6d28d9;
+    --chart-3: #16a34a;
+    --chart-4: #d97706;
+    --chart-5: #dc2626;
+  }
 }
 
 @theme inline {

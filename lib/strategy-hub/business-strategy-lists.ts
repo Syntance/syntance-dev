@@ -33,17 +33,22 @@ export function normalizeWeight(raw: number): StrategyListWeight {
   return 1;
 }
 
-const itemSchema = z.object({
-  id: z.string(),
-  text: z.string(),
-  note: z.string().optional().default(""),
-  weight: z
-    .number()
-    .int()
-    .optional()
-    .default(2)
-    .transform((v) => normalizeWeight(v ?? 2)),
-});
+const itemSchema = z
+  .object({
+    id: z.string().optional(),
+    text: z.string(),
+    note: z.string().optional().default(""),
+    weight: z
+      .number()
+      .int()
+      .optional()
+      .default(2)
+      .transform((v) => normalizeWeight(v ?? 2)),
+  })
+  .transform((item) => ({
+    ...item,
+    id: item.id ?? crypto.randomUUID(),
+  }));
 
 const listSchema = z.array(itemSchema);
 
@@ -95,6 +100,19 @@ function parseLegacyMarkdown(content: string): StrategyListItem[] {
   return single ? [createStrategyListItem(single)] : [];
 }
 
+function tryParseJsonList(raw: string): StrategyListItem[] | null {
+  try {
+    const parsed = listSchema.safeParse(JSON.parse(raw));
+    if (parsed.success) {
+      const items = parsed.data.filter((item) => item.text.trim());
+      return items.length > 0 ? items : null;
+    }
+  } catch {
+    // not valid JSON
+  }
+  return null;
+}
+
 /** Parsuje cele / UVP — JSON (nowy format) lub legacy markdown. */
 export function parseStrategyListItems(
   content: string | null | undefined
@@ -102,14 +120,17 @@ export function parseStrategyListItems(
   if (!content?.trim()) return [];
 
   const trimmed = content.trim();
+
+  // Próba parsowania jako JSON array
   if (trimmed.startsWith("[")) {
-    try {
-      const parsed = listSchema.safeParse(JSON.parse(trimmed));
-      if (parsed.success) {
-        return parsed.data.filter((item) => item.text.trim());
+    const items = tryParseJsonList(trimmed);
+    if (items) {
+      // Jeśli jest dokładnie 1 element i jego text wygląda jak JSON array — "un-nest"
+      if (items.length === 1 && items[0].text.trimStart().startsWith("[")) {
+        const nested = tryParseJsonList(items[0].text.trim());
+        if (nested) return nested;
       }
-    } catch {
-      // fallback do markdown
+      return items;
     }
   }
 
@@ -205,9 +226,9 @@ export function weightBadgeClass(weight: StrategyListWeight): string {
 
 export function weightPickerActiveClass(weight: StrategyListWeight): string {
   const map: Record<StrategyListWeight, string> = {
-    1: "border-emerald-500 bg-emerald-500/20 text-emerald-700 dark:text-emerald-400",
-    2: "border-amber-500 bg-amber-500/20 text-amber-800 dark:text-amber-400",
-    3: "border-destructive bg-destructive/20 text-destructive",
+    1: "bg-emerald-500/10 text-emerald-400",
+    2: "bg-amber-500/10 text-orange-400",
+    3: "bg-destructive/10 text-destructive",
   };
   return map[weight];
 }

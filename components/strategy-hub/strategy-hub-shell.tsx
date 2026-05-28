@@ -4,6 +4,7 @@ import * as React from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { NavSidebar } from "@/components/strategy-hub/nav-sidebar";
 import { StrategyHubHeader } from "@/components/strategy-hub/hub-header";
+import { ThemeProvider } from "@/components/strategy-hub/theme-provider";
 import {
   ProjectProvider,
   useProjectIdFromPath,
@@ -43,14 +44,16 @@ function ProjectMetaLoader({ children }: { children: React.ReactNode }) {
 
 export function StrategyHubShell({ children }: { children: React.ReactNode }) {
   return (
-    <ProjectMetaLoader>
-      <SidebarProvider>
-        <NavSidebar />
-        <div className="flex flex-1 flex-col min-h-screen min-w-0">
-          <StrategyHubHeader />
-          <main className="flex-1 p-6">{children}</main>
-        </div>
-      </SidebarProvider>
-    </ProjectMetaLoader>
+    <ThemeProvider>
+      <ProjectMetaLoader>
+        <SidebarProvider>
+          <NavSidebar />
+          <div className="flex flex-1 flex-col min-h-screen min-w-0">
+            <StrategyHubHeader />
+            <main className="flex-1 p-6">{children}</main>
+          </div>
+        </SidebarProvider>
+      </ProjectMetaLoader>
+    </ThemeProvider>
   );
 }

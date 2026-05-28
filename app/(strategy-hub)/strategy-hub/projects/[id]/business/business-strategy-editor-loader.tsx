@@ -11,20 +11,30 @@ const BusinessStrategyEditor = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="max-w-4xl mx-auto space-y-6 animate-pulse">
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-2">
-            <Skeleton className="h-7 w-56" />
-            <Skeleton className="h-4 w-40" />
+      <div className="-m-6 h-[calc(100vh-3.5rem)] flex flex-col animate-pulse">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <div className="space-y-1.5">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-3 w-32" />
           </div>
           <div className="flex gap-2">
-            <Skeleton className="h-8 w-16" />
+            <Skeleton className="h-8 w-14" />
             <Skeleton className="h-8 w-32" />
           </div>
         </div>
-        <Skeleton className="h-14 w-full rounded-xl" />
-        <Skeleton className="h-14 w-full rounded-xl" />
-        <Skeleton className="h-14 w-full rounded-xl" />
+        <div className="flex flex-1 min-h-0">
+          <div className="w-56 border-r border-border p-3 space-y-1">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-lg" />
+            ))}
+          </div>
+          <div className="flex-1 p-6 space-y-3">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="h-4 w-3/5" />
+          </div>
+        </div>
       </div>
     ),
   }

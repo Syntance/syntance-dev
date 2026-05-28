@@ -10,17 +10,14 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Loader2, Check } from "lucide-react";
+import { Plus, Trash2, Loader2, Check, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   createStrategyListItem,
   parseStrategyListItems,
   serializeStrategyListItems,
   WEIGHT_OPTIONS,
-  weightBgClass,
-  weightBorderClass,
   weightPickerActiveClass,
   type StrategyListItem,
   type StrategyListWeight,
@@ -38,29 +35,108 @@ interface ListItemsEditorProps {
   accent?: AccentVariant;
 }
 
-const ACCENT_RING: Record<AccentVariant, string> = {
-  violet: "focus-within:ring-violet-500/20 focus-within:border-violet-500/40",
-  amber: "focus-within:ring-amber-500/20 focus-within:border-amber-500/40",
-  rose: "focus-within:ring-rose-500/20 focus-within:border-rose-500/40",
-};
+// ─── Kolorowe kropki wagi ─────────────────────────────────────────────────────
 
-const CALLOUT_WIDTH =
-  "w-fit min-w-[min(100%,16rem)] max-w-lg";
+function weightDotClass(w: StrategyListWeight) {
+  return {
+    1: "bg-emerald-500",
+    2: "bg-amber-500",
+    3: "bg-destructive",
+  }[w];
+}
 
-function AutoResizeTitle({
+// Pasek wagi — tylko wizualny
+function WeightBar({ value }: { value: StrategyListWeight }) {
+  return (
+    <span
+      aria-hidden
+      className={cn("shrink-0 self-stretch w-1.5 rounded-l-md", weightDotClass(value))}
+    />
+  );
+}
+
+// Mini picker wagi — popup przy ołówku
+function WeightPicker({
+  value,
+  onChange,
+  itemLabel,
+}: {
+  value: StrategyListWeight;
+  onChange: (w: StrategyListWeight) => void;
+  itemLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-label={`Zmień wagę elementu: ${itemLabel}`}
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "size-5 flex items-center justify-center rounded transition-colors",
+          open
+            ? "text-foreground bg-muted"
+            : "text-transparent group-hover:text-muted-foreground hover:text-foreground hover:bg-muted"
+        )}
+      >
+        <Pencil className="size-3" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 bottom-6 z-20 flex items-center gap-1 rounded-lg border border-border bg-popover px-2 py-1.5 shadow-lg">
+          {WEIGHT_OPTIONS.map(({ value: w, label }) => (
+            <button
+              key={w}
+              type="button"
+              title={label}
+              onClick={() => {
+                onChange(w);
+                setOpen(false);
+              }}
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-colors",
+                value === w
+                  ? weightPickerActiveClass(w)
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <span className={cn("w-5 h-1.5 rounded-full shrink-0", weightDotClass(w))} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Auto-resize textarea ─────────────────────────────────────────────────────
+
+function AutoResizeText({
   value,
   onChange,
   placeholder,
   ariaLabel,
 }: {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (v: string) => void;
   placeholder: string;
   ariaLabel: string;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  const syncHeight = useCallback(() => {
+  const sync = useCallback(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "0px";
@@ -68,71 +144,33 @@ function AutoResizeTitle({
   }, []);
 
   useLayoutEffect(() => {
-    syncHeight();
-  }, [value, syncHeight]);
+    sync();
+  }, [value, sync]);
 
   return (
     <textarea
       ref={ref}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      onInput={syncHeight}
+      onInput={sync}
       placeholder={placeholder}
       aria-label={ariaLabel}
       rows={1}
       className={cn(
-        "flex w-full min-h-8 resize-none overflow-hidden rounded-lg border border-transparent",
-        "bg-transparent px-2.5 py-1.5 text-sm font-medium leading-snug shadow-none outline-none",
-        "transition-colors placeholder:text-muted-foreground",
-        "focus-visible:border-ring focus-visible:bg-background/80 focus-visible:ring-3 focus-visible:ring-ring/50",
-        "field-sizing-content dark:bg-transparent"
+        "flex-1 min-w-0 w-full bg-transparent text-sm leading-snug resize-none overflow-hidden",
+        "py-0.5 outline-none border-none shadow-none",
+        "placeholder:text-muted-foreground/50 text-foreground/90",
+        "field-sizing-content"
       )}
     />
   );
 }
 
-function WeightPicker({
-  value,
-  onChange,
-  itemLabel,
-}: {
-  value: StrategyListWeight;
-  onChange: (weight: StrategyListWeight) => void;
-  itemLabel: string;
-}) {
-  return (
-    <div
-      className="flex flex-wrap items-center justify-end gap-0.5 shrink-0"
-      role="group"
-      aria-label={`Priorytet elementu: ${itemLabel}`}
-    >
-      {WEIGHT_OPTIONS.map(({ value: w, label }) => (
-        <button
-          key={w}
-          type="button"
-          title={label}
-          aria-label={label}
-          aria-pressed={value === w}
-          onClick={() => onChange(w)}
-          className={cn(
-            "h-7 px-2 rounded-md text-[10px] font-medium border transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-            value === w
-              ? weightPickerActiveClass(w)
-              : "border-border bg-background text-muted-foreground hover:bg-muted/60"
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
+// ─── Jeden wiersz elementu ────────────────────────────────────────────────────
 
-function StrategyCallout({
+function StrategyRow({
   item,
   index,
-  accent,
   onChange,
   onRemove,
 }: {
@@ -142,92 +180,37 @@ function StrategyCallout({
   onChange: (next: StrategyListItem) => void;
   onRemove: () => void;
 }) {
-  const [noteOpen, setNoteOpen] = useState(Boolean(item.note.trim()));
-
-  const clearNote = () => {
-    onChange({ ...item, note: "" });
-    setNoteOpen(false);
-  };
-
   return (
-    <li className={CALLOUT_WIDTH}>
-      <div
-        className={cn(
-          "rounded-lg border border-border border-l-[3px] px-3 py-2.5 transition-colors",
-          weightBorderClass(item.weight),
-          weightBgClass(item.weight),
-          ACCENT_RING[accent],
-          "focus-within:ring-2"
-        )}
-      >
-        <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] gap-x-2 gap-y-2 items-start">
-          <span
-            className="text-xs font-medium text-muted-foreground pt-2 tabular-nums text-right"
-            aria-hidden
+    <li className="group flex items-stretch rounded-md border border-border/40 bg-muted/10 hover:bg-muted/20 transition-colors">
+      <WeightBar value={item.weight} />
+      <div className="flex items-start gap-2 flex-1 min-w-0 px-2.5 py-1.5">
+        <AutoResizeText
+          value={item.text}
+          onChange={(text) => onChange({ ...item, text })}
+          placeholder="Element…"
+          ariaLabel={`Element ${index + 1}`}
+        />
+        <div className="flex flex-col items-center gap-0.5 shrink-0 mt-0.5">
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Usuń element ${index + 1}`}
+            className="size-5 flex items-center justify-center rounded text-transparent group-hover:text-muted-foreground hover:text-destructive transition-colors"
           >
-            {index + 1}.
-          </span>
-
-          <AutoResizeTitle
-            value={item.text}
-            onChange={(text) => onChange({ ...item, text })}
-            placeholder="Nazwa…"
-            ariaLabel={`Element ${index + 1}`}
+            <Trash2 className="size-3" />
+          </button>
+          <WeightPicker
+            value={item.weight}
+            onChange={(weight) => onChange({ ...item, weight })}
+            itemLabel={item.text || `element ${index + 1}`}
           />
-
-          <div className="flex items-start gap-0.5 pt-0.5">
-            <WeightPicker
-              value={item.weight}
-              onChange={(weight) => onChange({ ...item, weight })}
-              itemLabel={item.text || `element ${index + 1}`}
-            />
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              onClick={onRemove}
-              className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
-              aria-label={`Usuń element ${index + 1}`}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </div>
-
-          {noteOpen ? (
-            <div className="col-start-2 relative min-w-0">
-              <Textarea
-                value={item.note}
-                onChange={(e) => onChange({ ...item, note: e.target.value })}
-                placeholder="Notatka (opcjonalna)…"
-                aria-label={`Notatka do elementu ${index + 1}`}
-                rows={2}
-                className="w-full min-h-0 text-xs bg-background/50 resize-none py-1.5 pr-9 field-sizing-content"
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                onClick={clearNote}
-                className="absolute top-1 right-1 size-7 text-muted-foreground hover:text-destructive"
-                aria-label={`Usuń notatkę elementu ${index + 1}`}
-              >
-                <Trash2 className="size-3" />
-              </Button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setNoteOpen(true)}
-              className="col-start-2 text-left text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              + Dodaj notatkę
-            </button>
-          )}
         </div>
       </div>
     </li>
   );
 }
+
+// ─── ListItemsEditor ──────────────────────────────────────────────────────────
 
 export function ListItemsEditor({
   initialContent,
@@ -235,7 +218,7 @@ export function ListItemsEditor({
   onSave,
   className,
   addLabel = "Dodaj",
-  emptyHint = "Brak elementów — dodaj pierwszy callout poniżej.",
+  emptyHint = "Brak elementów — dodaj pierwszy poniżej.",
   accent = "violet",
 }: ListItemsEditorProps) {
   const [items, setItems] = useState(() =>
@@ -299,37 +282,52 @@ export function ListItemsEditor({
   };
 
   return (
-    <div className={cn("bg-card", className)}>
-      <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-border bg-muted/20">
-        <span className="mr-auto text-xs text-muted-foreground">
-          {items.length}{" "}
-          {items.length === 1
-            ? "callout"
-            : items.length >= 2 && items.length <= 4
-              ? "callouty"
-              : "calloutów"}
+    <div className={cn(className)}>
+      {/* Status bar */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
+        <span className="text-xs text-muted-foreground mr-auto">
+          {items.length === 0
+            ? "Brak elementów"
+            : `${items.length} ${items.length === 1 ? "element" : items.length <= 4 ? "elementy" : "elementów"}`}
         </span>
-        {saving ? (
+        {/* Legenda wag */}
+        <div className="flex items-center gap-2 mr-2 pr-2 border-r border-border/50">
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
+            <span className="size-2 rounded-full bg-destructive" />
+            Ważne
+          </span>
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
+            <span className="size-2 rounded-full bg-amber-500" />
+            Średnie
+          </span>
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            Neutralne
+          </span>
+        </div>
+        {saving && (
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="size-3 animate-spin" />
             Zapisywanie…
           </span>
-        ) : saved ? (
+        )}
+        {!saving && saved && (
           <span className="inline-flex items-center gap-1 text-xs text-success">
             <Check className="size-3" />
             Zapisano
           </span>
-        ) : null}
+        )}
       </div>
 
+      {/* Lista */}
       {items.length === 0 ? (
         <p className="px-5 py-6 text-sm text-muted-foreground text-center">
           {emptyHint}
         </p>
       ) : (
-        <ul className="flex flex-col items-start gap-2.5 p-4">
+        <ul className="grid p-3 gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(14rem, 1fr))" }}>
           {items.map((item, index) => (
-            <StrategyCallout
+            <StrategyRow
               key={item.id}
               item={item}
               index={index}
@@ -341,15 +339,16 @@ export function ListItemsEditor({
         </ul>
       )}
 
-      <div className="border-t border-border bg-muted/10 px-4 py-3">
-        <div className={cn("flex items-center gap-2", CALLOUT_WIDTH)}>
+      {/* Dodaj nowy */}
+      <div className="border-t border-border px-4 py-3">
+        <div className="flex items-center gap-2 max-w-lg">
           <Input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleDraftKeyDown}
             placeholder={placeholder}
             aria-label="Nowy element"
-            className="flex-1 min-w-0"
+            className="flex-1 min-w-0 h-8 text-sm"
           />
           <Button
             type="button"
@@ -357,7 +356,7 @@ export function ListItemsEditor({
             variant="outline"
             onClick={addItem}
             disabled={!draft.trim() || saving}
-            className="gap-1.5 shrink-0"
+            className="gap-1.5 shrink-0 h-8 text-xs"
           >
             <Plus className="size-3.5" />
             {addLabel}

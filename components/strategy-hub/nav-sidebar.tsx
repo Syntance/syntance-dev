@@ -12,6 +12,7 @@ import {
   Sparkles,
   ChevronRight,
   Server,
+  MessageSquareText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -58,6 +59,11 @@ const strategyItems = (projectId: string) => [
     label: "Infrastruktura",
     href: `/strategy-hub/projects/${projectId}/admin`,
     icon: Server,
+  },
+  {
+    label: "AI Chat",
+    href: `/strategy-hub/projects/${projectId}/chat`,
+    icon: MessageSquareText,
   },
 ];
 

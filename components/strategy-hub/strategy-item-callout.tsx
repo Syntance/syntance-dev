@@ -1,12 +1,17 @@
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import {
   type StrategyListItem,
   WEIGHT_LABELS,
-  weightBgClass,
-  weightBadgeClass,
-  weightBorderClass,
+  type StrategyListWeight,
 } from "@/lib/strategy-hub/business-strategy-lists";
+
+function weightDotClass(w: StrategyListWeight) {
+  return {
+    1: "bg-emerald-500",
+    2: "bg-amber-500",
+    3: "bg-destructive",
+  }[w];
+}
 
 interface StrategyItemCalloutProps {
   item: StrategyListItem;
@@ -22,39 +27,31 @@ export function StrategyItemCallout({
   showNote = false,
 }: StrategyItemCalloutProps) {
   return (
-    <div
+    <li
       className={cn(
-        "w-fit min-w-[min(100%,16rem)] max-w-lg rounded-lg border border-border border-l-[3px] px-3 py-2.5",
-        weightBorderClass(item.weight),
-        weightBgClass(item.weight),
+        "flex items-start gap-2.5 py-2.5 border-b border-border/40 last:border-b-0",
         className
       )}
     >
-      <div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 items-start">
-        <span
-          className="text-xs font-medium text-muted-foreground pt-0.5 tabular-nums text-right"
-          aria-hidden
-        >
-          {index + 1}.
-        </span>
-        <p className="min-w-0 text-sm font-medium leading-snug text-foreground/95">
-          {item.text}
-        </p>
-        <Badge
-          variant="outline"
-          className={cn(
-            "shrink-0 text-[10px] h-5 px-2 font-medium border",
-            weightBadgeClass(item.weight)
-          )}
-        >
-          {WEIGHT_LABELS[item.weight]}
-        </Badge>
+      <span
+        className={cn(
+          "mt-[0.35rem] size-2.5 rounded-full shrink-0",
+          weightDotClass(item.weight)
+        )}
+        title={WEIGHT_LABELS[item.weight]}
+        aria-label={WEIGHT_LABELS[item.weight]}
+      />
+      <span className="text-[11px] text-muted-foreground tabular-nums pt-0.5 shrink-0 w-4 text-right select-none">
+        {index + 1}.
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm leading-snug text-foreground/90">{item.text}</p>
         {showNote && item.note.trim() ? (
-          <p className="col-start-2 min-w-0 text-xs text-muted-foreground leading-relaxed">
+          <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
             {item.note}
           </p>
         ) : null}
       </div>
-    </div>
+    </li>
   );
 }

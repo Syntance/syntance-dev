@@ -39,7 +39,7 @@ async function getStrategy(slug: string) {
 }
 
 const SECTIONS = [
-  { key: "goalsMd" as const, label: "Cele projektu", icon: Target, list: true },
+  { key: "goalsMd" as const, label: "Cele biznesowe", icon: Target, list: true },
   {
     key: "uvpMd" as const,
     label: "Unikalna propozycja wartości",
@@ -133,11 +133,9 @@ export default async function ClientBusinessStrategyPage({ params }: Props) {
                   <h2 className="font-medium text-sm">{section.label}</h2>
                 </div>
                 {section.list ? (
-                  <ul className="flex flex-col items-start gap-2">
+                  <ul className="space-y-0.5">
                     {listItems.map((item, index) => (
-                      <li key={item.id}>
-                        <StrategyItemCallout item={item} index={index} />
-                      </li>
+                      <StrategyItemCallout key={item.id} item={item} index={index} />
                     ))}
                   </ul>
                 ) : (
