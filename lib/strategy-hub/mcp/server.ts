@@ -7,10 +7,15 @@ import {
   kpis,
   userFlows,
   businessStrategy,
+  businessProblems,
+  uvp,
+  brandPositioning,
+  competitors,
+  objections,
   pages,
   seoKeywords,
 } from "@/db/schema";
-import { eq, isNull, and } from "drizzle-orm";
+import { eq, isNull, and, asc } from "drizzle-orm";
 
 function jsonText(data: unknown) {
   return {
@@ -157,16 +162,69 @@ export function createStrategyHubMcpServer() {
     "get_business_strategy",
     {
       description:
-        "Zwraca strategię biznesową projektu (markdown: goals, uvp, competitors, objections).",
+        "Zwraca pełną strategię biznesową projektu z 5 encji relacyjnych: business_problems (goals), uvp, brand_positioning, competitors, objections. Zwraca też legacy markdown z business_strategy.",
       inputSchema: z.object({ projectId: z.string().uuid() }),
     },
     async ({ projectId }) => {
-      const rows = await db
-        .select()
-        .from(businessStrategy)
-        .where(eq(businessStrategy.projectId, projectId))
-        .limit(1);
-      return jsonText(rows[0] ?? null);
+      const [
+        legacyRows,
+        problemRows,
+        uvpRows,
+        positioningRows,
+        competitorRows,
+        objectionRows,
+      ] = await Promise.all([
+        db
+          .select()
+          .from(businessStrategy)
+          .where(eq(businessStrategy.projectId, projectId))
+          .limit(1),
+        db
+          .select()
+          .from(businessProblems)
+          .where(
+            and(
+              eq(businessProblems.projectId, projectId),
+              isNull(businessProblems.deletedAt)
+            )
+          )
+          .orderBy(asc(businessProblems.orderIdx)),
+        db.select().from(uvp).where(eq(uvp.projectId, projectId)).limit(1),
+        db
+          .select()
+          .from(brandPositioning)
+          .where(eq(brandPositioning.projectId, projectId))
+          .limit(1),
+        db
+          .select()
+          .from(competitors)
+          .where(
+            and(
+              eq(competitors.projectId, projectId),
+              isNull(competitors.deletedAt)
+            )
+          )
+          .orderBy(asc(competitors.createdAt)),
+        db
+          .select()
+          .from(objections)
+          .where(
+            and(
+              eq(objections.projectId, projectId),
+              isNull(objections.deletedAt)
+            )
+          )
+          .orderBy(asc(objections.orderIdx)),
+      ]);
+
+      return jsonText({
+        problems: problemRows,
+        uvp: uvpRows[0] ?? null,
+        positioning: positioningRows[0] ?? null,
+        competitors: competitorRows,
+        objections: objectionRows,
+        legacy: legacyRows[0] ?? null,
+      });
     }
   );
 
@@ -207,6 +265,186 @@ export function createStrategyHubMcpServer() {
         });
       }
       return jsonText({ ok: true, section });
+    }
+  );
+
+  // ── Nowe encje strategii biznesowej (5 entities) ──────────────────
+
+  server.registerTool(
+    "upsert_business_problem",
+    {
+      description:
+        "Tworzy lub aktualizuje cel/problem biznesowy. priority: 1=neutralne, 2=średnie, 3=ważne.",
+      inputSchema: z.object({
+        id: z.string().uuid().optional(),
+        projectId: z.string().uuid(),
+        problemMd: z.string().min(1),
+        ambitionMd: z.string().optional().nullable(),
+        ourSolutionMd: z.string().optional().nullable(),
+        priority: z.number().int().min(1).max(3).optional(),
+        orderIdx: z.number().int().optional(),
+      }),
+    },
+    async ({ id, projectId, ...rest }) => {
+      if (id) {
+        const updated = await db
+          .update(businessProblems)
+          .set({ ...rest, updatedAt: new Date() })
+          .where(
+            and(
+              eq(businessProblems.id, id),
+              eq(businessProblems.projectId, projectId)
+            )
+          )
+          .returning();
+        return jsonText(updated[0] ?? { error: "not found" });
+      }
+      const inserted = await db
+        .insert(businessProblems)
+        .values({ projectId, ...rest, source: "ai" })
+        .returning();
+      return jsonText(inserted[0]);
+    }
+  );
+
+  server.registerTool(
+    "upsert_uvp",
+    {
+      description:
+        "Aktualizuje UVP projektu (singleton). coreUvpMd to jedno zdanie, valueAddsJson to serialised JSON tablicy {text, note, weight}.",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        coreUvpMd: z.string().optional().nullable(),
+        valueAddsJson: z.string().optional().nullable(),
+      }),
+    },
+    async ({ projectId, ...rest }) => {
+      const filtered = Object.fromEntries(
+        Object.entries(rest).filter(([, v]) => v !== undefined)
+      );
+      const result = await db
+        .insert(uvp)
+        .values({ projectId, ...filtered, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: uvp.projectId,
+          set: { ...filtered, updatedAt: new Date() },
+        })
+        .returning();
+      return jsonText(result[0]);
+    }
+  );
+
+  server.registerTool(
+    "upsert_brand_positioning",
+    {
+      description:
+        "Aktualizuje pozycjonowanie marki (singleton). ourX/ourY i pozycje konkurentów w zakresie -1..1.",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        axisXLabel: z.string().optional().nullable(),
+        axisYLabel: z.string().optional().nullable(),
+        ourX: z.number().min(-1).max(1).optional().nullable(),
+        ourY: z.number().min(-1).max(1).optional().nullable(),
+        ourLabel: z.string().optional().nullable(),
+        statementMd: z.string().optional().nullable(),
+        competitorsOnQuadrant: z
+          .array(
+            z.object({
+              id: z.string().optional(),
+              label: z.string().min(1),
+              x: z.number().min(-1).max(1),
+              y: z.number().min(-1).max(1),
+            })
+          )
+          .optional()
+          .nullable(),
+      }),
+    },
+    async ({ projectId, ...rest }) => {
+      const filtered = Object.fromEntries(
+        Object.entries(rest).filter(([, v]) => v !== undefined)
+      );
+      const result = await db
+        .insert(brandPositioning)
+        .values({ projectId, ...filtered, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: brandPositioning.projectId,
+          set: { ...filtered, updatedAt: new Date() },
+        })
+        .returning();
+      return jsonText(result[0]);
+    }
+  );
+
+  server.registerTool(
+    "upsert_competitor",
+    {
+      description: "Tworzy lub aktualizuje konkurenta. type: direct|indirect|none.",
+      inputSchema: z.object({
+        id: z.string().uuid().optional(),
+        projectId: z.string().uuid(),
+        name: z.string().min(1).max(255),
+        url: z.string().url().optional().nullable(),
+        type: z.enum(["direct", "indirect", "none"]).optional(),
+        segmentId: z.string().uuid().optional().nullable(),
+        strengthsMd: z.string().optional().nullable(),
+        weaknessesMd: z.string().optional().nullable(),
+        pricingMd: z.string().optional().nullable(),
+        channelsMd: z.string().optional().nullable(),
+        notesMd: z.string().optional().nullable(),
+        quadrantX: z.number().min(-1).max(1).optional().nullable(),
+        quadrantY: z.number().min(-1).max(1).optional().nullable(),
+      }),
+    },
+    async ({ id, projectId, ...rest }) => {
+      if (id) {
+        const updated = await db
+          .update(competitors)
+          .set({ ...rest, updatedAt: new Date() })
+          .where(and(eq(competitors.id, id), eq(competitors.projectId, projectId)))
+          .returning();
+        return jsonText(updated[0] ?? { error: "not found" });
+      }
+      const inserted = await db
+        .insert(competitors)
+        .values({ projectId, ...rest, source: "ai" })
+        .returning();
+      return jsonText(inserted[0]);
+    }
+  );
+
+  server.registerTool(
+    "upsert_objection",
+    {
+      description:
+        "Tworzy lub aktualizuje obiekcję. stage: TOFU|MOFU|BOFU|retention. status: active|resolved|needs_proof.",
+      inputSchema: z.object({
+        id: z.string().uuid().optional(),
+        projectId: z.string().uuid(),
+        objectionMd: z.string().min(1),
+        responseMd: z.string().optional().nullable(),
+        proofMd: z.string().optional().nullable(),
+        segmentId: z.string().uuid().optional().nullable(),
+        stage: z.enum(["TOFU", "MOFU", "BOFU", "retention"]).optional().nullable(),
+        status: z.enum(["active", "resolved", "needs_proof"]).optional(),
+        priority: z.number().int().min(1).max(3).optional(),
+        orderIdx: z.number().int().optional(),
+      }),
+    },
+    async ({ id, projectId, ...rest }) => {
+      if (id) {
+        const updated = await db
+          .update(objections)
+          .set({ ...rest, updatedAt: new Date() })
+          .where(and(eq(objections.id, id), eq(objections.projectId, projectId)))
+          .returning();
+        return jsonText(updated[0] ?? { error: "not found" });
+      }
+      const inserted = await db
+        .insert(objections)
+        .values({ projectId, ...rest, source: "ai" })
+        .returning();
+      return jsonText(inserted[0]);
     }
   );
 
@@ -284,6 +522,11 @@ export const MCP_TOOL_NAMES = [
   "list_seo_keywords",
   "get_business_strategy",
   "update_business_strategy",
+  "upsert_business_problem",
+  "upsert_uvp",
+  "upsert_brand_positioning",
+  "upsert_competitor",
+  "upsert_objection",
   "upsert_segment",
   "upsert_kpi",
 ] as const;

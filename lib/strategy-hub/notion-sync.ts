@@ -2,12 +2,21 @@ import "server-only";
 import { db } from "@/db";
 import {
   businessStrategy,
+  businessProblems,
+  uvp,
+  brandPositioning,
+  competitors,
+  objections,
   notionMappings,
   notionSyncLog,
   projects,
 } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
-import { strategyListItemsToMarkdown } from "@/lib/strategy-hub/business-strategy-lists";
+import { eq, and, isNull, asc } from "drizzle-orm";
+import {
+  strategyListItemsToMarkdown,
+  WEIGHT_LABELS,
+  type StrategyListWeight,
+} from "@/lib/strategy-hub/business-strategy-lists";
 
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
@@ -120,10 +129,134 @@ async function appendBlocks(pageId: string, blocks: NotionBlock[]) {
   }
 }
 
+function priorityToWeight(p: number): StrategyListWeight {
+  if (p <= 1) return 1;
+  if (p >= 3) return 3;
+  return 2;
+}
+
+/**
+ * Buduje markdown sekcji "Cele biznesowe" z business_problems.
+ */
+function problemsToMarkdown(
+  rows: { problemMd: string; ambitionMd: string | null; priority: number }[]
+): string {
+  if (rows.length === 0) return "—";
+  return rows
+    .map((p) => {
+      const wLabel = WEIGHT_LABELS[priorityToWeight(p.priority)];
+      let block = `- **[${wLabel}]** ${p.problemMd}`;
+      if (p.ambitionMd?.trim()) {
+        block += `\n  _Ambicja:_ ${p.ambitionMd.trim()}`;
+      }
+      return block;
+    })
+    .join("\n\n");
+}
+
+/**
+ * Buduje markdown sekcji "Obiekcje" z objections.
+ */
+function objectionsToMarkdown(
+  rows: { objectionMd: string; responseMd: string | null; priority: number }[]
+): string {
+  if (rows.length === 0) return "—";
+  return rows
+    .map((o) => {
+      const wLabel = WEIGHT_LABELS[priorityToWeight(o.priority)];
+      let block = `- **[${wLabel}]** ${o.objectionMd}`;
+      if (o.responseMd?.trim()) {
+        block += `\n  _Odpowiedź:_ ${o.responseMd.trim()}`;
+      }
+      return block;
+    })
+    .join("\n\n");
+}
+
+/**
+ * Buduje markdown sekcji "UVP" z uvp.coreUvpMd + valueAddsJson.
+ */
+function uvpToMarkdown(row: {
+  coreUvpMd: string | null;
+  valueAddsJson: string | null;
+}): string {
+  const parts: string[] = [];
+  if (row.coreUvpMd?.trim()) parts.push(`**${row.coreUvpMd.trim()}**`);
+  const valueAdds = strategyListItemsToMarkdown(row.valueAddsJson);
+  if (valueAdds && valueAdds !== "—") {
+    parts.push("### Value adds\n\n" + valueAdds);
+  }
+  return parts.length > 0 ? parts.join("\n\n") : "—";
+}
+
+/**
+ * Buduje markdown sekcji "Pozycjonowanie" z brand_positioning.
+ */
+function positioningToMarkdown(row: {
+  axisXLabel: string | null;
+  axisYLabel: string | null;
+  ourX: number | null;
+  ourY: number | null;
+  ourLabel: string | null;
+  statementMd: string | null;
+}): string {
+  const parts: string[] = [];
+  if (row.statementMd?.trim()) parts.push(row.statementMd.trim());
+  const axisLines: string[] = [];
+  if (row.axisXLabel) axisLines.push(`- **Oś X:** ${row.axisXLabel}`);
+  if (row.axisYLabel) axisLines.push(`- **Oś Y:** ${row.axisYLabel}`);
+  if (row.ourLabel || row.ourX !== null) {
+    const label = row.ourLabel || "Nasza marka";
+    const coords =
+      row.ourX !== null && row.ourY !== null
+        ? ` (${row.ourX.toFixed(2)}, ${row.ourY.toFixed(2)})`
+        : "";
+    axisLines.push(`- **Pozycja:** ${label}${coords}`);
+  }
+  if (axisLines.length > 0) parts.push(axisLines.join("\n"));
+  return parts.length > 0 ? parts.join("\n\n") : "—";
+}
+
+/**
+ * Buduje markdown sekcji "Konkurencja" z listy competitors.
+ */
+function competitorsToMarkdown(
+  rows: {
+    name: string;
+    url: string | null;
+    type: string;
+    strengthsMd: string | null;
+    weaknessesMd: string | null;
+    notesMd: string | null;
+  }[]
+): string {
+  if (rows.length === 0) return "—";
+  return rows
+    .map((c) => {
+      const lines: string[] = [];
+      const link = c.url ? ` [${c.url}](${c.url})` : "";
+      lines.push(`### ${c.name}${link}  _(${c.type})_`);
+      if (c.strengthsMd?.trim())
+        lines.push(`**Mocne strony:** ${c.strengthsMd.trim()}`);
+      if (c.weaknessesMd?.trim())
+        lines.push(`**Słabe strony:** ${c.weaknessesMd.trim()}`);
+      if (c.notesMd?.trim()) lines.push(c.notesMd.trim());
+      return lines.join("\n\n");
+    })
+    .join("\n\n---\n\n");
+}
+
 /**
  * Push strategii biznesowej projektu do strony Notion.
  * Strona musi istnieć (Notion API integracji nie da prosto utworzyć nowej strony bez parenta).
  * Zapisuje projektowy `notion_page_url` lub korzysta z `projects.notionPageUrl`.
+ *
+ * Czyta z 5 nowych encji relacyjnych. Sekcje:
+ *   - 🎯 Cele biznesowe ← business_problems
+ *   - ✨ UVP ← uvp
+ *   - 🧭 Pozycjonowanie ← brand_positioning
+ *   - 🥊 Konkurencja ← competitors
+ *   - 💬 Obiekcje klientów ← objections
  */
 export async function pushBusinessStrategyToNotion(projectId: string) {
   const start = Date.now();
@@ -138,22 +271,61 @@ export async function pushBusinessStrategyToNotion(projectId: string) {
       throw new Error("Brak notion_page_url dla projektu");
     }
 
-    const stratRows = await db
-      .select()
-      .from(businessStrategy)
-      .where(eq(businessStrategy.projectId, projectId))
-      .limit(1);
-    const strat = stratRows[0];
-    if (!strat) throw new Error("Brak strategii biznesowej");
+    const [problemRows, uvpRows, positioningRows, competitorRows, objectionRows] =
+      await Promise.all([
+        db
+          .select()
+          .from(businessProblems)
+          .where(
+            and(
+              eq(businessProblems.projectId, projectId),
+              isNull(businessProblems.deletedAt)
+            )
+          )
+          .orderBy(asc(businessProblems.orderIdx)),
+        db.select().from(uvp).where(eq(uvp.projectId, projectId)).limit(1),
+        db
+          .select()
+          .from(brandPositioning)
+          .where(eq(brandPositioning.projectId, projectId))
+          .limit(1),
+        db
+          .select()
+          .from(competitors)
+          .where(
+            and(
+              eq(competitors.projectId, projectId),
+              isNull(competitors.deletedAt)
+            )
+          )
+          .orderBy(asc(competitors.createdAt)),
+        db
+          .select()
+          .from(objections)
+          .where(
+            and(
+              eq(objections.projectId, projectId),
+              isNull(objections.deletedAt)
+            )
+          )
+          .orderBy(asc(objections.orderIdx)),
+      ]);
 
     const pageId = extractPageId(project.notionPageUrl);
     if (!pageId) throw new Error("Nie udało się sparsować Notion page id");
 
     const sections: { title: string; md: string | null }[] = [
-      { title: "🎯 Cele biznesowe", md: strategyListItemsToMarkdown(strat.goalsMd) },
-      { title: "✨ UVP", md: strategyListItemsToMarkdown(strat.uvpMd) },
-      { title: "🥊 Konkurencja", md: strat.competitorsMd },
-      { title: "💬 Obiekcje klientów", md: strategyListItemsToMarkdown(strat.objectionsMd) },
+      { title: "🎯 Cele biznesowe", md: problemsToMarkdown(problemRows) },
+      {
+        title: "✨ UVP",
+        md: uvpRows[0] ? uvpToMarkdown(uvpRows[0]) : "—",
+      },
+      {
+        title: "🧭 Pozycjonowanie",
+        md: positioningRows[0] ? positioningToMarkdown(positioningRows[0]) : "—",
+      },
+      { title: "🥊 Konkurencja", md: competitorsToMarkdown(competitorRows) },
+      { title: "💬 Obiekcje klientów", md: objectionsToMarkdown(objectionRows) },
     ];
 
     let allBlocks: NotionBlock[] = [];

@@ -68,12 +68,46 @@ interface ObjectionRow {
   status: string | null;
 }
 
+interface UvpRow {
+  projectId: string;
+  coreUvpMd: string | null;
+  valueAddsJson: string | null;
+}
+
+interface PositioningRow {
+  projectId: string;
+  axisXLabel: string | null;
+  axisYLabel: string | null;
+  ourX: number | null;
+  ourY: number | null;
+  ourLabel: string | null;
+  competitorsOnQuadrant: unknown;
+  statementMd: string | null;
+}
+
+interface CompetitorRow {
+  id: string;
+  name: string;
+  url: string | null;
+  type: string;
+  strengthsMd: string | null;
+  weaknessesMd: string | null;
+  pricingMd: string | null;
+  channelsMd: string | null;
+  notesMd: string | null;
+  quadrantX: number | null;
+  quadrantY: number | null;
+}
+
 interface Props {
   projectId: string;
   projectName: string;
   strategy: Strategy;
   problems: ProblemRow[];
   objections: ObjectionRow[];
+  uvp: UvpRow;
+  positioning: PositioningRow;
+  competitors: CompetitorRow[];
 }
 
 export function BusinessStrategyEditorLoader(props: Props) {

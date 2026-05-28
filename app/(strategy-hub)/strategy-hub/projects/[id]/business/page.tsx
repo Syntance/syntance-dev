@@ -5,6 +5,9 @@ import {
   businessStrategy,
   businessProblems,
   objections,
+  uvp,
+  brandPositioning,
+  competitors,
 } from "@/db/schema";
 import { eq, isNull, and, asc } from "drizzle-orm";
 import { BusinessStrategyEditorLoader } from "./business-strategy-editor-loader";
@@ -25,7 +28,14 @@ async function getData(id: string) {
   const project = rows[0];
   if (!project) return null;
 
-  const [stratRows, problemRows, objectionRows] = await Promise.all([
+  const [
+    stratRows,
+    problemRows,
+    objectionRows,
+    uvpRows,
+    positioningRows,
+    competitorRows,
+  ] = await Promise.all([
     db
       .select()
       .from(businessStrategy)
@@ -46,6 +56,17 @@ async function getData(id: string) {
       .from(objections)
       .where(and(eq(objections.projectId, id), isNull(objections.deletedAt)))
       .orderBy(asc(objections.orderIdx), asc(objections.createdAt)),
+    db.select().from(uvp).where(eq(uvp.projectId, id)).limit(1),
+    db
+      .select()
+      .from(brandPositioning)
+      .where(eq(brandPositioning.projectId, id))
+      .limit(1),
+    db
+      .select()
+      .from(competitors)
+      .where(and(eq(competitors.projectId, id), isNull(competitors.deletedAt)))
+      .orderBy(asc(competitors.createdAt)),
   ]);
 
   const strategy = stratRows[0] ?? {
@@ -58,7 +79,32 @@ async function getData(id: string) {
     updatedBy: null,
   };
 
-  return { project, strategy, problems: problemRows, objections: objectionRows };
+  const uvpRow = uvpRows[0] ?? {
+    projectId: id,
+    coreUvpMd: null,
+    valueAddsJson: null,
+  };
+
+  const positioningRow = positioningRows[0] ?? {
+    projectId: id,
+    axisXLabel: null,
+    axisYLabel: null,
+    ourX: null,
+    ourY: null,
+    ourLabel: null,
+    competitorsOnQuadrant: null,
+    statementMd: null,
+  };
+
+  return {
+    project,
+    strategy,
+    problems: problemRows,
+    objections: objectionRows,
+    uvp: uvpRow,
+    positioning: positioningRow,
+    competitors: competitorRows,
+  };
 }
 
 export default async function BusinessStrategyPage({ params }: Props) {
@@ -80,6 +126,9 @@ export default async function BusinessStrategyPage({ params }: Props) {
       strategy={data.strategy}
       problems={data.problems}
       objections={data.objections}
+      uvp={data.uvp}
+      positioning={data.positioning}
+      competitors={data.competitors}
     />
   );
 }

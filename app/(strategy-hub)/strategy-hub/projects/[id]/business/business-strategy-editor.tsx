@@ -7,6 +7,15 @@ import {
   EntityCalloutList,
   type CalloutItem,
 } from "@/components/strategy-hub/entity-callout-list";
+import { UvpEditor } from "@/components/strategy-hub/uvp-editor";
+import {
+  PositioningEditor,
+  type CompetitorMarker,
+} from "@/components/strategy-hub/positioning-editor";
+import {
+  CompetitorsEditor,
+  type CompetitorRow,
+} from "@/components/strategy-hub/competitors-editor";
 import {
   listItemsPreview,
   parseStrategyListItems,
@@ -16,6 +25,7 @@ import {
   Target,
   Sparkles,
   Users,
+  Crosshair,
   MessageSquare,
   ArrowUpToLine,
   FileDown,
@@ -72,16 +82,41 @@ interface ObjectionRow {
   status: string | null;
 }
 
+interface UvpRow {
+  projectId: string;
+  coreUvpMd: string | null;
+  valueAddsJson: string | null;
+}
+
+interface PositioningRow {
+  projectId: string;
+  axisXLabel: string | null;
+  axisYLabel: string | null;
+  ourX: number | null;
+  ourY: number | null;
+  ourLabel: string | null;
+  competitorsOnQuadrant: unknown;
+  statementMd: string | null;
+}
+
 interface Props {
   projectId: string;
   projectName: string;
   strategy: Strategy;
   problems: ProblemRow[];
   objections: ObjectionRow[];
+  uvp: UvpRow;
+  positioning: PositioningRow;
+  competitors: CompetitorRow[];
 }
 
 /** UI section identifiers — niezależne od nazw kolumn DB. */
-type SectionKey = "problems" | "uvpMd" | "competitorsMd" | "objections";
+type SectionKey =
+  | "problems"
+  | "uvp"
+  | "positioning"
+  | "competitors"
+  | "objections";
 
 type SectionConfig = {
   key: SectionKey;
@@ -90,8 +125,14 @@ type SectionConfig = {
   color: string;
   iconBg: string;
   activeBar: string;
-  editor: "list" | "markdown" | "entity-callouts";
-  /** Klucz w `strategy` dla edytorów markdown/list — opcjonalny dla entity-callouts. */
+  editor:
+    | "list"
+    | "markdown"
+    | "entity-callouts"
+    | "uvp"
+    | "positioning"
+    | "competitors-list";
+  /** Klucz w `strategy` dla edytorów markdown/list — opcjonalny dla nowych typów. */
   legacyKey?: keyof Strategy;
   placeholder: string;
   emptyHint?: string;
@@ -112,29 +153,38 @@ const SECTIONS: SectionConfig[] = [
     emptyHint: "Dodaj cele jako elementy — każdy z wagą.",
   },
   {
-    key: "uvpMd",
+    key: "uvp",
     label: "UVP",
     icon: Sparkles,
     color: "text-amber-400",
     iconBg: "bg-amber-500/10 border-amber-500/20",
     activeBar: "bg-amber-500",
-    editor: "list",
-    legacyKey: "uvpMd",
+    editor: "uvp",
     accent: "amber",
     placeholder: "np. jedyny sklep z darmową personalizacją w 24h",
     emptyHint: "Dodaj argumenty UVP — każdy z wagą i notatką.",
   },
   {
-    key: "competitorsMd",
+    key: "positioning",
+    label: "Pozycjonowanie",
+    icon: Crosshair,
+    color: "text-cyan-400",
+    iconBg: "bg-cyan-500/10 border-cyan-500/20",
+    activeBar: "bg-cyan-500",
+    editor: "positioning",
+    placeholder: "Ustaw pozycję marki na quadrancie 2-osi",
+    emptyHint: "Wybierz dwie osie (np. cena ↔ premium, generic ↔ personal).",
+  },
+  {
+    key: "competitors",
     label: "Analiza konkurencji",
     icon: Users,
     color: "text-blue-400",
     iconBg: "bg-blue-500/10 border-blue-500/20",
     activeBar: "bg-blue-500",
-    editor: "markdown",
-    legacyKey: "competitorsMd",
-    placeholder:
-      "Kto jest konkurencją? Jakie mają mocne i słabe strony? Co możemy zrobić lepiej?",
+    editor: "competitors-list",
+    placeholder: "Dodaj konkurenta po nazwie i URL",
+    emptyHint: "Brak konkurentów. Dodaj pierwszego poniżej.",
   },
   {
     key: "objections",
@@ -179,9 +229,22 @@ function objectionToCallout(o: ObjectionRow): CalloutItem {
   };
 }
 
+interface PositioningState {
+  axisXLabel: string;
+  axisYLabel: string;
+  ourX: number | null;
+  ourY: number | null;
+  ourLabel: string;
+  competitorsOnQuadrant: CompetitorMarker[];
+  statementMd: string;
+}
+
 interface SectionState {
   problems: CalloutItem[];
   objections: CalloutItem[];
+  uvp: { coreUvpMd: string; valueAddsJson: string };
+  positioning: PositioningState;
+  competitors: CompetitorRow[];
 }
 
 function sectionIsFilled(
@@ -193,6 +256,18 @@ function sectionIsFilled(
     return section.key === "problems"
       ? state.problems.length > 0
       : state.objections.length > 0;
+  }
+  if (section.editor === "uvp") {
+    return (
+      state.uvp.coreUvpMd.trim().length > 0 ||
+      parseStrategyListItems(state.uvp.valueAddsJson).length > 0
+    );
+  }
+  if (section.editor === "positioning") {
+    return state.positioning.ourX !== null || state.positioning.statementMd.trim().length > 0;
+  }
+  if (section.editor === "competitors-list") {
+    return state.competitors.length > 0;
   }
   const content = section.legacyKey ? strategy[section.legacyKey] : null;
   if (section.editor === "list") return parseStrategyListItems(content).length > 0;
@@ -208,11 +283,46 @@ function sectionPreview(
     const items = section.key === "problems" ? state.problems : state.objections;
     return items[0]?.text.slice(0, 55) ?? "";
   }
+  if (section.editor === "uvp") {
+    const core = state.uvp.coreUvpMd.replace(/#+\s/g, "").trim();
+    if (core) return core.length > 55 ? `${core.slice(0, 55)}…` : core;
+    return listItemsPreview(state.uvp.valueAddsJson, 1);
+  }
+  if (section.editor === "positioning") {
+    const stmt = state.positioning.statementMd.replace(/#+\s/g, "").trim();
+    if (stmt) return stmt.length > 55 ? `${stmt.slice(0, 55)}…` : stmt;
+    return state.positioning.competitorsOnQuadrant.length > 0
+      ? `${state.positioning.competitorsOnQuadrant.length} konkurentów`
+      : "";
+  }
+  if (section.editor === "competitors-list") {
+    return state.competitors[0]?.name ?? "";
+  }
   const content = section.legacyKey ? strategy[section.legacyKey] : null;
   if (section.editor === "list") return listItemsPreview(content, 1);
   if (!content) return "";
   const stripped = content.replace(/#+\s/g, "").trim();
   return stripped.length > 55 ? `${stripped.substring(0, 55)}…` : stripped;
+}
+
+function parseCompetitorsOnQuadrant(raw: unknown): CompetitorMarker[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (item): item is CompetitorMarker =>
+        typeof item === "object" &&
+        item !== null &&
+        "label" in item &&
+        typeof (item as CompetitorMarker).label === "string" &&
+        typeof (item as CompetitorMarker).x === "number" &&
+        typeof (item as CompetitorMarker).y === "number"
+    )
+    .map((item) => ({
+      id: item.id,
+      label: item.label,
+      x: item.x,
+      y: item.y,
+    }));
 }
 
 export function BusinessStrategyEditor({
@@ -221,6 +331,9 @@ export function BusinessStrategyEditor({
   strategy,
   problems,
   objections,
+  uvp,
+  positioning,
+  competitors,
 }: Props) {
   const [localStrategy, setLocalStrategy] = useState(strategy);
   const [problemItems, setProblemItems] = useState<CalloutItem[]>(
@@ -229,6 +342,22 @@ export function BusinessStrategyEditor({
   const [objectionItems, setObjectionItems] = useState<CalloutItem[]>(
     objections.map(objectionToCallout)
   );
+  const [uvpData, setUvpData] = useState({
+    coreUvpMd: uvp.coreUvpMd ?? "",
+    valueAddsJson: uvp.valueAddsJson ?? "",
+  });
+  const [positioningData, setPositioningData] = useState<PositioningState>({
+    axisXLabel: positioning.axisXLabel ?? "",
+    axisYLabel: positioning.axisYLabel ?? "",
+    ourX: positioning.ourX,
+    ourY: positioning.ourY,
+    ourLabel: positioning.ourLabel ?? "",
+    competitorsOnQuadrant: parseCompetitorsOnQuadrant(
+      positioning.competitorsOnQuadrant
+    ),
+    statementMd: positioning.statementMd ?? "",
+  });
+  const [competitorItems, setCompetitorItems] = useState<CompetitorRow[]>(competitors);
   const [activeKey, setActiveKey] = useState<SectionKey>(SECTIONS[0].key);
   const [pushState, setPushState] = useState<"idle" | "success" | "error">("idle");
   const [pushing, startPush] = useTransition();
@@ -382,6 +511,101 @@ export function BusinessStrategyEditor({
     [objectionsApi]
   );
 
+  // ── UVP (singleton) ───────────────────────────────────────────────
+  const uvpApi = `/api/strategy-hub/projects/${projectId}/uvp`;
+
+  const saveUvpField = useCallback(
+    async (patch: Partial<{ coreUvpMd: string; valueAddsJson: string }>) => {
+      setUvpData((prev) => ({ ...prev, ...patch }));
+      const res = await fetch(uvpApi, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error("Failed to update UVP");
+    },
+    [uvpApi]
+  );
+
+  // ── Positioning (singleton) ───────────────────────────────────────
+  const positioningApi = `/api/strategy-hub/projects/${projectId}/positioning`;
+
+  const savePositioning = useCallback(
+    async (
+      patch: Partial<{
+        axisXLabel: string | null;
+        axisYLabel: string | null;
+        ourX: number | null;
+        ourY: number | null;
+        ourLabel: string | null;
+        competitorsOnQuadrant: CompetitorMarker[] | null;
+        statementMd: string | null;
+      }>
+    ) => {
+      setPositioningData((prev) => {
+        const next = { ...prev };
+        if (patch.axisXLabel !== undefined) next.axisXLabel = patch.axisXLabel ?? "";
+        if (patch.axisYLabel !== undefined) next.axisYLabel = patch.axisYLabel ?? "";
+        if (patch.ourX !== undefined) next.ourX = patch.ourX;
+        if (patch.ourY !== undefined) next.ourY = patch.ourY;
+        if (patch.ourLabel !== undefined) next.ourLabel = patch.ourLabel ?? "";
+        if (patch.competitorsOnQuadrant !== undefined)
+          next.competitorsOnQuadrant = patch.competitorsOnQuadrant ?? [];
+        if (patch.statementMd !== undefined) next.statementMd = patch.statementMd ?? "";
+        return next;
+      });
+      const res = await fetch(positioningApi, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error("Failed to update positioning");
+    },
+    [positioningApi]
+  );
+
+  // ── Competitors (collection) ──────────────────────────────────────
+  const competitorsApi = `/api/strategy-hub/projects/${projectId}/competitors`;
+
+  const addCompetitor = useCallback(
+    async (data: { name: string; url?: string }): Promise<CompetitorRow> => {
+      const res = await fetch(competitorsApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, type: "direct" }),
+      });
+      if (!res.ok) throw new Error("Failed to create competitor");
+      const { item } = (await res.json()) as { item: CompetitorRow };
+      setCompetitorItems((prev) => [...prev, item]);
+      return item;
+    },
+    [competitorsApi]
+  );
+
+  const updateCompetitor = useCallback(
+    async (id: string, patch: Partial<CompetitorRow>) => {
+      setCompetitorItems((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, ...patch } : c))
+      );
+      const res = await fetch(`${competitorsApi}/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error("Failed to update competitor");
+    },
+    [competitorsApi]
+  );
+
+  const removeCompetitor = useCallback(
+    async (id: string) => {
+      setCompetitorItems((prev) => prev.filter((c) => c.id !== id));
+      const res = await fetch(`${competitorsApi}/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete competitor");
+    },
+    [competitorsApi]
+  );
+
   const handlePush = () => {
     startPush(async () => {
       try {
@@ -404,6 +628,9 @@ export function BusinessStrategyEditor({
   const sectionState: SectionState = {
     problems: problemItems,
     objections: objectionItems,
+    uvp: uvpData,
+    positioning: positioningData,
+    competitors: competitorItems,
   };
   const filledCount = SECTIONS.filter((s) =>
     sectionIsFilled(s, localStrategy, sectionState)
@@ -589,6 +816,34 @@ export function BusinessStrategyEditor({
                   emptyHint={activeSection.emptyHint}
                 />
               )
+            ) : activeSection.editor === "uvp" ? (
+              <UvpEditor
+                core={uvpData.coreUvpMd}
+                valueAdds={uvpData.valueAddsJson}
+                onSaveCore={(md) => saveUvpField({ coreUvpMd: md })}
+                onSaveValueAdds={(md) => saveUvpField({ valueAddsJson: md })}
+                placeholder={activeSection.placeholder}
+                emptyHint={activeSection.emptyHint}
+                accent={activeSection.accent}
+              />
+            ) : activeSection.editor === "positioning" ? (
+              <PositioningEditor
+                axisXLabel={positioningData.axisXLabel}
+                axisYLabel={positioningData.axisYLabel}
+                ourX={positioningData.ourX}
+                ourY={positioningData.ourY}
+                ourLabel={positioningData.ourLabel}
+                competitors={positioningData.competitorsOnQuadrant}
+                statementMd={positioningData.statementMd}
+                onSave={savePositioning}
+              />
+            ) : activeSection.editor === "competitors-list" ? (
+              <CompetitorsEditor
+                items={competitorItems}
+                onAdd={addCompetitor}
+                onUpdate={updateCompetitor}
+                onRemove={removeCompetitor}
+              />
             ) : activeSection.editor === "list" && activeSection.legacyKey ? (
               <ListItemsEditor
                 initialContent={localStrategy[activeSection.legacyKey]}
