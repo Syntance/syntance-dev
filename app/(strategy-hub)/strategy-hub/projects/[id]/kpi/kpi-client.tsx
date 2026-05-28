@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Sparkline } from "@/components/strategy-hub/sparkline";
+import {
+  VisibilityControl,
+  type VisibilityStatus,
+} from "@/components/strategy-hub/visibility-control";
 
 interface Snapshot {
   id: string;
@@ -41,11 +45,15 @@ function KpiCard({
   onActualCommit,
   onAddMeasurement,
   onDelete,
+  projectId,
+  visStatus,
 }: {
   kpi: Kpi;
   onActualCommit: (value: string) => void;
   onAddMeasurement: (value: string) => Promise<void>;
   onDelete: () => void;
+  projectId: string;
+  visStatus: VisibilityStatus;
 }) {
   const [actual, setActual] = useState(kpi.actual ?? "");
   const [measure, setMeasure] = useState("");
@@ -92,14 +100,23 @@ function KpiCard({
             </Badge>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onDelete}
-          aria-label="Usuń KPI"
-          className="size-6 flex items-center justify-center rounded text-transparent group-hover:text-muted-foreground hover:text-destructive transition-colors shrink-0"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <VisibilityControl
+            projectId={projectId}
+            scope="record"
+            entityType="kpis"
+            entityId={kpi.id}
+            initialStatus={visStatus}
+          />
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label="Usuń KPI"
+            className="size-6 flex items-center justify-center rounded text-transparent group-hover:text-muted-foreground hover:text-destructive transition-colors"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex items-end justify-between gap-3">
@@ -190,7 +207,22 @@ export function KpiClient({ projectId, projectName }: Props) {
     category: "",
   });
   const [savingNew, setSavingNew] = useState(false);
+  const [visMap, setVisMap] = useState<Record<string, VisibilityStatus>>({});
   const mounted = useRef(true);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`/api/strategy-hub/projects/${projectId}/visibility`, {
+      signal: ctrl.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(
+        (d: { records?: Record<string, Record<string, VisibilityStatus>> } | null) =>
+          setVisMap(d?.records?.kpis ?? {})
+      )
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [projectId]);
 
   const fetchSnapshots = useCallback(
     async (kpiId: string): Promise<Snapshot[]> => {
@@ -432,6 +464,8 @@ export function KpiClient({ projectId, projectName }: Props) {
                       onActualCommit={(v) => patchKpi(kpi.id, { actual: v })}
                       onAddMeasurement={(v) => addMeasurement(kpi.id, v)}
                       onDelete={() => removeKpi(kpi.id)}
+                      projectId={projectId}
+                      visStatus={visMap[kpi.id] ?? "visible"}
                     />
                   ))}
               </div>

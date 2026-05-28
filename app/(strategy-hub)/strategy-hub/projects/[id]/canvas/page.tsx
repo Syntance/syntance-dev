@@ -6,7 +6,9 @@ import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 import { computeProjectHealth } from "@/lib/strategy-hub/health-score";
+import { getProjectVisibility, moduleStatus } from "@/lib/strategy-hub/visibility";
 import { HealthRing } from "@/components/strategy-hub/health-ring";
+import { ModuleVisibility } from "@/components/strategy-hub/module-visibility";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -41,10 +43,19 @@ export default async function CanvasPage({ params }: Props) {
   const project = rows[0];
   if (!project) notFound();
 
-  const health = await computeProjectHealth(id);
+  const [health, visibility] = await Promise.all([
+    computeProjectHealth(id),
+    getProjectVisibility(id),
+  ]);
 
   const sorted = [...health.modules].sort((a, b) => a.score - b.score);
   const weakest = sorted.filter((m) => m.score < 100).slice(0, 3);
+
+  const moduleVis = health.modules.map((m) => ({
+    key: m.key,
+    label: m.label,
+    status: moduleStatus(visibility, m.key),
+  }));
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -114,6 +125,8 @@ export default async function CanvasPage({ params }: Props) {
           ))}
         </div>
       </div>
+
+      <ModuleVisibility projectId={id} modules={moduleVis} />
     </div>
   );
 }

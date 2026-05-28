@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { OptionCombobox } from "@/components/strategy-hub/option-combobox";
+import {
+  VisibilityControl,
+  type VisibilityStatus,
+} from "@/components/strategy-hub/visibility-control";
 
 export type FieldType =
   | "text"
@@ -244,11 +248,17 @@ function RecordCard({
   fields,
   onUpdate,
   onRemove,
+  projectId,
+  entityType,
+  visStatus,
 }: {
   record: EntityRecord;
   fields: FieldDef[];
   onUpdate: (data: Record<string, unknown>) => void;
   onRemove: () => void;
+  projectId: string;
+  entityType: string;
+  visStatus: VisibilityStatus;
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -343,6 +353,13 @@ function RecordCard({
           })}
         </div>
         <div className="flex flex-col items-center gap-0.5 shrink-0">
+          <VisibilityControl
+            projectId={projectId}
+            scope="record"
+            entityType={entityType}
+            entityId={record.id}
+            initialStatus={visStatus}
+          />
           <button
             type="button"
             onClick={() => setEditing(true)}
@@ -382,8 +399,23 @@ export function EntityCrud({
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [visMap, setVisMap] = useState<Record<string, VisibilityStatus>>({});
 
   const base = basePath ?? apiBase(projectId, entity);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`/api/strategy-hub/projects/${projectId}/visibility`, {
+      signal: ctrl.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(
+        (d: { records?: Record<string, Record<string, VisibilityStatus>> } | null) =>
+          setVisMap(d?.records?.[entity] ?? {})
+      )
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [projectId, entity]);
 
   const load = useCallback(async () => {
     try {
@@ -505,6 +537,9 @@ export function EntityCrud({
               fields={fields}
               onUpdate={(data) => handleUpdate(item.id, data)}
               onRemove={() => handleRemove(item.id)}
+              projectId={projectId}
+              entityType={entity}
+              visStatus={visMap[item.id] ?? "visible"}
             />
           ))}
         </ul>

@@ -607,6 +607,43 @@ export const clientVisitsLog = pgTable(
   (t) => [index("client_visits_log_project_idx").on(t.projectId)]
 );
 
+// ─── Widoczność dla klienta ──────────────────────────────────────────────────
+
+/**
+ * Nadpisania widoczności elementów dla klienta.
+ * Domyślnie wszystko jest widoczne — przechowujemy TYLKO odstępstwa
+ * (hidden / in_progress). Status "visible" = brak wiersza (kasujemy).
+ *
+ * scope:
+ *   - "module"  → entityType = klucz modułu (np. "segments"), entityId = null
+ *   - "record"  → entityType = klucz encji (np. "kpis"), entityId = id rekordu
+ */
+export const elementVisibility = pgTable(
+  "element_visibility",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    scope: varchar("scope", { length: 10 }).notNull(),
+    entityType: varchar("entity_type", { length: 100 }).notNull(),
+    entityId: uuid("entity_id"),
+    /** "hidden" | "in_progress" (visible = brak wiersza) */
+    status: varchar("status", { length: 20 }).notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    updatedBy: uuid("updated_by"),
+  },
+  (t) => [
+    index("element_visibility_project_idx").on(t.projectId),
+    index("element_visibility_lookup_idx").on(
+      t.projectId,
+      t.scope,
+      t.entityType,
+      t.entityId
+    ),
+  ]
+);
+
 // ─── Discovery / Onboarding ──────────────────────────────────────────────────
 
 export const projectQuestions = pgTable(

@@ -9,8 +9,13 @@ import {
   techStack,
 } from "@/db/schema";
 import { eq, isNull, and, asc } from "drizzle-orm";
-import { Globe, FileBox, Search, Layers, ExternalLink } from "lucide-react";
+import { Globe, FileBox, Search, Layers, ExternalLink, Hammer } from "lucide-react";
 import { trackVisit } from "@/lib/strategy-hub/tracking";
+import {
+  getProjectVisibility,
+  moduleStatus,
+  type VisibilityStatus,
+} from "@/lib/strategy-hub/visibility";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -26,6 +31,8 @@ async function getWebsiteData(slug: string) {
   if (!rows[0]) return null;
 
   const projectId = rows[0].id;
+  const vis = await getProjectVisibility(projectId);
+  const moduleVis: VisibilityStatus = moduleStatus(vis, "website");
   const [pageList, seoList, techList] = await Promise.all([
     db
       .select()
@@ -45,7 +52,7 @@ async function getWebsiteData(slug: string) {
       .where(and(eq(techStack.projectId, projectId), isNull(techStack.deletedAt))),
   ]);
 
-  return { projectId, pageList, seoList, techList };
+  return { projectId, moduleVis, pageList, seoList, techList };
 }
 
 export default async function ClientWebsitePage({ params }: Props) {
@@ -65,6 +72,8 @@ export default async function ClientWebsitePage({ params }: Props) {
   const data = await getWebsiteData(slug);
   if (data) trackVisit(data.projectId, "website");
 
+  if (data?.moduleVis === "hidden") notFound();
+
   const hasContent =
     data &&
     (data.pageList.length > 0 ||
@@ -83,7 +92,15 @@ export default async function ClientWebsitePage({ params }: Props) {
         </p>
       </div>
 
-      {!hasContent ? (
+      {data?.moduleVis === "in_progress" ? (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 py-16 text-center">
+          <Hammer className="mx-auto size-10 text-amber-500/50 mb-3" />
+          <p className="text-sm text-foreground/90">Ta sekcja jest w budowie.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Pracujemy nad nią — wróć wkrótce.
+          </p>
+        </div>
+      ) : !hasContent ? (
         <div className="rounded-xl border border-dashed border-border bg-card/40 py-16 text-center">
           <Globe className="mx-auto size-10 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground">

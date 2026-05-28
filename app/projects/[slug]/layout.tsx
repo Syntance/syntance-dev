@@ -5,6 +5,10 @@ import { LogoutButton } from "@/components/logout-button";
 import { ClientNav } from "@/components/dashboard/client-nav";
 import { getProjectBySlugForUser } from "@/sanity/queries";
 import { notFound } from "next/navigation";
+import { db } from "@/db";
+import { projects as dbProjects } from "@/db/schema";
+import { eq, isNull, and } from "drizzle-orm";
+import { getProjectVisibility } from "@/lib/strategy-hub/visibility";
 
 interface Props {
   children: React.ReactNode;
@@ -25,6 +29,28 @@ export default async function ProjectDashboardLayout({ children, params }: Props
   }
 
   if (!project) notFound();
+
+  // Widoczność modułów (z relacyjnej bazy Drizzle, po slug)
+  let hiddenModules: string[] = [];
+  let inProgressModules: string[] = [];
+  try {
+    const [dbProject] = await db
+      .select({ id: dbProjects.id })
+      .from(dbProjects)
+      .where(and(eq(dbProjects.slug, slug), isNull(dbProjects.deletedAt)))
+      .limit(1);
+    if (dbProject) {
+      const vis = await getProjectVisibility(dbProject.id);
+      hiddenModules = Object.entries(vis.modules)
+        .filter(([, s]) => s === "hidden")
+        .map(([k]) => k);
+      inProgressModules = Object.entries(vis.modules)
+        .filter(([, s]) => s === "in_progress")
+        .map(([k]) => k);
+    }
+  } catch {
+    // brak danych = wszystko widoczne
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -50,7 +76,12 @@ export default async function ProjectDashboardLayout({ children, params }: Props
           <p className="px-3 text-xs font-medium text-muted-foreground/60 uppercase tracking-wider mb-2">
             {project.name}
           </p>
-          <ClientNav slug={slug} projectName={project.name} />
+          <ClientNav
+            slug={slug}
+            projectName={project.name}
+            hiddenModules={hiddenModules}
+            inProgressModules={inProgressModules}
+          />
         </aside>
 
         {/* Content */}

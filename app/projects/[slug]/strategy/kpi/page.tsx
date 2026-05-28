@@ -8,9 +8,15 @@ import {
   kpiSnapshots,
 } from "@/db/schema";
 import { eq, isNull, and, asc, inArray } from "drizzle-orm";
-import { Gauge } from "lucide-react";
+import { Gauge, Hammer } from "lucide-react";
 import { trackVisit } from "@/lib/strategy-hub/tracking";
 import { Sparkline } from "@/components/strategy-hub/sparkline";
+import {
+  getProjectVisibility,
+  moduleStatus,
+  recordStatus,
+  type VisibilityStatus,
+} from "@/lib/strategy-hub/visibility";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -24,6 +30,7 @@ interface KpiView {
   unit: string | null;
   category: string | null;
   series: number[];
+  vis: VisibilityStatus;
 }
 
 function parseNum(v: string | null | undefined): number | null {
@@ -32,25 +39,32 @@ function parseNum(v: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-async function getKpis(slug: string): Promise<KpiView[]> {
+async function getKpis(slug: string): Promise<{
+  moduleVis: VisibilityStatus;
+  rows: KpiView[];
+}> {
   try {
     const rows = await db
       .select({ id: dbProjects.id })
       .from(dbProjects)
       .where(and(eq(dbProjects.slug, slug), isNull(dbProjects.deletedAt)))
       .limit(1);
-    if (!rows[0]) return [];
+    if (!rows[0]) return { moduleVis: "visible", rows: [] };
 
     const projectId = rows[0].id;
     trackVisit(projectId, "kpi");
 
-    const kpiRows = await db
-      .select()
-      .from(kpis)
-      .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt)))
-      .orderBy(asc(kpis.category), asc(kpis.name));
+    const [kpiRows, vis] = await Promise.all([
+      db
+        .select()
+        .from(kpis)
+        .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt)))
+        .orderBy(asc(kpis.category), asc(kpis.name)),
+      getProjectVisibility(projectId),
+    ]);
 
-    if (kpiRows.length === 0) return [];
+    const moduleVis = moduleStatus(vis, "kpi");
+    if (kpiRows.length === 0) return { moduleVis, rows: [] };
 
     const snaps = await db
       .select()
@@ -66,20 +80,25 @@ async function getKpis(slug: string): Promise<KpiView[]> {
       )
       .orderBy(asc(kpiSnapshots.recordedAt));
 
-    return kpiRows.map((k) => ({
-      id: k.id,
-      name: k.name,
-      target: k.target,
-      actual: k.actual,
-      unit: k.unit,
-      category: k.category,
-      series: snaps
-        .filter((s) => s.kpiId === k.id)
-        .map((s) => parseNum(s.value))
-        .filter((n): n is number => n != null),
-    }));
+    const result = kpiRows
+      .map((k) => ({
+        id: k.id,
+        name: k.name,
+        target: k.target,
+        actual: k.actual,
+        unit: k.unit,
+        category: k.category,
+        series: snaps
+          .filter((s) => s.kpiId === k.id)
+          .map((s) => parseNum(s.value))
+          .filter((n): n is number => n != null),
+        vis: recordStatus(vis, "kpis", k.id),
+      }))
+      .filter((k) => k.vis !== "hidden");
+
+    return { moduleVis, rows: result };
   } catch {
-    return [];
+    return { moduleVis: "visible", rows: [] };
   }
 }
 
@@ -97,7 +116,8 @@ export default async function ClientKpiPage({ params }: Props) {
   }
   if (!project) notFound();
 
-  const rows = await getKpis(slug);
+  const { moduleVis, rows } = await getKpis(slug);
+  if (moduleVis === "hidden") notFound();
   const categories = Array.from(
     new Set(rows.map((k) => k.category ?? "Pozostałe"))
   );
@@ -114,7 +134,15 @@ export default async function ClientKpiPage({ params }: Props) {
         </p>
       </div>
 
-      {rows.length === 0 ? (
+      {moduleVis === "in_progress" ? (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 py-16 text-center">
+          <Hammer className="mx-auto size-10 text-amber-500/50 mb-3" />
+          <p className="text-sm text-foreground/90">Ta sekcja jest w budowie.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Pracujemy nad nią — wróć wkrótce.
+          </p>
+        </div>
+      ) : rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card/40 py-16 text-center">
           <Gauge className="mx-auto size-10 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground">
@@ -141,6 +169,7 @@ export default async function ClientKpiPage({ params }: Props) {
                       target != null && actual != null && target !== 0
                         ? Math.max(0, Math.min(1, actual / target))
                         : null;
+                    const wip = k.vis === "in_progress";
                     return (
                       <div
                         key={k.id}
@@ -148,31 +177,41 @@ export default async function ClientKpiPage({ params }: Props) {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <h3 className="text-sm font-medium">{k.name}</h3>
-                          <Sparkline values={k.series} className="shrink-0" />
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-xl font-semibold tabular-nums">
-                            {k.actual ?? "—"}
-                          </span>
-                          {k.unit && (
-                            <span className="text-xs text-muted-foreground">
-                              {k.unit}
+                          {wip ? (
+                            <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+                              <Hammer className="size-3" /> w budowie
                             </span>
-                          )}
-                          {k.target && (
-                            <span className="ml-auto text-xs text-muted-foreground">
-                              cel: {k.target}
-                              {k.unit ? ` ${k.unit}` : ""}
-                            </span>
+                          ) : (
+                            <Sparkline values={k.series} className="shrink-0" />
                           )}
                         </div>
-                        {progress != null && (
-                          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-brand"
-                              style={{ width: `${(progress * 100).toFixed(0)}%` }}
-                            />
-                          </div>
+                        {!wip && (
+                          <>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-xl font-semibold tabular-nums">
+                                {k.actual ?? "—"}
+                              </span>
+                              {k.unit && (
+                                <span className="text-xs text-muted-foreground">
+                                  {k.unit}
+                                </span>
+                              )}
+                              {k.target && (
+                                <span className="ml-auto text-xs text-muted-foreground">
+                                  cel: {k.target}
+                                  {k.unit ? ` ${k.unit}` : ""}
+                                </span>
+                              )}
+                            </div>
+                            {progress != null && (
+                              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-brand"
+                                  style={{ width: `${(progress * 100).toFixed(0)}%` }}
+                                />
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     );

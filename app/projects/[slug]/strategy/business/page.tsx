@@ -4,16 +4,26 @@ import { getProjectBySlugForUser } from "@/sanity/queries";
 import { db } from "@/db";
 import { projects as dbProjects, businessStrategy } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
-import { FileText, Target, Sparkles, Users, MessageSquare } from "lucide-react";
+import { FileText, Target, Sparkles, Users, MessageSquare, Hammer } from "lucide-react";
 import { trackVisit } from "@/lib/strategy-hub/tracking";
 import { StrategyItemCallout } from "@/components/strategy-hub/strategy-item-callout";
 import { parseStrategyListItems } from "@/lib/strategy-hub/business-strategy-lists";
+import {
+  getProjectVisibility,
+  moduleStatus,
+  type VisibilityStatus,
+} from "@/lib/strategy-hub/visibility";
 
 interface Props {
   params: Promise<{ slug: string }>;
 }
 
-async function getStrategy(slug: string) {
+type StrategyRow = typeof businessStrategy.$inferSelect;
+
+async function getStrategy(slug: string): Promise<{
+  moduleVis: VisibilityStatus;
+  strategy: StrategyRow | null;
+}> {
   try {
     const rows = await db
       .select({ id: dbProjects.id })
@@ -21,20 +31,26 @@ async function getStrategy(slug: string) {
       .where(and(eq(dbProjects.slug, slug), isNull(dbProjects.deletedAt)))
       .limit(1);
 
-    if (!rows[0]) return null;
+    if (!rows[0]) return { moduleVis: "visible", strategy: null };
 
     const projectId = rows[0].id;
     trackVisit(projectId, "business");
 
-    const stratRows = await db
-      .select()
-      .from(businessStrategy)
-      .where(eq(businessStrategy.projectId, projectId))
-      .limit(1);
+    const [stratRows, vis] = await Promise.all([
+      db
+        .select()
+        .from(businessStrategy)
+        .where(eq(businessStrategy.projectId, projectId))
+        .limit(1),
+      getProjectVisibility(projectId),
+    ]);
 
-    return stratRows[0] ?? null;
+    return {
+      moduleVis: moduleStatus(vis, "business"),
+      strategy: stratRows[0] ?? null,
+    };
   } catch {
-    return null;
+    return { moduleVis: "visible", strategy: null };
   }
 }
 
@@ -77,7 +93,8 @@ export default async function ClientBusinessStrategyPage({ params }: Props) {
 
   if (!project) notFound();
 
-  const strategy = await getStrategy(slug);
+  const { moduleVis, strategy } = await getStrategy(slug);
+  if (moduleVis === "hidden") notFound();
 
   const hasContent = strategy && SECTIONS.some((s) => {
     const content = strategy[s.key];
@@ -100,7 +117,15 @@ export default async function ClientBusinessStrategyPage({ params }: Props) {
         </p>
       </div>
 
-      {!hasContent ? (
+      {moduleVis === "in_progress" ? (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 py-16 text-center">
+          <Hammer className="mx-auto size-10 text-amber-500/50 mb-3" />
+          <p className="text-sm text-foreground/90">Ta sekcja jest w budowie.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Pracujemy nad nią — wróć wkrótce.
+          </p>
+        </div>
+      ) : !hasContent ? (
         <div className="rounded-xl border border-dashed border-border bg-card/40 py-16 text-center">
           <FileText className="mx-auto size-10 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground">

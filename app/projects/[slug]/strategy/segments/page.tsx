@@ -4,32 +4,52 @@ import { getProjectBySlugForUser } from "@/sanity/queries";
 import { db } from "@/db";
 import { projects as dbProjects, segments } from "@/db/schema";
 import { eq, isNull, and, asc } from "drizzle-orm";
-import { Users, Target, AlertCircle, Sparkles } from "lucide-react";
+import { Users, Target, AlertCircle, Sparkles, Hammer } from "lucide-react";
 import { trackVisit } from "@/lib/strategy-hub/tracking";
+import {
+  getProjectVisibility,
+  moduleStatus,
+  recordStatus,
+  type VisibilityStatus,
+} from "@/lib/strategy-hub/visibility";
 
 interface Props {
   params: Promise<{ slug: string }>;
 }
 
-async function getSegments(slug: string) {
+type SegmentRow = typeof segments.$inferSelect & { _vis: VisibilityStatus };
+
+async function getSegments(slug: string): Promise<{
+  moduleVis: VisibilityStatus;
+  rows: SegmentRow[];
+}> {
   try {
     const rows = await db
       .select({ id: dbProjects.id })
       .from(dbProjects)
       .where(and(eq(dbProjects.slug, slug), isNull(dbProjects.deletedAt)))
       .limit(1);
-    if (!rows[0]) return [];
+    if (!rows[0]) return { moduleVis: "visible", rows: [] };
 
     const projectId = rows[0].id;
     trackVisit(projectId, "segments");
 
-    return db
-      .select()
-      .from(segments)
-      .where(and(eq(segments.projectId, projectId), isNull(segments.deletedAt)))
-      .orderBy(asc(segments.orderIdx), asc(segments.name));
+    const [all, vis] = await Promise.all([
+      db
+        .select()
+        .from(segments)
+        .where(and(eq(segments.projectId, projectId), isNull(segments.deletedAt)))
+        .orderBy(asc(segments.orderIdx), asc(segments.name)),
+      getProjectVisibility(projectId),
+    ]);
+
+    const visible = all
+      .map((s) => ({ ...s, _vis: recordStatus(vis, "segments", s.id) }))
+      .filter((s) => s._vis !== "hidden");
+
+    return { moduleVis: moduleStatus(vis, "segments"), rows: visible };
   } catch {
-    return [];
+    return { moduleVis: "visible", rows: [] };
   }
 }
 
@@ -70,7 +90,9 @@ export default async function ClientSegmentsPage({ params }: Props) {
   }
   if (!project) notFound();
 
-  const rows = await getSegments(slug);
+  const { moduleVis, rows } = await getSegments(slug);
+
+  if (moduleVis === "hidden") notFound();
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -85,7 +107,15 @@ export default async function ClientSegmentsPage({ params }: Props) {
         </p>
       </div>
 
-      {rows.length === 0 ? (
+      {moduleVis === "in_progress" ? (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 py-16 text-center">
+          <Hammer className="mx-auto size-10 text-amber-500/50 mb-3" />
+          <p className="text-sm text-foreground/90">Ta sekcja jest w budowie.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Pracujemy nad nią — wróć wkrótce.
+          </p>
+        </div>
+      ) : rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card/40 py-16 text-center">
           <Users className="mx-auto size-10 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground">
@@ -119,35 +149,43 @@ export default async function ClientSegmentsPage({ params }: Props) {
                     )}
                   </div>
                 </div>
-                {typeof s.revenueSharePct === "number" && (
-                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                    {s.revenueSharePct}% przychodu
+                {s._vis === "in_progress" ? (
+                  <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+                    <Hammer className="size-3" /> w budowie
                   </span>
+                ) : (
+                  typeof s.revenueSharePct === "number" && (
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {s.revenueSharePct}% przychodu
+                    </span>
+                  )
                 )}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  icon={Target}
-                  label="Zadanie do wykonania (JTBD)"
-                  value={s.jtbdMd ?? s.jtbd}
-                />
-                <Field
-                  icon={AlertCircle}
-                  label="Problem"
-                  value={s.problemMd ?? s.problem}
-                />
-                <Field
-                  icon={Sparkles}
-                  label="Propozycja wartości"
-                  value={s.uvpForSegmentMd ?? s.uvpText}
-                />
-                <Field
-                  icon={Users}
-                  label="Charakterystyka"
-                  value={s.demographicsMd ?? s.persona}
-                />
-              </div>
+              {s._vis !== "in_progress" && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    icon={Target}
+                    label="Zadanie do wykonania (JTBD)"
+                    value={s.jtbdMd ?? s.jtbd}
+                  />
+                  <Field
+                    icon={AlertCircle}
+                    label="Problem"
+                    value={s.problemMd ?? s.problem}
+                  />
+                  <Field
+                    icon={Sparkles}
+                    label="Propozycja wartości"
+                    value={s.uvpForSegmentMd ?? s.uvpText}
+                  />
+                  <Field
+                    icon={Users}
+                    label="Charakterystyka"
+                    value={s.demographicsMd ?? s.persona}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>

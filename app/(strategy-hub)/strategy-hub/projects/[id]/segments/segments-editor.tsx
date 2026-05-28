@@ -17,6 +17,10 @@ import {
   type JsonColumn,
 } from "@/components/strategy-hub/json-list-editor";
 import { EntityCrud, type FieldDef } from "@/components/strategy-hub/entity-crud";
+import {
+  VisibilityControl,
+  type VisibilityStatus,
+} from "@/components/strategy-hub/visibility-control";
 
 interface Props {
   projectId: string;
@@ -83,8 +87,23 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [draftName, setDraftName] = useState("");
   const [pending, startTransition] = useTransition();
+  const [visMap, setVisMap] = useState<Record<string, VisibilityStatus>>({});
 
   const market = useSingleton(projectId, "market-segmentation");
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`/api/strategy-hub/projects/${projectId}/visibility`, {
+      signal: ctrl.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(
+        (d: { records?: Record<string, Record<string, VisibilityStatus>> } | null) =>
+          setVisMap(d?.records?.segments ?? {})
+      )
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [projectId]);
 
   const pendingRef = useRef<Record<string, Record<string, unknown>>>({});
   const timerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -307,15 +326,28 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
           <div className="space-y-5 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <SaveIndicator status={status} />
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => removeSegment(selected.id)}
-                className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="size-3.5" />
-                Usuń segment
-              </Button>
+              <div className="flex items-center gap-2">
+                <VisibilityControl
+                  projectId={projectId}
+                  scope="record"
+                  entityType="segments"
+                  entityId={selected.id}
+                  initialStatus={visMap[selected.id] ?? "visible"}
+                  variant="chip"
+                  onChange={(s) =>
+                    setVisMap((m) => ({ ...m, [selected.id]: s }))
+                  }
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => removeSegment(selected.id)}
+                  className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="size-3.5" />
+                  Usuń segment
+                </Button>
+              </div>
             </div>
 
             <SectionCard title="Podstawowe">
