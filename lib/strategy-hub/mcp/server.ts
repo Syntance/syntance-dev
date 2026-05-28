@@ -16,11 +16,38 @@ import {
   seoKeywords,
 } from "@/db/schema";
 import { eq, isNull, and, asc } from "drizzle-orm";
+import {
+  getListEntity,
+  getSingletonEntity,
+  getSegmentChild,
+  getPageChild,
+  getAuditChild,
+  getKpiChild,
+  listEntityKeys,
+  singletonEntityKeys,
+  segmentChildKeys,
+  pageChildKeys,
+  auditChildKeys,
+  kpiChildKeys,
+} from "@/lib/strategy-hub/entities/registry";
 
 function jsonText(data: unknown) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
   };
+}
+
+/** Bezpieczne wykonanie z czytelnym błędem walidacji Zod dla agenta AI. */
+async function safeRun<T>(fn: () => Promise<T>) {
+  try {
+    return jsonText(await fn());
+  } catch (e) {
+    const err = e as { message?: string; issues?: unknown };
+    return jsonText({
+      error: err.message ?? "Operation failed",
+      issues: err.issues,
+    });
+  }
 }
 
 export function createStrategyHubMcpServer() {
@@ -509,10 +536,253 @@ export function createStrategyHubMcpServer() {
     }
   );
 
+  // ── Generyczne narzędzia hub_ (pełne CRUD dla wszystkich nowych encji) ──────
+  //
+  // Zamiast dziesiątek niemal identycznych narzędzi, agent AI używa rejestru
+  // encji: hub_catalog ujawnia dostępne klucze, a hub_* operuje po kluczu.
+  // Dane przechodzą walidację Zod ze schematów rejestru (create/patch).
+
+  const dataSchema = z.record(z.string(), z.unknown());
+
+  server.registerTool(
+    "hub_catalog",
+    {
+      description:
+        "Zwraca katalog dostępnych encji Strategy Hub: listy, singletony oraz dzieci (segment/page/audit/kpi). Użyj, by poznać klucze do pozostałych narzędzi hub_*.",
+      inputSchema: z.object({}),
+    },
+    async () =>
+      jsonText({
+        list: listEntityKeys(),
+        singleton: singletonEntityKeys(),
+        segmentChildren: segmentChildKeys(),
+        pageChildren: pageChildKeys(),
+        auditChildren: auditChildKeys(),
+        kpiChildren: kpiChildKeys(),
+      })
+  );
+
+  // — Encje listowe (project-scoped) —
+  server.registerTool(
+    "hub_list",
+    {
+      description:
+        "Listuje rekordy encji projektowej. entity: klucz z hub_catalog.list (np. questions, glossary, sales-pitches, nav-items, kpis).",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        entity: z.string(),
+      }),
+    },
+    async ({ projectId, entity }) =>
+      safeRun(async () => {
+        const def = getListEntity(entity);
+        if (!def) throw new Error(`Unknown list entity: ${entity}`);
+        return def.list(projectId);
+      })
+  );
+
+  server.registerTool(
+    "hub_create",
+    {
+      description:
+        "Tworzy rekord encji projektowej. data walidowane wg schematu encji. entity: klucz z hub_catalog.list.",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        entity: z.string(),
+        data: dataSchema,
+      }),
+    },
+    async ({ projectId, entity, data }) =>
+      safeRun(async () => {
+        const def = getListEntity(entity);
+        if (!def) throw new Error(`Unknown list entity: ${entity}`);
+        return def.create(projectId, def.createSchema.parse(data));
+      })
+  );
+
+  server.registerTool(
+    "hub_update",
+    {
+      description: "Aktualizuje rekord encji projektowej (PATCH częściowy).",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        entity: z.string(),
+        itemId: z.string().uuid(),
+        data: dataSchema,
+      }),
+    },
+    async ({ projectId, entity, itemId, data }) =>
+      safeRun(async () => {
+        const def = getListEntity(entity);
+        if (!def) throw new Error(`Unknown list entity: ${entity}`);
+        return (
+          (await def.update(projectId, itemId, def.patchSchema.parse(data))) ?? {
+            error: "not found",
+          }
+        );
+      })
+  );
+
+  server.registerTool(
+    "hub_delete",
+    {
+      description: "Usuwa (soft delete) rekord encji projektowej.",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        entity: z.string(),
+        itemId: z.string().uuid(),
+      }),
+    },
+    async ({ projectId, entity, itemId }) =>
+      safeRun(async () => {
+        const def = getListEntity(entity);
+        if (!def) throw new Error(`Unknown list entity: ${entity}`);
+        return { ok: await def.softDelete(projectId, itemId) };
+      })
+  );
+
+  // — Singletony (project-scoped) —
+  server.registerTool(
+    "hub_get_singleton",
+    {
+      description:
+        "Zwraca singleton projektu. entity: klucz z hub_catalog.singleton (np. brand-identity, brand-visual, copy-guidelines, market-segmentation).",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        entity: z.string(),
+      }),
+    },
+    async ({ projectId, entity }) =>
+      safeRun(async () => {
+        const def = getSingletonEntity(entity);
+        if (!def) throw new Error(`Unknown singleton: ${entity}`);
+        return (await def.get(projectId)) ?? null;
+      })
+  );
+
+  server.registerTool(
+    "hub_upsert_singleton",
+    {
+      description: "Tworzy/aktualizuje singleton projektu (upsert).",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        entity: z.string(),
+        data: dataSchema,
+      }),
+    },
+    async ({ projectId, entity, data }) =>
+      safeRun(async () => {
+        const def = getSingletonEntity(entity);
+        if (!def) throw new Error(`Unknown singleton: ${entity}`);
+        return def.upsert(projectId, def.patchSchema.parse(data));
+      })
+  );
+
+  // — Dzieci scoped (segment/page/audit/kpi) —
+  const childGetter = {
+    segment: getSegmentChild,
+    page: getPageChild,
+    audit: getAuditChild,
+    kpi: getKpiChild,
+  } as const;
+
+  server.registerTool(
+    "hub_list_children",
+    {
+      description:
+        "Listuje dzieci encji nadrzędnej. scope: segment|page|audit|kpi. child: klucz z odpowiedniego katalogu (np. buyer-journey, sections, findings, snapshots). parentId: id encji nadrzędnej.",
+      inputSchema: z.object({
+        scope: z.enum(["segment", "page", "audit", "kpi"]),
+        child: z.string(),
+        parentId: z.string().uuid(),
+      }),
+    },
+    async ({ scope, child, parentId }) =>
+      safeRun(async () => {
+        const def = childGetter[scope](child);
+        if (!def) throw new Error(`Unknown ${scope} child: ${child}`);
+        return def.list(parentId);
+      })
+  );
+
+  server.registerTool(
+    "hub_create_child",
+    {
+      description:
+        "Tworzy dziecko encji nadrzędnej (scope: segment|page|audit|kpi).",
+      inputSchema: z.object({
+        scope: z.enum(["segment", "page", "audit", "kpi"]),
+        child: z.string(),
+        parentId: z.string().uuid(),
+        data: dataSchema,
+      }),
+    },
+    async ({ scope, child, parentId, data }) =>
+      safeRun(async () => {
+        const def = childGetter[scope](child);
+        if (!def) throw new Error(`Unknown ${scope} child: ${child}`);
+        return def.create(parentId, def.createSchema.parse(data));
+      })
+  );
+
+  server.registerTool(
+    "hub_update_child",
+    {
+      description: "Aktualizuje dziecko encji nadrzędnej (PATCH częściowy).",
+      inputSchema: z.object({
+        scope: z.enum(["segment", "page", "audit", "kpi"]),
+        child: z.string(),
+        parentId: z.string().uuid(),
+        itemId: z.string().uuid(),
+        data: dataSchema,
+      }),
+    },
+    async ({ scope, child, parentId, itemId, data }) =>
+      safeRun(async () => {
+        const def = childGetter[scope](child);
+        if (!def) throw new Error(`Unknown ${scope} child: ${child}`);
+        return (
+          (await def.update(parentId, itemId, def.patchSchema.parse(data))) ?? {
+            error: "not found",
+          }
+        );
+      })
+  );
+
+  server.registerTool(
+    "hub_delete_child",
+    {
+      description: "Usuwa (soft delete) dziecko encji nadrzędnej.",
+      inputSchema: z.object({
+        scope: z.enum(["segment", "page", "audit", "kpi"]),
+        child: z.string(),
+        parentId: z.string().uuid(),
+        itemId: z.string().uuid(),
+      }),
+    },
+    async ({ scope, child, parentId, itemId }) =>
+      safeRun(async () => {
+        const def = childGetter[scope](child);
+        if (!def) throw new Error(`Unknown ${scope} child: ${child}`);
+        return { ok: await def.softDelete(parentId, itemId) };
+      })
+  );
+
   return server;
 }
 
 export const MCP_TOOL_NAMES = [
+  "hub_catalog",
+  "hub_list",
+  "hub_create",
+  "hub_update",
+  "hub_delete",
+  "hub_get_singleton",
+  "hub_upsert_singleton",
+  "hub_list_children",
+  "hub_create_child",
+  "hub_update_child",
+  "hub_delete_child",
   "list_projects",
   "get_project",
   "list_segments",

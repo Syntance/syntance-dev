@@ -1425,3 +1425,7 @@ export function registerSingletonEntities(
 
 export const listEntityKeys = () => Object.keys(listEntities);
 export const singletonEntityKeys = () => Object.keys(singletonEntities);
+export const segmentChildKeys = () => Object.keys(segmentChildEntities);
+export const pageChildKeys = () => Object.keys(pageChildEntities);
+export const auditChildKeys = () => Object.keys(auditChildEntities);
+export const kpiChildKeys = () => Object.keys(kpiChildEntities);
