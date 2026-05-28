@@ -34,7 +34,6 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { Badge } from "@/components/ui/badge";
 import { useProject, useProjectIdFromPath } from "@/components/strategy-hub/project-context";
 
 const navItems = [
@@ -195,16 +194,11 @@ export function NavSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 render={<Link href="/strategy-hub/sync" />}
+                isActive={isActive("/strategy-hub/sync")}
                 tooltip="Sync z Notion"
               >
                 <RefreshCw className="size-4" />
                 <span>Sync z Notion</span>
-                <Badge
-                  variant="secondary"
-                  className="ml-auto text-[10px] px-1.5 h-4 group-data-[collapsible=icon]:hidden"
-                >
-                  wkrótce
-                </Badge>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>

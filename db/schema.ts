@@ -549,6 +549,9 @@ export const notionMappings = pgTable(
     notionDataSourceUrl: text("notion_data_source_url"),
     lastSyncedAt: timestamp("last_synced_at"),
     lastSyncedDirection: varchar("last_synced_direction", { length: 20 }),
+    /** Anti-loop: hash treści ostatniego pushu + moment pushu. */
+    lastPushHash: varchar("last_push_hash", { length: 64 }),
+    lastPushedAt: timestamp("last_pushed_at"),
   },
   (t) => [index("notion_mappings_entity_idx").on(t.entityType, t.entityId)]
 );

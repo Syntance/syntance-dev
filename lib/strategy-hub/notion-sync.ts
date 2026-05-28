@@ -1,4 +1,5 @@
 import "server-only";
+import crypto from "crypto";
 import { db } from "@/db";
 import {
   businessStrategy,
@@ -20,6 +21,18 @@ import {
 
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
+
+/**
+ * Okno anti-loop: webhook przychodzący w tym czasie od naszego pushu
+ * traktujemy jako echo własnej zmiany i ignorujemy.
+ */
+const SELF_ECHO_WINDOW_MS = 30_000;
+
+/** Stabilny hash treści (SHA-256) — normalizuje whitespace, by porównywać sens. */
+function contentHash(input: string): string {
+  const normalized = input.replace(/\s+/g, " ").trim();
+  return crypto.createHash("sha256").update(normalized).digest("hex");
+}
 
 interface NotionBlock {
   object: "block";
@@ -329,15 +342,21 @@ export async function pushBusinessStrategyToNotion(projectId: string) {
     ];
 
     let allBlocks: NotionBlock[] = [];
+    const mdParts: string[] = [];
     for (const s of sections) {
       if (!s.md || !s.md.trim() || s.md === "—") continue;
       allBlocks.push(headingBlock(2, s.title));
       allBlocks = allBlocks.concat(markdownToNotionBlocks(s.md));
+      mdParts.push(`## ${s.title}\n\n${s.md}`);
     }
+
+    // Anti-loop: hash dokładnie tej treści, którą wypychamy do Notion.
+    const pushHash = contentHash(mdParts.join("\n\n"));
 
     await clearPageChildren(pageId);
     await appendBlocks(pageId, allBlocks);
 
+    const now = new Date();
     const existingMapping = await db
       .select()
       .from(notionMappings)
@@ -352,8 +371,10 @@ export async function pushBusinessStrategyToNotion(projectId: string) {
       await db
         .update(notionMappings)
         .set({
-          lastSyncedAt: new Date(),
+          lastSyncedAt: now,
           lastSyncedDirection: "push",
+          lastPushHash: pushHash,
+          lastPushedAt: now,
         })
         .where(eq(notionMappings.id, existingMapping[0].id));
     } else {
@@ -362,8 +383,10 @@ export async function pushBusinessStrategyToNotion(projectId: string) {
         entityId: projectId,
         projectId,
         notionUrl: project.notionPageUrl,
-        lastSyncedAt: new Date(),
+        lastSyncedAt: now,
         lastSyncedDirection: "push",
+        lastPushHash: pushHash,
+        lastPushedAt: now,
       });
     }
 
@@ -432,12 +455,60 @@ export async function pullFromNotion(notionPageId: string) {
       projectId = proj.id;
     }
 
+    // ── Anti-loop #1: echo własnego pushu ──────────────────────────────────
+    // Notion odpala content_updated tuż po naszym pushu — jeśli mieścimy się
+    // w oknie SELF_ECHO_WINDOW_MS, to jest nasze echo, nie zmiana klienta.
+    const strategyMapping = await db
+      .select()
+      .from(notionMappings)
+      .where(
+        and(
+          eq(notionMappings.entityType, "business_strategy"),
+          eq(notionMappings.entityId, projectId)
+        )
+      )
+      .limit(1);
+    const mappingRow = strategyMapping[0];
+    if (
+      mappingRow?.lastPushedAt &&
+      Date.now() - mappingRow.lastPushedAt.getTime() < SELF_ECHO_WINDOW_MS
+    ) {
+      await db.insert(notionSyncLog).values({
+        projectId,
+        entityType: "business_strategy",
+        entityId: projectId,
+        direction: "pull",
+        status: "skipped_self_echo",
+      });
+      return { ok: true, skipped: "self_echo", elapsedMs: Date.now() - start };
+    }
+
     // Pobierz bloki Notion i konwertuj na markdown per sekcję
     const list = (await notionFetch(
       `/blocks/${notionPageId}/children?page_size=100`
     )) as { results: NotionBlock[] };
 
     const sections = blocksToSections(list.results);
+
+    // ── Anti-loop #2: pomiń zapis, jeśli treść identyczna z naszym pushem ───
+    const incomingHash = contentHash(
+      [
+        sections.goals ?? "",
+        sections.uvp ?? "",
+        sections.competitors ?? "",
+        sections.objections ?? "",
+      ].join("\n\n")
+    );
+    if (mappingRow?.lastPushHash && mappingRow.lastPushHash === incomingHash) {
+      await db.insert(notionSyncLog).values({
+        projectId,
+        entityType: "business_strategy",
+        entityId: projectId,
+        direction: "pull",
+        status: "skipped_no_change",
+      });
+      return { ok: true, skipped: "no_change", elapsedMs: Date.now() - start };
+    }
 
     await db
       .insert(businessStrategy)
@@ -458,6 +529,19 @@ export async function pullFromNotion(notionPageId: string) {
           updatedAt: new Date(),
         },
       });
+
+    // Zapisujemy hash i kierunek pulla — kolejny webhook z tą samą treścią
+    // zostanie pominięty (anti-loop #2). Nie nadpisujemy lastPushedAt.
+    if (mappingRow) {
+      await db
+        .update(notionMappings)
+        .set({
+          lastSyncedAt: new Date(),
+          lastSyncedDirection: "pull",
+          lastPushHash: incomingHash,
+        })
+        .where(eq(notionMappings.id, mappingRow.id));
+    }
 
     await db.insert(notionSyncLog).values({
       projectId,
