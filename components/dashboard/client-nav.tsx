@@ -11,6 +11,8 @@ import {
   BarChart3,
   Globe,
   TrendingUp,
+  Users,
+  Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,9 +45,21 @@ const navItems = (slug: string) => [
     badge: "Nowe",
   },
   {
+    href: `/projects/${slug}/strategy/segments`,
+    icon: Users,
+    label: "Segmenty",
+    badge: "Nowe",
+  },
+  {
     href: `/projects/${slug}/strategy/marketing`,
     icon: BarChart3,
     label: "Strategia marketingowa",
+    badge: "Nowe",
+  },
+  {
+    href: `/projects/${slug}/strategy/kpi`,
+    icon: Gauge,
+    label: "KPI",
     badge: "Nowe",
   },
   {

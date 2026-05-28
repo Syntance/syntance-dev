@@ -11,6 +11,8 @@ import {
   ArrowRight,
   CheckCircle2,
   Circle,
+  Users,
+  Gauge,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -70,12 +72,30 @@ export default async function ProjectOverviewPage({ params }: Props) {
       badge: "Nowe",
     },
     {
+      href: `/projects/${slug}/strategy/segments`,
+      icon: Users,
+      label: "Segmenty",
+      description: "Persony, potrzeby, propozycja wartości",
+      color: "text-blue-400",
+      bg: "bg-blue-500/10 border-blue-500/20",
+      badge: "Nowe",
+    },
+    {
       href: `/projects/${slug}/strategy/marketing`,
       icon: BarChart3,
       label: "Strategia marketingowa",
       description: "Segmenty, lejki, KPI",
       color: "text-emerald-400",
       bg: "bg-emerald-500/10 border-emerald-500/20",
+      badge: "Nowe",
+    },
+    {
+      href: `/projects/${slug}/strategy/kpi`,
+      icon: Gauge,
+      label: "KPI",
+      description: "Cele liczbowe i postęp",
+      color: "text-rose-400",
+      bg: "bg-rose-500/10 border-rose-500/20",
       badge: "Nowe",
     },
     {
