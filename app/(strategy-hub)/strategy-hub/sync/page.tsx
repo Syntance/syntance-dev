@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { requireStrategyHubAccess } from "@/lib/strategy-hub/context";
 import { db } from "@/db";
 import { projects, notionSyncLog } from "@/db/schema";
-import { isNull, desc, eq, and } from "drizzle-orm";
+import { isNull, desc, eq } from "drizzle-orm";
 import { SyncDashboard, type SyncProject } from "./sync-dashboard";
 
 export const metadata: Metadata = {
