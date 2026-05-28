@@ -4,6 +4,7 @@ import { pages, seoKeywords, techStack } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 import { getProjectById } from "@/lib/strategy-hub/context";
 import { WebsiteDashboard } from "./website-dashboard";
+import { WebsiteRelations } from "./website-relations";
 
 export const metadata = { title: "Strona" };
 
@@ -35,12 +36,22 @@ export default async function WebsitePage({ params }: Props) {
   ]);
 
   return (
-    <WebsiteDashboard
-      projectId={id}
-      projectName={project.name}
-      pages={pageList}
-      seoKeywords={seoList}
-      techStack={techList}
-    />
+    <div className="max-w-4xl mx-auto space-y-8">
+      <WebsiteDashboard
+        projectId={id}
+        projectName={project.name}
+        pages={pageList}
+        seoKeywords={seoList}
+        techStack={techList}
+      />
+      <WebsiteRelations
+        projectId={id}
+        pages={pageList.map((p) => ({
+          id: p.id,
+          name: p.name,
+          urlPath: p.urlPath,
+        }))}
+      />
+    </div>
   );
 }

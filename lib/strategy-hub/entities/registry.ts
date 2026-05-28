@@ -22,6 +22,11 @@ import {
   salesScripts,
   leadMagnets,
   copyGuidelines,
+  navItems,
+  siteMaintenanceCosts,
+  siteAudits,
+  siteAuditFindings,
+  pageSections,
 } from "@/db/schema";
 import { encryptSecret } from "@/lib/strategy-hub/crypto";
 
@@ -256,6 +261,62 @@ const copyGuidelinesPatch = z.object({
   hashtags: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
   examples: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
 });
+
+// ─── Strona: schematy ────────────────────────────────────────────────────────
+
+const navItemCreate = z.object({
+  label: z.string().min(1).max(255),
+  url: z.string().max(500).nullable().optional(),
+  pageId: z.string().uuid().nullable().optional(),
+  position: z.enum(["header", "footer", "sidebar", "mobile"]).nullable().optional(),
+  type: z.string().max(50).nullable().optional(),
+  parentId: z.string().uuid().nullable().optional(),
+  orderIdx: z.number().int().optional(),
+});
+const navItemPatch = navItemCreate.partial();
+
+const maintenanceCreate = z.object({
+  item: z.string().min(1).max(255),
+  monthlyCost: z.number().int().nullable().optional(),
+  yearlyCost: z.number().int().nullable().optional(),
+  provider: z.string().max(100).nullable().optional(),
+  notesMd: md(),
+});
+const maintenancePatch = maintenanceCreate.partial();
+
+const auditCreate = z.object({
+  type: z.string().max(50).nullable().optional(),
+  date: z.coerce.date().optional(),
+  summaryMd: md(),
+  severityHigh: z.number().int().min(0).optional(),
+  severityMedium: z.number().int().min(0).optional(),
+  severityLow: z.number().int().min(0).optional(),
+  status: z.enum(["open", "in_progress", "resolved"]).optional(),
+});
+const auditPatch = auditCreate.partial();
+
+const pageSectionCreate = z.object({
+  name: z.string().min(1).max(255),
+  purposeMd: md(),
+  schemaMd: md(),
+  copyMd: md(),
+  ctaText: z.string().max(255).nullable().optional(),
+  ctaUrl: z.string().max(500).nullable().optional(),
+  designNotesMd: md(),
+  orderIdx: z.number().int().optional(),
+});
+const pageSectionPatch = pageSectionCreate.partial();
+
+const findingCreate = z.object({
+  findingMd: z.string().min(1),
+  area: z.string().max(100).nullable().optional(),
+  severity: z.enum(["low", "medium", "high"]).optional(),
+  recommendationMd: md(),
+  status: z.enum(["open", "in_progress", "resolved"]).optional(),
+  pageId: z.string().uuid().nullable().optional(),
+  orderIdx: z.number().int().optional(),
+});
+const findingPatch = findingCreate.partial();
 
 // ─── Rejestr encji listowych ─────────────────────────────────────────────────
 
@@ -734,6 +795,215 @@ const listEntities: Record<string, ListEntityDef> = {
         .returning({ id: leadMagnets.id })
         .then((r) => r.length > 0),
   }),
+
+  "nav-items": listDef({
+    kind: "list",
+    label: "Pozycja nawigacji",
+    createSchema: navItemCreate,
+    patchSchema: navItemPatch,
+    list: (pid) =>
+      db
+        .select()
+        .from(navItems)
+        .where(and(eq(navItems.projectId, pid), isNull(navItems.deletedAt)))
+        .orderBy(asc(navItems.orderIdx), asc(navItems.label)),
+    create: (pid, data) =>
+      db
+        .insert(navItems)
+        .values({ projectId: pid, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(navItems)
+        .set(compact(data))
+        .where(and(eq(navItems.id, itemId), eq(navItems.projectId, pid)))
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(navItems)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(navItems.id, itemId), eq(navItems.projectId, pid)))
+        .returning({ id: navItems.id })
+        .then((r) => r.length > 0),
+  }),
+
+  "site-maintenance-costs": listDef({
+    kind: "list",
+    label: "Koszt utrzymania",
+    createSchema: maintenanceCreate,
+    patchSchema: maintenancePatch,
+    list: (pid) =>
+      db
+        .select()
+        .from(siteMaintenanceCosts)
+        .where(
+          and(
+            eq(siteMaintenanceCosts.projectId, pid),
+            isNull(siteMaintenanceCosts.deletedAt)
+          )
+        )
+        .orderBy(asc(siteMaintenanceCosts.item)),
+    create: (pid, data) =>
+      db
+        .insert(siteMaintenanceCosts)
+        .values({ projectId: pid, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(siteMaintenanceCosts)
+        .set(compact(data))
+        .where(
+          and(
+            eq(siteMaintenanceCosts.id, itemId),
+            eq(siteMaintenanceCosts.projectId, pid)
+          )
+        )
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(siteMaintenanceCosts)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            eq(siteMaintenanceCosts.id, itemId),
+            eq(siteMaintenanceCosts.projectId, pid)
+          )
+        )
+        .returning({ id: siteMaintenanceCosts.id })
+        .then((r) => r.length > 0),
+  }),
+
+  "site-audits": listDef({
+    kind: "list",
+    label: "Audyt",
+    createSchema: auditCreate,
+    patchSchema: auditPatch,
+    list: (pid) =>
+      db
+        .select()
+        .from(siteAudits)
+        .where(and(eq(siteAudits.projectId, pid), isNull(siteAudits.deletedAt)))
+        .orderBy(desc(siteAudits.date)),
+    create: (pid, data) =>
+      db
+        .insert(siteAudits)
+        .values({ projectId: pid, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(siteAudits)
+        .set(compact(data))
+        .where(and(eq(siteAudits.id, itemId), eq(siteAudits.projectId, pid)))
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(siteAudits)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(siteAudits.id, itemId), eq(siteAudits.projectId, pid)))
+        .returning({ id: siteAudits.id })
+        .then((r) => r.length > 0),
+  }),
+};
+
+// ─── Dzieci strony (scoped po pageId) ────────────────────────────────────────
+
+const pageChildEntities: Record<string, ListEntityDef> = {
+  sections: listDef({
+    kind: "list",
+    label: "Sekcja strony",
+    createSchema: pageSectionCreate,
+    patchSchema: pageSectionPatch,
+    list: (pageId) =>
+      db
+        .select()
+        .from(pageSections)
+        .where(
+          and(eq(pageSections.pageId, pageId), isNull(pageSections.deletedAt))
+        )
+        .orderBy(asc(pageSections.orderIdx)),
+    create: (pageId, data) =>
+      db
+        .insert(pageSections)
+        .values({ pageId, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (pageId, itemId, data) =>
+      db
+        .update(pageSections)
+        .set(compact(data))
+        .where(
+          and(eq(pageSections.id, itemId), eq(pageSections.pageId, pageId))
+        )
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pageId, itemId) =>
+      db
+        .update(pageSections)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(eq(pageSections.id, itemId), eq(pageSections.pageId, pageId))
+        )
+        .returning({ id: pageSections.id })
+        .then((r) => r.length > 0),
+  }),
+};
+
+// ─── Dzieci audytu (scoped po auditId) ───────────────────────────────────────
+
+const auditChildEntities: Record<string, ListEntityDef> = {
+  findings: listDef({
+    kind: "list",
+    label: "Ustalenie audytu",
+    createSchema: findingCreate,
+    patchSchema: findingPatch,
+    list: (auditId) =>
+      db
+        .select()
+        .from(siteAuditFindings)
+        .where(
+          and(
+            eq(siteAuditFindings.auditId, auditId),
+            isNull(siteAuditFindings.deletedAt)
+          )
+        )
+        .orderBy(asc(siteAuditFindings.orderIdx)),
+    create: (auditId, data) =>
+      db
+        .insert(siteAuditFindings)
+        .values({ auditId, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (auditId, itemId, data) =>
+      db
+        .update(siteAuditFindings)
+        .set(compact(data))
+        .where(
+          and(
+            eq(siteAuditFindings.id, itemId),
+            eq(siteAuditFindings.auditId, auditId)
+          )
+        )
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (auditId, itemId) =>
+      db
+        .update(siteAuditFindings)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            eq(siteAuditFindings.id, itemId),
+            eq(siteAuditFindings.auditId, auditId)
+          )
+        )
+        .returning({ id: siteAuditFindings.id })
+        .then((r) => r.length > 0),
+  }),
 };
 
 // ─── Rejestr dzieci segmentu (scoped po segmentId) ───────────────────────────
@@ -1032,6 +1302,14 @@ export function getSingletonEntity(key: string): SingletonEntityDef | undefined 
 
 export function getSegmentChild(key: string): ListEntityDef | undefined {
   return segmentChildEntities[key];
+}
+
+export function getPageChild(key: string): ListEntityDef | undefined {
+  return pageChildEntities[key];
+}
+
+export function getAuditChild(key: string): ListEntityDef | undefined {
+  return auditChildEntities[key];
 }
 
 export function registerListEntities(entries: Record<string, ListEntityDef>) {
