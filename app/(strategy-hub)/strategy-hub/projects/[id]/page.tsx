@@ -15,6 +15,7 @@ import {
   Megaphone,
   Gauge,
   LayoutDashboard,
+  Map as MapIcon,
 } from "lucide-react";
 import { db } from "@/db";
 import { projects, businessStrategy, segments, kpis } from "@/db/schema";
@@ -212,22 +213,40 @@ export default async function ProjectPage({ params }: Props) {
         />
       </div>
 
-      {/* Strategy Canvas CTA */}
-      <Link
-        href={`/strategy-hub/projects/${id}/canvas`}
-        className="group flex items-center gap-4 rounded-xl border border-brand/20 bg-brand/5 p-5 hover:border-brand/40 transition-colors"
-      >
-        <div className="size-10 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center">
-          <LayoutDashboard className="size-5 text-brand" />
-        </div>
-        <div className="flex-1">
-          <div className="font-medium text-sm">Strategy Canvas</div>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            Health score i kompletność wszystkich modułów w jednym widoku.
+      {/* Strategy Canvas + Strategy Map CTA */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link
+          href={`/strategy-hub/projects/${id}/canvas`}
+          className="group flex items-center gap-4 rounded-xl border border-brand/20 bg-brand/5 p-5 hover:border-brand/40 transition-colors"
+        >
+          <div className="size-10 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0">
+            <LayoutDashboard className="size-5 text-brand" />
           </div>
-        </div>
-        <ArrowRight className="size-4 text-brand/60 group-hover:text-brand transition-colors" />
-      </Link>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm">Strategy Canvas</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Health score i kompletność wszystkich modułów.
+            </div>
+          </div>
+          <ArrowRight className="size-4 text-brand/60 group-hover:text-brand transition-colors shrink-0" />
+        </Link>
+
+        <Link
+          href={`/strategy-hub/projects/${id}/strategy-map`}
+          className="group flex items-center gap-4 rounded-xl border border-brand/20 bg-brand/5 p-5 hover:border-brand/40 transition-colors"
+        >
+          <div className="size-10 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center shrink-0">
+            <MapIcon className="size-5 text-brand" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm">Strategy Map</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Interaktywna mapa: lista, zależności i graf wpływu.
+            </div>
+          </div>
+          <ArrowRight className="size-4 text-brand/60 group-hover:text-brand transition-colors shrink-0" />
+        </Link>
+      </div>
 
       {/* Moduły strategii */}
       <div>

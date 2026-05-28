@@ -10,7 +10,6 @@ import {
   Settings,
   RefreshCw,
   Sparkles,
-  ChevronRight,
   Server,
   MessageSquareText,
   Compass,
@@ -20,6 +19,7 @@ import {
   Megaphone,
   Gauge,
   LayoutDashboard,
+  Map as MapIcon,
 } from "lucide-react";
 import {
   Sidebar,
@@ -44,12 +44,26 @@ const navItems = [
   },
 ];
 
-const strategyItems = (projectId: string) => [
+const viewItems = (projectId: string) => [
+  {
+    label: "Widok główny",
+    href: `/strategy-hub/projects/${projectId}`,
+    icon: LayoutGrid,
+    exact: true,
+  },
   {
     label: "Strategy Canvas",
     href: `/strategy-hub/projects/${projectId}/canvas`,
     icon: LayoutDashboard,
   },
+  {
+    label: "Strategy Map",
+    href: `/strategy-hub/projects/${projectId}/strategy-map`,
+    icon: MapIcon,
+  },
+];
+
+const strategyItems = (projectId: string) => [
   {
     label: "Discovery",
     href: `/strategy-hub/projects/${projectId}/discovery`,
@@ -113,7 +127,6 @@ export function NavSidebar() {
   const projectIdFromPath = useProjectIdFromPath();
 
   const projectId = projectFromContext?.id ?? projectIdFromPath;
-  const projectName = projectFromContext?.name ?? "Projekt";
 
   const isActive = (href: string, exact = false) => {
     if (exact) return pathname === href;
@@ -161,9 +174,28 @@ export function NavSidebar() {
           <>
             <SidebarSeparator />
             <SidebarGroup>
-              <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden flex items-center gap-1.5">
-                <span className="truncate">{projectName ?? "Projekt"}</span>
-                <ChevronRight className="size-3 shrink-0 opacity-50" />
+              <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
+                Widoki
+              </SidebarGroupLabel>
+              <SidebarMenu>
+                {viewItems(projectId).map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      render={<Link href={item.href} />}
+                      isActive={isActive(item.href, "exact" in item && item.exact)}
+                      tooltip={item.label}
+                    >
+                      <item.icon className="size-4" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
+                Strategia
               </SidebarGroupLabel>
               <SidebarMenu>
                 {strategyItems(projectId).map((item) => (

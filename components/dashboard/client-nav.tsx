@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Users,
   Gauge,
+  Map as MapIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,12 @@ const navItems = (slug: string) => [
     href: `/projects/${slug}/preview`,
     icon: Monitor,
     label: "Podgląd strony",
+  },
+  {
+    href: `/projects/${slug}/strategy/map`,
+    icon: MapIcon,
+    label: "Mapa strategii",
+    badge: "Nowe",
   },
   {
     href: `/projects/${slug}/hosting`,
