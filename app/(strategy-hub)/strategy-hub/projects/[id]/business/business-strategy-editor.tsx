@@ -4,8 +4,13 @@ import { useState, useTransition, useRef, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { ListItemsEditor } from "@/components/strategy-hub/list-items-editor";
 import {
+  EntityCalloutList,
+  type CalloutItem,
+} from "@/components/strategy-hub/entity-callout-list";
+import {
   listItemsPreview,
   parseStrategyListItems,
+  type StrategyListWeight,
 } from "@/lib/strategy-hub/business-strategy-lists";
 import {
   Target,
@@ -47,13 +52,36 @@ interface Strategy {
   objectionsMd: string | null;
 }
 
+interface ProblemRow {
+  id: string;
+  problemMd: string;
+  ambitionMd: string | null;
+  ourSolutionMd: string | null;
+  priority: number;
+  orderIdx: number | null;
+}
+
+interface ObjectionRow {
+  id: string;
+  objectionMd: string;
+  responseMd: string | null;
+  proofMd: string | null;
+  priority: number;
+  orderIdx: number | null;
+  stage: string | null;
+  status: string | null;
+}
+
 interface Props {
   projectId: string;
   projectName: string;
   strategy: Strategy;
+  problems: ProblemRow[];
+  objections: ObjectionRow[];
 }
 
-type SectionKey = keyof Strategy;
+/** UI section identifiers — niezależne od nazw kolumn DB. */
+type SectionKey = "problems" | "uvpMd" | "competitorsMd" | "objections";
 
 type SectionConfig = {
   key: SectionKey;
@@ -62,7 +90,9 @@ type SectionConfig = {
   color: string;
   iconBg: string;
   activeBar: string;
-  editor: "list" | "markdown";
+  editor: "list" | "markdown" | "entity-callouts";
+  /** Klucz w `strategy` dla edytorów markdown/list — opcjonalny dla entity-callouts. */
+  legacyKey?: keyof Strategy;
   placeholder: string;
   emptyHint?: string;
   accent?: "violet" | "amber" | "rose";
@@ -70,16 +100,16 @@ type SectionConfig = {
 
 const SECTIONS: SectionConfig[] = [
   {
-    key: "goalsMd",
+    key: "problems",
     label: "Cele biznesowe",
     icon: Target,
     color: "text-violet-400",
     iconBg: "bg-violet-500/10 border-violet-500/20",
     activeBar: "bg-violet-500",
-    editor: "list",
+    editor: "entity-callouts",
     accent: "violet",
     placeholder: "np. zwiększyć sprzedaż online o 30% w 12 miesiącach",
-    emptyHint: "Dodaj cele jako elementy — każdy z wagą i opcjonalną notatką.",
+    emptyHint: "Dodaj cele jako elementy — każdy z wagą.",
   },
   {
     key: "uvpMd",
@@ -89,6 +119,7 @@ const SECTIONS: SectionConfig[] = [
     iconBg: "bg-amber-500/10 border-amber-500/20",
     activeBar: "bg-amber-500",
     editor: "list",
+    legacyKey: "uvpMd",
     accent: "amber",
     placeholder: "np. jedyny sklep z darmową personalizacją w 24h",
     emptyHint: "Dodaj argumenty UVP — każdy z wagą i notatką.",
@@ -101,21 +132,21 @@ const SECTIONS: SectionConfig[] = [
     iconBg: "bg-blue-500/10 border-blue-500/20",
     activeBar: "bg-blue-500",
     editor: "markdown",
+    legacyKey: "competitorsMd",
     placeholder:
       "Kto jest konkurencją? Jakie mają mocne i słabe strony? Co możemy zrobić lepiej?",
   },
   {
-    key: "objectionsMd",
+    key: "objections",
     label: "Obiekcje klientów",
     icon: MessageSquare,
     color: "text-rose-400",
     iconBg: "bg-rose-500/10 border-rose-500/20",
     activeBar: "bg-rose-500",
-    editor: "list",
+    editor: "entity-callouts",
     accent: "rose",
     placeholder: "np. za drogo w porównaniu do konkurencji",
-    emptyHint:
-      "Dodaj obiekcje — każda z wagą i opcjonalną notatką (np. jak ją zbijamy).",
+    emptyHint: "Dodaj obiekcje — każda z wagą.",
   },
 ];
 
@@ -124,22 +155,80 @@ const NAV_MAX = 400;
 const NAV_DEFAULT = 224;
 const CONTENT_MIN = 320;
 
-function sectionIsFilled(section: SectionConfig, strategy: Strategy): boolean {
-  const content = strategy[section.key];
+function clampWeight(p: number): StrategyListWeight {
+  if (p <= 1) return 1;
+  if (p >= 3) return 3;
+  return 2;
+}
+
+function problemToCallout(p: ProblemRow): CalloutItem {
+  return {
+    id: p.id,
+    text: p.problemMd,
+    note: p.ambitionMd ?? "",
+    weight: clampWeight(p.priority),
+  };
+}
+
+function objectionToCallout(o: ObjectionRow): CalloutItem {
+  return {
+    id: o.id,
+    text: o.objectionMd,
+    note: o.responseMd ?? "",
+    weight: clampWeight(o.priority),
+  };
+}
+
+interface SectionState {
+  problems: CalloutItem[];
+  objections: CalloutItem[];
+}
+
+function sectionIsFilled(
+  section: SectionConfig,
+  strategy: Strategy,
+  state: SectionState
+): boolean {
+  if (section.editor === "entity-callouts") {
+    return section.key === "problems"
+      ? state.problems.length > 0
+      : state.objections.length > 0;
+  }
+  const content = section.legacyKey ? strategy[section.legacyKey] : null;
   if (section.editor === "list") return parseStrategyListItems(content).length > 0;
   return (content?.length ?? 0) > 0;
 }
 
-function sectionPreview(section: SectionConfig, strategy: Strategy): string {
-  const content = strategy[section.key];
+function sectionPreview(
+  section: SectionConfig,
+  strategy: Strategy,
+  state: SectionState
+): string {
+  if (section.editor === "entity-callouts") {
+    const items = section.key === "problems" ? state.problems : state.objections;
+    return items[0]?.text.slice(0, 55) ?? "";
+  }
+  const content = section.legacyKey ? strategy[section.legacyKey] : null;
   if (section.editor === "list") return listItemsPreview(content, 1);
   if (!content) return "";
   const stripped = content.replace(/#+\s/g, "").trim();
   return stripped.length > 55 ? `${stripped.substring(0, 55)}…` : stripped;
 }
 
-export function BusinessStrategyEditor({ projectId, projectName, strategy }: Props) {
+export function BusinessStrategyEditor({
+  projectId,
+  projectName,
+  strategy,
+  problems,
+  objections,
+}: Props) {
   const [localStrategy, setLocalStrategy] = useState(strategy);
+  const [problemItems, setProblemItems] = useState<CalloutItem[]>(
+    problems.map(problemToCallout)
+  );
+  const [objectionItems, setObjectionItems] = useState<CalloutItem[]>(
+    objections.map(objectionToCallout)
+  );
   const [activeKey, setActiveKey] = useState<SectionKey>(SECTIONS[0].key);
   const [pushState, setPushState] = useState<"idle" | "success" | "error">("idle");
   const [pushing, startPush] = useTransition();
@@ -191,6 +280,108 @@ export function BusinessStrategyEditor({ projectId, projectName, strategy }: Pro
     setLocalStrategy((prev) => ({ ...prev, [key]: markdown }));
   };
 
+  // ── DB-backed CRUD: problems ─────────────────────────────────────
+  const problemsApi = `/api/strategy-hub/projects/${projectId}/problems`;
+
+  const addProblem = useCallback(
+    async (text: string): Promise<CalloutItem> => {
+      const res = await fetch(problemsApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problemMd: text, priority: 2 }),
+      });
+      if (!res.ok) throw new Error("Failed to create problem");
+      const { item } = (await res.json()) as { item: ProblemRow };
+      const callout = problemToCallout(item);
+      setProblemItems((prev) => [...prev, callout]);
+      return callout;
+    },
+    [problemsApi]
+  );
+
+  const updateProblem = useCallback(
+    async (
+      id: string,
+      patch: Partial<Pick<CalloutItem, "text" | "note" | "weight">>
+    ) => {
+      const dbPatch: Record<string, unknown> = {};
+      if (patch.text !== undefined) dbPatch.problemMd = patch.text;
+      if (patch.note !== undefined) dbPatch.ambitionMd = patch.note || null;
+      if (patch.weight !== undefined) dbPatch.priority = patch.weight;
+
+      setProblemItems((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      );
+      const res = await fetch(`${problemsApi}/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dbPatch),
+      });
+      if (!res.ok) throw new Error("Failed to update problem");
+    },
+    [problemsApi]
+  );
+
+  const removeProblem = useCallback(
+    async (id: string) => {
+      setProblemItems((prev) => prev.filter((p) => p.id !== id));
+      const res = await fetch(`${problemsApi}/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete problem");
+    },
+    [problemsApi]
+  );
+
+  // ── DB-backed CRUD: objections ────────────────────────────────────
+  const objectionsApi = `/api/strategy-hub/projects/${projectId}/objections`;
+
+  const addObjection = useCallback(
+    async (text: string): Promise<CalloutItem> => {
+      const res = await fetch(objectionsApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objectionMd: text, priority: 2 }),
+      });
+      if (!res.ok) throw new Error("Failed to create objection");
+      const { item } = (await res.json()) as { item: ObjectionRow };
+      const callout = objectionToCallout(item);
+      setObjectionItems((prev) => [...prev, callout]);
+      return callout;
+    },
+    [objectionsApi]
+  );
+
+  const updateObjection = useCallback(
+    async (
+      id: string,
+      patch: Partial<Pick<CalloutItem, "text" | "note" | "weight">>
+    ) => {
+      const dbPatch: Record<string, unknown> = {};
+      if (patch.text !== undefined) dbPatch.objectionMd = patch.text;
+      if (patch.note !== undefined) dbPatch.responseMd = patch.note || null;
+      if (patch.weight !== undefined) dbPatch.priority = patch.weight;
+
+      setObjectionItems((prev) =>
+        prev.map((o) => (o.id === id ? { ...o, ...patch } : o))
+      );
+      const res = await fetch(`${objectionsApi}/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dbPatch),
+      });
+      if (!res.ok) throw new Error("Failed to update objection");
+    },
+    [objectionsApi]
+  );
+
+  const removeObjection = useCallback(
+    async (id: string) => {
+      setObjectionItems((prev) => prev.filter((o) => o.id !== id));
+      const res = await fetch(`${objectionsApi}/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete objection");
+    },
+    [objectionsApi]
+  );
+
   const handlePush = () => {
     startPush(async () => {
       try {
@@ -210,7 +401,13 @@ export function BusinessStrategyEditor({ projectId, projectName, strategy }: Pro
     });
   };
 
-  const filledCount = SECTIONS.filter((s) => sectionIsFilled(s, localStrategy)).length;
+  const sectionState: SectionState = {
+    problems: problemItems,
+    objections: objectionItems,
+  };
+  const filledCount = SECTIONS.filter((s) =>
+    sectionIsFilled(s, localStrategy, sectionState)
+  ).length;
 
   return (
     <div className="-m-6 h-[calc(100vh-3.5rem)] flex flex-col">
@@ -292,8 +489,8 @@ export function BusinessStrategyEditor({ projectId, projectName, strategy }: Pro
             >
               {SECTIONS.map((section) => {
                 const isActive = activeKey === section.key;
-                const isFilled = sectionIsFilled(section, localStrategy);
-                const preview = sectionPreview(section, localStrategy);
+                const isFilled = sectionIsFilled(section, localStrategy, sectionState);
+                const preview = sectionPreview(section, localStrategy, sectionState);
                 const Icon = section.icon;
 
                 return (
@@ -372,23 +569,51 @@ export function BusinessStrategyEditor({ projectId, projectName, strategy }: Pro
 
           {/* Edytor */}
           <div key={activeKey} className="flex-1">
-            {activeSection.editor === "list" ? (
+            {activeSection.editor === "entity-callouts" ? (
+              activeKey === "problems" ? (
+                <EntityCalloutList
+                  items={problemItems}
+                  onAdd={addProblem}
+                  onUpdate={updateProblem}
+                  onRemove={removeProblem}
+                  placeholder={activeSection.placeholder}
+                  emptyHint={activeSection.emptyHint}
+                />
+              ) : (
+                <EntityCalloutList
+                  items={objectionItems}
+                  onAdd={addObjection}
+                  onUpdate={updateObjection}
+                  onRemove={removeObjection}
+                  placeholder={activeSection.placeholder}
+                  emptyHint={activeSection.emptyHint}
+                />
+              )
+            ) : activeSection.editor === "list" && activeSection.legacyKey ? (
               <ListItemsEditor
-                initialContent={localStrategy[activeKey]}
+                initialContent={localStrategy[activeSection.legacyKey]}
                 placeholder={activeSection.placeholder}
                 emptyHint={activeSection.emptyHint}
                 accent={activeSection.accent}
-                onSave={(md) => handleSave(activeKey, md)}
+                onSave={(md) =>
+                  activeSection.legacyKey
+                    ? handleSave(activeSection.legacyKey, md)
+                    : Promise.resolve()
+                }
                 className="rounded-none border-0 h-full"
               />
-            ) : (
+            ) : activeSection.editor === "markdown" && activeSection.legacyKey ? (
               <TiptapEditor
-                initialContent={localStrategy[activeKey] ?? ""}
+                initialContent={localStrategy[activeSection.legacyKey] ?? ""}
                 placeholder={activeSection.placeholder}
-                onSave={(md) => handleSave(activeKey, md)}
+                onSave={(md) =>
+                  activeSection.legacyKey
+                    ? handleSave(activeSection.legacyKey, md)
+                    : Promise.resolve()
+                }
                 className="rounded-none border-0"
               />
-            )}
+            ) : null}
           </div>
         </div>
       </div>

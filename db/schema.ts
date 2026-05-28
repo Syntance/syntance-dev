@@ -4,6 +4,7 @@ import {
   timestamp,
   boolean,
   integer,
+  real,
   uuid,
   varchar,
   jsonb,
@@ -65,7 +66,7 @@ export const projects = pgTable(
   ]
 );
 
-// ─── Strategia biznesowa ──────────────────────────────────────────────────────
+// ─── Strategia biznesowa (LEGACY — do usunięcia po migracji w PR 1.5) ───────
 
 export const businessStrategy = pgTable("business_strategy", {
   projectId: uuid("project_id")
@@ -78,6 +79,140 @@ export const businessStrategy = pgTable("business_strategy", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   updatedBy: uuid("updated_by"),
 });
+
+// ─── Strategia biznesowa (relacyjna) ─────────────────────────────────────────
+
+/**
+ * Problemy / ambicje biznesowe.
+ * Jeden problem = jeden wiersz, z opcjonalną ambicją (co chcemy osiągnąć)
+ * i naszym proponowanym rozwiązaniem.
+ * Priority 1=Neutralne, 2=Średnie, 3=Ważne (zgodnie z `StrategyListWeight`).
+ */
+export const businessProblems = pgTable(
+  "business_problems",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    problemMd: text("problem_md").notNull(),
+    ambitionMd: text("ambition_md"),
+    ourSolutionMd: text("our_solution_md"),
+    priority: integer("priority").notNull().default(2),
+    orderIdx: integer("order_idx").notNull().default(0),
+    source: varchar("source", { length: 20 }).notNull().default("hub"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("business_problems_project_idx").on(t.projectId)]
+);
+
+/**
+ * UVP (Unique Value Proposition) projektu — jeden wiersz per projekt.
+ * Główne UVP, wartości dodane (lista calloutów w formacie list-items
+ * — przejściowo zachowujemy serializację JSON dla kompatybilności)
+ * + strukturalne wyróżniki.
+ */
+export const uvp = pgTable("uvp", {
+  projectId: uuid("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  coreUvpMd: text("core_uvp_md"),
+  /** JSON: serializowana lista StrategyListItem[] (text/note/weight). */
+  valueAddsJson: text("value_adds_json"),
+  /** [{title: string, description: string}] */
+  differentiators: jsonb("differentiators"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: uuid("updated_by"),
+});
+
+/**
+ * Pozycjonowanie marki — quadrant chart (drag&drop w UI).
+ * Osie konfigurowalne, pozycja "nas" + lista konkurentów na quadrancie.
+ * Wartości X/Y z zakresu -1.0 do 1.0 (środek = 0,0).
+ */
+export const brandPositioning = pgTable("brand_positioning", {
+  projectId: uuid("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  axisXLabel: varchar("axis_x_label", { length: 100 }),
+  axisYLabel: varchar("axis_y_label", { length: 100 }),
+  ourX: real("our_x"),
+  ourY: real("our_y"),
+  ourLabel: varchar("our_label", { length: 100 }),
+  /** [{label: string, x: number, y: number}] — markery konkurencji */
+  competitorsOnQuadrant: jsonb("competitors_on_quadrant"),
+  statementMd: text("statement_md"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: uuid("updated_by"),
+});
+
+/**
+ * Konkurenci — lista per projekt.
+ * Typ: `direct` (bezpośrednia), `indirect` (pośrednia), `none` ("nic nie robię").
+ * Quadrant X/Y opcjonalne — gdy jest mapping na pozycjonowanie.
+ */
+export const competitors = pgTable(
+  "competitors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Główny segment dla którego ten konkurent jest istotny (opcjonalnie). */
+    segmentId: uuid("segment_id"),
+    name: varchar("name", { length: 255 }).notNull(),
+    url: text("url"),
+    type: varchar("type", { length: 20 }).notNull().default("direct"),
+    strengthsMd: text("strengths_md"),
+    weaknessesMd: text("weaknesses_md"),
+    pricingMd: text("pricing_md"),
+    channelsMd: text("channels_md"),
+    notesMd: text("notes_md"),
+    quadrantX: real("quadrant_x"),
+    quadrantY: real("quadrant_y"),
+    source: varchar("source", { length: 20 }).notNull().default("hub"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [
+    index("competitors_project_idx").on(t.projectId),
+    index("competitors_segment_idx").on(t.segmentId),
+  ]
+);
+
+/**
+ * Obiekcje klientów — z dowodem.
+ * Może być powiązana z segmentem i etapem zakupu (TOFU/MOFU/BOFU/retention).
+ * Status: `active` (aktualna), `resolved` (zaadresowana), `needs_proof` (brak dowodu).
+ */
+export const objections = pgTable(
+  "objections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    segmentId: uuid("segment_id"),
+    stage: varchar("stage", { length: 20 }),
+    objectionMd: text("objection_md").notNull(),
+    responseMd: text("response_md"),
+    proofMd: text("proof_md"),
+    priority: integer("priority").notNull().default(2),
+    status: varchar("status", { length: 20 }).notNull().default("active"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    source: varchar("source", { length: 20 }).notNull().default("hub"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [
+    index("objections_project_idx").on(t.projectId),
+    index("objections_segment_idx").on(t.segmentId),
+  ]
+);
 
 // ─── Strategia marketingowa ──────────────────────────────────────────────────
 
@@ -440,6 +575,17 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     fields: [projects.id],
     references: [businessStrategy.projectId],
   }),
+  uvp: one(uvp, {
+    fields: [projects.id],
+    references: [uvp.projectId],
+  }),
+  brandPositioning: one(brandPositioning, {
+    fields: [projects.id],
+    references: [brandPositioning.projectId],
+  }),
+  businessProblems: many(businessProblems),
+  competitors: many(competitors),
+  objections: many(objections),
   segments: many(segments),
   channels: many(channels),
   userFlows: many(userFlows),
@@ -452,6 +598,55 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   clientResources: many(clientResources),
 }));
 
+export const businessProblemsRelations = relations(
+  businessProblems,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [businessProblems.projectId],
+      references: [projects.id],
+    }),
+  })
+);
+
+export const uvpRelations = relations(uvp, ({ one }) => ({
+  project: one(projects, {
+    fields: [uvp.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const brandPositioningRelations = relations(
+  brandPositioning,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [brandPositioning.projectId],
+      references: [projects.id],
+    }),
+  })
+);
+
+export const competitorsRelations = relations(competitors, ({ one }) => ({
+  project: one(projects, {
+    fields: [competitors.projectId],
+    references: [projects.id],
+  }),
+  segment: one(segments, {
+    fields: [competitors.segmentId],
+    references: [segments.id],
+  }),
+}));
+
+export const objectionsRelations = relations(objections, ({ one }) => ({
+  project: one(projects, {
+    fields: [objections.projectId],
+    references: [projects.id],
+  }),
+  segment: one(segments, {
+    fields: [objections.segmentId],
+    references: [segments.id],
+  }),
+}));
+
 export const segmentsRelations = relations(segments, ({ one, many }) => ({
   project: one(projects, {
     fields: [segments.projectId],
@@ -460,6 +655,8 @@ export const segmentsRelations = relations(segments, ({ one, many }) => ({
   purchaseStages: many(purchaseStages),
   kpis: many(kpis),
   userFlows: many(userFlows),
+  competitors: many(competitors),
+  objections: many(objections),
 }));
 
 export const purchaseStagesRelations = relations(

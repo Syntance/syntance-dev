@@ -48,10 +48,32 @@ interface Strategy {
   objectionsMd: string | null;
 }
 
+interface ProblemRow {
+  id: string;
+  problemMd: string;
+  ambitionMd: string | null;
+  ourSolutionMd: string | null;
+  priority: number;
+  orderIdx: number | null;
+}
+
+interface ObjectionRow {
+  id: string;
+  objectionMd: string;
+  responseMd: string | null;
+  proofMd: string | null;
+  priority: number;
+  orderIdx: number | null;
+  stage: string | null;
+  status: string | null;
+}
+
 interface Props {
   projectId: string;
   projectName: string;
   strategy: Strategy;
+  problems: ProblemRow[];
+  objections: ObjectionRow[];
 }
 
 export function BusinessStrategyEditorLoader(props: Props) {

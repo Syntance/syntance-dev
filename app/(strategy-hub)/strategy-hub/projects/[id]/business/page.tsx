@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 import { db } from "@/db";
-import { projects, businessStrategy } from "@/db/schema";
-import { eq, isNull, and } from "drizzle-orm";
+import {
+  projects,
+  businessStrategy,
+  businessProblems,
+  objections,
+} from "@/db/schema";
+import { eq, isNull, and, asc } from "drizzle-orm";
 import { BusinessStrategyEditorLoader } from "./business-strategy-editor-loader";
 
 export const metadata = { title: "Strategia biznesowa" };
@@ -20,11 +25,28 @@ async function getData(id: string) {
   const project = rows[0];
   if (!project) return null;
 
-  const stratRows = await db
-    .select()
-    .from(businessStrategy)
-    .where(eq(businessStrategy.projectId, id))
-    .limit(1);
+  const [stratRows, problemRows, objectionRows] = await Promise.all([
+    db
+      .select()
+      .from(businessStrategy)
+      .where(eq(businessStrategy.projectId, id))
+      .limit(1),
+    db
+      .select()
+      .from(businessProblems)
+      .where(
+        and(
+          eq(businessProblems.projectId, id),
+          isNull(businessProblems.deletedAt)
+        )
+      )
+      .orderBy(asc(businessProblems.orderIdx), asc(businessProblems.createdAt)),
+    db
+      .select()
+      .from(objections)
+      .where(and(eq(objections.projectId, id), isNull(objections.deletedAt)))
+      .orderBy(asc(objections.orderIdx), asc(objections.createdAt)),
+  ]);
 
   const strategy = stratRows[0] ?? {
     projectId: id,
@@ -36,7 +58,7 @@ async function getData(id: string) {
     updatedBy: null,
   };
 
-  return { project, strategy };
+  return { project, strategy, problems: problemRows, objections: objectionRows };
 }
 
 export default async function BusinessStrategyPage({ params }: Props) {
@@ -56,6 +78,8 @@ export default async function BusinessStrategyPage({ params }: Props) {
       projectId={id}
       projectName={data.project.name}
       strategy={data.strategy}
+      problems={data.problems}
+      objections={data.objections}
     />
   );
 }
