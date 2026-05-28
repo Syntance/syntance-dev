@@ -119,7 +119,9 @@ export const uvp = pgTable("uvp", {
     .primaryKey()
     .references(() => projects.id, { onDelete: "cascade" }),
   coreUvpMd: text("core_uvp_md"),
-  /** JSON: serializowana lista StrategyListItem[] (text/note/weight). */
+  /** Markdown (spec): lista wartości dodanych. */
+  valueAddsMd: text("value_adds_md"),
+  /** JSON: serializowana lista StrategyListItem[] (text/note/weight) — legacy/UI. */
   valueAddsJson: text("value_adds_json"),
   /** [{title: string, description: string}] */
   differentiators: jsonb("differentiators"),
@@ -223,12 +225,37 @@ export const segments = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    code: varchar("code", { length: 50 }),
     name: varchar("name", { length: 255 }).notNull(),
+    personaName: varchar("persona_name", { length: 255 }),
+    icon: varchar("icon", { length: 10 }),
+    priority: integer("priority").default(0),
+    revenueSharePct: integer("revenue_share_pct"),
+    status: varchar("status", { length: 50 }).default("active"),
+    orderIdx: integer("order_idx").default(0),
+    // Karta segmentu (8 sekcji)
+    demographicsMd: text("demographics_md"),
+    jtbdMd: text("jtbd_md"),
+    problemMd: text("problem_md"),
+    uvpForSegmentMd: text("uvp_for_segment_md"),
+    emotionalDriversMd: text("emotional_drivers_md"),
+    triggersMd: text("triggers_md"),
+    blockersMd: text("blockers_md"),
+    mentalityMd: text("mentality_md"),
+    budgetMd: text("budget_md"),
+    marketSizeMd: text("market_size_md"),
+    /** [{label, value, source}] — TAM/SAM/SOM itp. */
+    marketData: jsonb("market_data"),
+    /** [{kpi, target, unit}] */
+    kpiTargets: jsonb("kpi_targets"),
+    segmentPricingMd: text("segment_pricing_md"),
+    /** {fit: number, value: number, effort: number, total: number} */
+    scoring: jsonb("scoring"),
+    // ── Legacy (zachowane dla kompatybilności) ──
     persona: text("persona"),
     jtbd: text("jtbd"),
     problem: text("problem"),
     uvpText: text("uvp_text"),
-    priority: integer("priority").default(0),
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("segments_project_idx").on(t.projectId)]
@@ -386,11 +413,13 @@ export const pages = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     urlPath: varchar("url_path", { length: 255 }),
     type: varchar("type", { length: 100 }),
+    layoutTemplate: varchar("layout_template", { length: 100 }),
     roleInFunnel: text("role_in_funnel"),
     cta: varchar("cta", { length: 255 }),
     goal: text("goal"),
     status: varchar("status", { length: 50 }).default("draft"),
     priority: integer("priority").default(0),
+    priorityTier: varchar("priority_tier", { length: 20 }),
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("pages_project_idx").on(t.projectId)]
@@ -559,6 +588,456 @@ export const clientVisitsLog = pgTable(
   (t) => [index("client_visits_log_project_idx").on(t.projectId)]
 );
 
+// ─── Discovery / Onboarding ──────────────────────────────────────────────────
+
+export const projectQuestions = pgTable(
+  "project_questions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    category: varchar("category", { length: 100 }),
+    question: text("question").notNull(),
+    answerMd: text("answer_md"),
+    ourAnalysisMd: text("our_analysis_md"),
+    status: varchar("status", { length: 30 }).notNull().default("open"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    source: varchar("source", { length: 20 }).notNull().default("hub"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("project_questions_project_idx").on(t.projectId)]
+);
+
+export const projectGlossary = pgTable(
+  "project_glossary",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    term: varchar("term", { length: 255 }).notNull(),
+    definitionMd: text("definition_md"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("project_glossary_project_idx").on(t.projectId)]
+);
+
+export const projectCredentials = pgTable(
+  "project_credentials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    serviceName: varchar("service_name", { length: 255 }).notNull(),
+    url: text("url"),
+    login: varchar("login", { length: 255 }),
+    /** Zaszyfrowany sekret (AES-GCM) — nigdy plaintext. */
+    encryptedSecret: text("encrypted_secret"),
+    category: varchar("category", { length: 100 }),
+    notes: text("notes"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("project_credentials_project_idx").on(t.projectId)]
+);
+
+export const projectMaterials = pgTable(
+  "project_materials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    type: varchar("type", { length: 50 }),
+    title: varchar("title", { length: 255 }).notNull(),
+    url: text("url"),
+    source: varchar("source", { length: 100 }),
+    fileId: varchar("file_id", { length: 255 }),
+    notesMd: text("notes_md"),
+    addedAt: timestamp("added_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("project_materials_project_idx").on(t.projectId)]
+);
+
+export const projectNotes = pgTable(
+  "project_notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    authorType: varchar("author_type", { length: 20 }).notNull().default("team"),
+    contentMd: text("content_md").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("project_notes_project_idx").on(t.projectId)]
+);
+
+export const projectTasks = pgTable(
+  "project_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 255 }).notNull(),
+    descriptionMd: text("description_md"),
+    status: varchar("status", { length: 30 }).notNull().default("todo"),
+    owner: varchar("owner", { length: 100 }),
+    dueDate: timestamp("due_date"),
+    priority: integer("priority").notNull().default(2),
+    orderIdx: integer("order_idx").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("project_tasks_project_idx").on(t.projectId)]
+);
+
+// ─── Marka ───────────────────────────────────────────────────────────────────
+
+export const brandIdentity = pgTable("brand_identity", {
+  projectId: uuid("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  missionMd: text("mission_md"),
+  visionMd: text("vision_md"),
+  purposeMd: text("purpose_md"),
+  brandPillarsMd: text("brand_pillars_md"),
+  toneOfVoiceMd: text("tone_of_voice_md"),
+  brandPersonalityMd: text("brand_personality_md"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: uuid("updated_by"),
+});
+
+export const brandVisual = pgTable("brand_visual", {
+  projectId: uuid("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  /** [{label, url, kind}] */
+  logoFiles: jsonb("logo_files"),
+  /** [{name, hex, oklch, role}] */
+  colors: jsonb("colors"),
+  /** [{role, family, weights, url}] */
+  typography: jsonb("typography"),
+  brandbookUrl: text("brandbook_url"),
+  usageGuidelinesMd: text("usage_guidelines_md"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: uuid("updated_by"),
+});
+
+// ─── Strategia biznesowa: kryteria segmentacji ───────────────────────────────
+
+export const marketSegmentationCriteria = pgTable(
+  "market_segmentation_criteria",
+  {
+    projectId: uuid("project_id")
+      .primaryKey()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** [{dimension, description, values: string[]}] */
+    dimensions: jsonb("dimensions"),
+    notesMd: text("notes_md"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    updatedBy: uuid("updated_by"),
+  }
+);
+
+// ─── Segmenty: dzieci ────────────────────────────────────────────────────────
+
+export const buyerJourneyStages = pgTable(
+  "buyer_journey_stages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    segmentId: uuid("segment_id")
+      .notNull()
+      .references(() => segments.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    whatDoesMd: text("what_does_md"),
+    timeHint: varchar("time_hint", { length: 100 }),
+    ourActionMd: text("our_action_md"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("buyer_journey_stages_segment_idx").on(t.segmentId)]
+);
+
+export const segmentQuickWins = pgTable(
+  "segment_quick_wins",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    segmentId: uuid("segment_id")
+      .notNull()
+      .references(() => segments.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 255 }).notNull(),
+    descriptionMd: text("description_md"),
+    deadline: timestamp("deadline"),
+    status: varchar("status", { length: 30 }).notNull().default("planned"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("segment_quick_wins_segment_idx").on(t.segmentId)]
+);
+
+export const segmentRisks = pgTable(
+  "segment_risks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    segmentId: uuid("segment_id")
+      .notNull()
+      .references(() => segments.id, { onDelete: "cascade" }),
+    riskMd: text("risk_md").notNull(),
+    mitigationMd: text("mitigation_md"),
+    severity: varchar("severity", { length: 20 }).notNull().default("medium"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("segment_risks_segment_idx").on(t.segmentId)]
+);
+
+// ─── Kanały: plan aktywności ─────────────────────────────────────────────────
+
+export const channelActivityPlan = pgTable(
+  "channel_activity_plan",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+    segmentId: uuid("segment_id").references(() => segments.id, {
+      onDelete: "set null",
+    }),
+    stage: varchar("stage", { length: 20 }),
+    whatToPublishMd: text("what_to_publish_md"),
+    cadence: varchar("cadence", { length: 100 }),
+    weeklyCount: integer("weekly_count"),
+    monthlyBudget: integer("monthly_budget"),
+    priority: integer("priority").notNull().default(2),
+    notesMd: text("notes_md"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [
+    index("channel_activity_plan_channel_idx").on(t.channelId),
+    index("channel_activity_plan_segment_idx").on(t.segmentId),
+  ]
+);
+
+// ─── Sprzedaż / copywriting ──────────────────────────────────────────────────
+
+export const salesPitches = pgTable(
+  "sales_pitches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    segmentId: uuid("segment_id").references(() => segments.id, {
+      onDelete: "set null",
+    }),
+    context: varchar("context", { length: 100 }),
+    title: varchar("title", { length: 255 }).notNull(),
+    pitchMd: text("pitch_md"),
+    version: integer("version").notNull().default(1),
+    status: varchar("status", { length: 30 }).notNull().default("draft"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    source: varchar("source", { length: 20 }).notNull().default("hub"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [
+    index("sales_pitches_project_idx").on(t.projectId),
+    index("sales_pitches_segment_idx").on(t.segmentId),
+  ]
+);
+
+export const salesScripts = pgTable(
+  "sales_scripts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    context: varchar("context", { length: 100 }),
+    name: varchar("name", { length: 255 }).notNull(),
+    scriptMd: text("script_md"),
+    version: integer("version").notNull().default(1),
+    status: varchar("status", { length: 30 }).notNull().default("draft"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    source: varchar("source", { length: 20 }).notNull().default("hub"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("sales_scripts_project_idx").on(t.projectId)]
+);
+
+export const leadMagnets = pgTable(
+  "lead_magnets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    segmentId: uuid("segment_id").references(() => segments.id, {
+      onDelete: "set null",
+    }),
+    name: varchar("name", { length: 255 }).notNull(),
+    format: varchar("format", { length: 100 }),
+    descriptionMd: text("description_md"),
+    url: text("url"),
+    conversionTarget: varchar("conversion_target", { length: 100 }),
+    status: varchar("status", { length: 30 }).notNull().default("draft"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    source: varchar("source", { length: 20 }).notNull().default("hub"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [
+    index("lead_magnets_project_idx").on(t.projectId),
+    index("lead_magnets_segment_idx").on(t.segmentId),
+  ]
+);
+
+export const copyGuidelines = pgTable("copy_guidelines", {
+  projectId: uuid("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  principlesMd: text("principles_md"),
+  doMd: text("do_md"),
+  dontMd: text("dont_md"),
+  /** [{name, body}] */
+  templates: jsonb("templates"),
+  /** string[] */
+  hashtags: jsonb("hashtags"),
+  /** [{label, body}] */
+  examples: jsonb("examples"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: uuid("updated_by"),
+});
+
+// ─── Strategia strony: dzieci ────────────────────────────────────────────────
+
+export const pageSections = pgTable(
+  "page_sections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => pages.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    orderIdx: integer("order_idx").notNull().default(0),
+    purposeMd: text("purpose_md"),
+    schemaMd: text("schema_md"),
+    copyMd: text("copy_md"),
+    ctaText: varchar("cta_text", { length: 255 }),
+    ctaUrl: varchar("cta_url", { length: 500 }),
+    designNotesMd: text("design_notes_md"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("page_sections_page_idx").on(t.pageId)]
+);
+
+export const navItems = pgTable(
+  "nav_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    label: varchar("label", { length: 255 }).notNull(),
+    url: varchar("url", { length: 500 }),
+    pageId: uuid("page_id").references(() => pages.id, { onDelete: "set null" }),
+    position: varchar("position", { length: 50 }),
+    type: varchar("type", { length: 50 }),
+    parentId: uuid("parent_id"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("nav_items_project_idx").on(t.projectId)]
+);
+
+export const siteMaintenanceCosts = pgTable(
+  "site_maintenance_costs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    item: varchar("item", { length: 255 }).notNull(),
+    monthlyCost: integer("monthly_cost"),
+    yearlyCost: integer("yearly_cost"),
+    provider: varchar("provider", { length: 100 }),
+    notesMd: text("notes_md"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("site_maintenance_costs_project_idx").on(t.projectId)]
+);
+
+export const siteAudits = pgTable(
+  "site_audits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    type: varchar("type", { length: 50 }),
+    date: timestamp("date").defaultNow().notNull(),
+    summaryMd: text("summary_md"),
+    severityHigh: integer("severity_high").default(0),
+    severityMedium: integer("severity_medium").default(0),
+    severityLow: integer("severity_low").default(0),
+    status: varchar("status", { length: 30 }).notNull().default("open"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("site_audits_project_idx").on(t.projectId)]
+);
+
+export const siteAuditFindings = pgTable(
+  "site_audit_findings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    auditId: uuid("audit_id")
+      .notNull()
+      .references(() => siteAudits.id, { onDelete: "cascade" }),
+    pageId: uuid("page_id").references(() => pages.id, { onDelete: "set null" }),
+    area: varchar("area", { length: 100 }),
+    findingMd: text("finding_md").notNull(),
+    severity: varchar("severity", { length: 20 }).notNull().default("medium"),
+    recommendationMd: text("recommendation_md"),
+    status: varchar("status", { length: 30 }).notNull().default("open"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("site_audit_findings_audit_idx").on(t.auditId)]
+);
+
+// ─── Historia zmian (audit trail) ────────────────────────────────────────────
+
+export const changeHistory = pgTable(
+  "change_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    entityType: varchar("entity_type", { length: 100 }).notNull(),
+    entityId: uuid("entity_id"),
+    field: varchar("field", { length: 100 }),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    source: varchar("source", { length: 20 }).notNull().default("hub"),
+    userId: uuid("user_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("change_history_project_idx").on(t.projectId)]
+);
+
 // ─── Relations ────────────────────────────────────────────────────────────────
 
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
@@ -583,6 +1062,22 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     fields: [projects.id],
     references: [brandPositioning.projectId],
   }),
+  marketSegmentationCriteria: one(marketSegmentationCriteria, {
+    fields: [projects.id],
+    references: [marketSegmentationCriteria.projectId],
+  }),
+  brandIdentity: one(brandIdentity, {
+    fields: [projects.id],
+    references: [brandIdentity.projectId],
+  }),
+  brandVisual: one(brandVisual, {
+    fields: [projects.id],
+    references: [brandVisual.projectId],
+  }),
+  copyGuidelines: one(copyGuidelines, {
+    fields: [projects.id],
+    references: [copyGuidelines.projectId],
+  }),
   businessProblems: many(businessProblems),
   competitors: many(competitors),
   objections: many(objections),
@@ -596,6 +1091,19 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   hostingServices: many(hostingServices),
   domains: many(domains),
   clientResources: many(clientResources),
+  questions: many(projectQuestions),
+  glossary: many(projectGlossary),
+  credentials: many(projectCredentials),
+  materials: many(projectMaterials),
+  notes: many(projectNotes),
+  tasks: many(projectTasks),
+  salesPitches: many(salesPitches),
+  salesScripts: many(salesScripts),
+  leadMagnets: many(leadMagnets),
+  navItems: many(navItems),
+  siteMaintenanceCosts: many(siteMaintenanceCosts),
+  siteAudits: many(siteAudits),
+  changeHistory: many(changeHistory),
 }));
 
 export const businessProblemsRelations = relations(
@@ -657,6 +1165,12 @@ export const segmentsRelations = relations(segments, ({ one, many }) => ({
   userFlows: many(userFlows),
   competitors: many(competitors),
   objections: many(objections),
+  buyerJourneyStages: many(buyerJourneyStages),
+  quickWins: many(segmentQuickWins),
+  risks: many(segmentRisks),
+  channelActivityPlan: many(channelActivityPlan),
+  salesPitches: many(salesPitches),
+  leadMagnets: many(leadMagnets),
 }));
 
 export const purchaseStagesRelations = relations(
@@ -692,6 +1206,7 @@ export const channelsRelations = relations(channels, ({ one, many }) => ({
     references: [projects.id],
   }),
   funnelElements: many(funnelElementChannels),
+  activityPlan: many(channelActivityPlan),
 }));
 
 export const funnelElementChannelsRelations = relations(
@@ -742,5 +1257,220 @@ export const userFlowPagesRelations = relations(userFlowPages, ({ one }) => ({
   page: one(pages, {
     fields: [userFlowPages.pageId],
     references: [pages.id],
+  }),
+}));
+
+export const pagesRelations = relations(pages, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [pages.projectId],
+    references: [projects.id],
+  }),
+  sections: many(pageSections),
+  userFlows: many(userFlowPages),
+}));
+
+export const pageSectionsRelations = relations(pageSections, ({ one }) => ({
+  page: one(pages, {
+    fields: [pageSections.pageId],
+    references: [pages.id],
+  }),
+}));
+
+export const projectQuestionsRelations = relations(projectQuestions, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectQuestions.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const projectGlossaryRelations = relations(projectGlossary, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectGlossary.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const projectCredentialsRelations = relations(
+  projectCredentials,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [projectCredentials.projectId],
+      references: [projects.id],
+    }),
+  })
+);
+
+export const projectMaterialsRelations = relations(
+  projectMaterials,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [projectMaterials.projectId],
+      references: [projects.id],
+    }),
+  })
+);
+
+export const projectNotesRelations = relations(projectNotes, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectNotes.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const projectTasksRelations = relations(projectTasks, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectTasks.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const brandIdentityRelations = relations(brandIdentity, ({ one }) => ({
+  project: one(projects, {
+    fields: [brandIdentity.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const brandVisualRelations = relations(brandVisual, ({ one }) => ({
+  project: one(projects, {
+    fields: [brandVisual.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const marketSegmentationCriteriaRelations = relations(
+  marketSegmentationCriteria,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [marketSegmentationCriteria.projectId],
+      references: [projects.id],
+    }),
+  })
+);
+
+export const buyerJourneyStagesRelations = relations(
+  buyerJourneyStages,
+  ({ one }) => ({
+    segment: one(segments, {
+      fields: [buyerJourneyStages.segmentId],
+      references: [segments.id],
+    }),
+  })
+);
+
+export const segmentQuickWinsRelations = relations(
+  segmentQuickWins,
+  ({ one }) => ({
+    segment: one(segments, {
+      fields: [segmentQuickWins.segmentId],
+      references: [segments.id],
+    }),
+  })
+);
+
+export const segmentRisksRelations = relations(segmentRisks, ({ one }) => ({
+  segment: one(segments, {
+    fields: [segmentRisks.segmentId],
+    references: [segments.id],
+  }),
+}));
+
+export const channelActivityPlanRelations = relations(
+  channelActivityPlan,
+  ({ one }) => ({
+    channel: one(channels, {
+      fields: [channelActivityPlan.channelId],
+      references: [channels.id],
+    }),
+    segment: one(segments, {
+      fields: [channelActivityPlan.segmentId],
+      references: [segments.id],
+    }),
+  })
+);
+
+export const salesPitchesRelations = relations(salesPitches, ({ one }) => ({
+  project: one(projects, {
+    fields: [salesPitches.projectId],
+    references: [projects.id],
+  }),
+  segment: one(segments, {
+    fields: [salesPitches.segmentId],
+    references: [segments.id],
+  }),
+}));
+
+export const salesScriptsRelations = relations(salesScripts, ({ one }) => ({
+  project: one(projects, {
+    fields: [salesScripts.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const leadMagnetsRelations = relations(leadMagnets, ({ one }) => ({
+  project: one(projects, {
+    fields: [leadMagnets.projectId],
+    references: [projects.id],
+  }),
+  segment: one(segments, {
+    fields: [leadMagnets.segmentId],
+    references: [segments.id],
+  }),
+}));
+
+export const copyGuidelinesRelations = relations(copyGuidelines, ({ one }) => ({
+  project: one(projects, {
+    fields: [copyGuidelines.projectId],
+    references: [projects.id],
+  }),
+}));
+
+export const navItemsRelations = relations(navItems, ({ one }) => ({
+  project: one(projects, {
+    fields: [navItems.projectId],
+    references: [projects.id],
+  }),
+  page: one(pages, {
+    fields: [navItems.pageId],
+    references: [pages.id],
+  }),
+}));
+
+export const siteMaintenanceCostsRelations = relations(
+  siteMaintenanceCosts,
+  ({ one }) => ({
+    project: one(projects, {
+      fields: [siteMaintenanceCosts.projectId],
+      references: [projects.id],
+    }),
+  })
+);
+
+export const siteAuditsRelations = relations(siteAudits, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [siteAudits.projectId],
+    references: [projects.id],
+  }),
+  findings: many(siteAuditFindings),
+}));
+
+export const siteAuditFindingsRelations = relations(
+  siteAuditFindings,
+  ({ one }) => ({
+    audit: one(siteAudits, {
+      fields: [siteAuditFindings.auditId],
+      references: [siteAudits.id],
+    }),
+    page: one(pages, {
+      fields: [siteAuditFindings.pageId],
+      references: [pages.id],
+    }),
+  })
+);
+
+export const changeHistoryRelations = relations(changeHistory, ({ one }) => ({
+  project: one(projects, {
+    fields: [changeHistory.projectId],
+    references: [projects.id],
   }),
 }));

@@ -9,6 +9,9 @@ import {
   TrendingUp,
   ArrowRight,
   ExternalLink,
+  Compass,
+  Gem,
+  Filter,
 } from "lucide-react";
 import { db } from "@/db";
 import { projects, businessStrategy, segments, kpis } from "@/db/schema";
@@ -52,12 +55,44 @@ async function getProjectData(id: string) {
 
 const modules = (id: string) => [
   {
+    href: `/strategy-hub/projects/${id}/discovery`,
+    icon: Compass,
+    label: "Discovery",
+    description: "Pytania, słownik, dostępy, materiały",
+    color: "text-amber-400",
+    bg: "bg-amber-500/10 border-amber-500/20",
+  },
+  {
+    href: `/strategy-hub/projects/${id}/brand`,
+    icon: Gem,
+    label: "Marka",
+    description: "Tożsamość, kolory, typografia, loga",
+    color: "text-pink-400",
+    bg: "bg-pink-500/10 border-pink-500/20",
+  },
+  {
     href: `/strategy-hub/projects/${id}/business`,
     icon: FileText,
     label: "Strategia biznesowa",
     description: "Cele, UVP, konkurencja, obiekcje",
     color: "text-violet-400",
     bg: "bg-violet-500/10 border-violet-500/20",
+  },
+  {
+    href: `/strategy-hub/projects/${id}/segments`,
+    icon: Users,
+    label: "Segmenty",
+    description: "Persona, JTBD, ścieżka, quick wins",
+    color: "text-blue-400",
+    bg: "bg-blue-500/10 border-blue-500/20",
+  },
+  {
+    href: `/strategy-hub/projects/${id}/funnel`,
+    icon: Filter,
+    label: "Lejek i kanały",
+    description: "Funnel flow, plan kanałów, macierz",
+    color: "text-cyan-400",
+    bg: "bg-cyan-500/10 border-cyan-500/20",
   },
   {
     href: `/strategy-hub/projects/${id}/marketing`,

@@ -13,6 +13,10 @@ import {
   ChevronRight,
   Server,
   MessageSquareText,
+  Compass,
+  Gem,
+  Users,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -41,9 +45,29 @@ const navItems = [
 
 const strategyItems = (projectId: string) => [
   {
+    label: "Discovery",
+    href: `/strategy-hub/projects/${projectId}/discovery`,
+    icon: Compass,
+  },
+  {
+    label: "Marka",
+    href: `/strategy-hub/projects/${projectId}/brand`,
+    icon: Gem,
+  },
+  {
     label: "Strategia biznesowa",
     href: `/strategy-hub/projects/${projectId}/business`,
     icon: FileText,
+  },
+  {
+    label: "Segmenty",
+    href: `/strategy-hub/projects/${projectId}/segments`,
+    icon: Users,
+  },
+  {
+    label: "Lejek i kanały",
+    href: `/strategy-hub/projects/${projectId}/funnel`,
+    icon: Filter,
   },
   {
     label: "Strategia marketingowa",
