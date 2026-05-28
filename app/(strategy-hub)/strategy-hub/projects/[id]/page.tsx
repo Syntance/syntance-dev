@@ -12,6 +12,7 @@ import {
   Compass,
   Gem,
   Filter,
+  Megaphone,
 } from "lucide-react";
 import { db } from "@/db";
 import { projects, businessStrategy, segments, kpis } from "@/db/schema";
@@ -93,6 +94,14 @@ const modules = (id: string) => [
     description: "Funnel flow, plan kanałów, macierz",
     color: "text-cyan-400",
     bg: "bg-cyan-500/10 border-cyan-500/20",
+  },
+  {
+    href: `/strategy-hub/projects/${id}/sales`,
+    icon: Megaphone,
+    label: "Sprzedaż i copy",
+    description: "Pitche, skrypty, lead magnety, wytyczne",
+    color: "text-orange-400",
+    bg: "bg-orange-500/10 border-orange-500/20",
   },
   {
     href: `/strategy-hub/projects/${id}/marketing`,

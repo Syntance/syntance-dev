@@ -17,6 +17,7 @@ import {
   Gem,
   Users,
   Filter,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -68,6 +69,11 @@ const strategyItems = (projectId: string) => [
     label: "Lejek i kanały",
     href: `/strategy-hub/projects/${projectId}/funnel`,
     icon: Filter,
+  },
+  {
+    label: "Sprzedaż i copy",
+    href: `/strategy-hub/projects/${projectId}/sales`,
+    icon: Megaphone,
   },
   {
     label: "Strategia marketingowa",

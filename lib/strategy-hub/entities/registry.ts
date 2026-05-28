@@ -18,6 +18,10 @@ import {
   segmentRisks,
   channels,
   channelActivityPlan,
+  salesPitches,
+  salesScripts,
+  leadMagnets,
+  copyGuidelines,
 } from "@/db/schema";
 import { encryptSecret } from "@/lib/strategy-hub/crypto";
 
@@ -208,6 +212,50 @@ const activityCreate = z.object({
   orderIdx: z.number().int().optional(),
 });
 const activityPatch = activityCreate.partial();
+
+// ─── Sprzedaż / copy: schematy ───────────────────────────────────────────────
+
+const pitchCreate = z.object({
+  title: z.string().min(1).max(255),
+  segmentId: z.string().uuid().nullable().optional(),
+  context: z.string().max(100).nullable().optional(),
+  pitchMd: md(),
+  version: z.number().int().min(1).optional(),
+  status: z.enum(["draft", "review", "approved", "archived"]).optional(),
+  orderIdx: z.number().int().optional(),
+});
+const pitchPatch = pitchCreate.partial();
+
+const scriptCreate = z.object({
+  name: z.string().min(1).max(255),
+  context: z.string().max(100).nullable().optional(),
+  scriptMd: md(),
+  version: z.number().int().min(1).optional(),
+  status: z.enum(["draft", "review", "approved", "archived"]).optional(),
+  orderIdx: z.number().int().optional(),
+});
+const scriptPatch = scriptCreate.partial();
+
+const leadMagnetCreate = z.object({
+  name: z.string().min(1).max(255),
+  segmentId: z.string().uuid().nullable().optional(),
+  format: z.string().max(100).nullable().optional(),
+  descriptionMd: md(),
+  url: z.string().nullable().optional(),
+  conversionTarget: z.string().max(100).nullable().optional(),
+  status: z.enum(["draft", "live", "paused", "archived"]).optional(),
+  orderIdx: z.number().int().optional(),
+});
+const leadMagnetPatch = leadMagnetCreate.partial();
+
+const copyGuidelinesPatch = z.object({
+  principlesMd: md(),
+  doMd: md(),
+  dontMd: md(),
+  templates: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
+  hashtags: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
+  examples: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
+});
 
 // ─── Rejestr encji listowych ─────────────────────────────────────────────────
 
@@ -587,6 +635,105 @@ const listEntities: Record<string, ListEntityDef> = {
         .returning({ id: channelActivityPlan.id })
         .then((r) => r.length > 0),
   }),
+
+  "sales-pitches": listDef({
+    kind: "list",
+    label: "Pitch sprzedażowy",
+    createSchema: pitchCreate,
+    patchSchema: pitchPatch,
+    list: (pid) =>
+      db
+        .select()
+        .from(salesPitches)
+        .where(and(eq(salesPitches.projectId, pid), isNull(salesPitches.deletedAt)))
+        .orderBy(asc(salesPitches.orderIdx), asc(salesPitches.createdAt)),
+    create: (pid, data) =>
+      db
+        .insert(salesPitches)
+        .values({ projectId: pid, ...data, source: "hub" })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(salesPitches)
+        .set({ ...compact(data), updatedAt: new Date() })
+        .where(and(eq(salesPitches.id, itemId), eq(salesPitches.projectId, pid)))
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(salesPitches)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(salesPitches.id, itemId), eq(salesPitches.projectId, pid)))
+        .returning({ id: salesPitches.id })
+        .then((r) => r.length > 0),
+  }),
+
+  "sales-scripts": listDef({
+    kind: "list",
+    label: "Skrypt sprzedażowy",
+    createSchema: scriptCreate,
+    patchSchema: scriptPatch,
+    list: (pid) =>
+      db
+        .select()
+        .from(salesScripts)
+        .where(and(eq(salesScripts.projectId, pid), isNull(salesScripts.deletedAt)))
+        .orderBy(asc(salesScripts.orderIdx), asc(salesScripts.createdAt)),
+    create: (pid, data) =>
+      db
+        .insert(salesScripts)
+        .values({ projectId: pid, ...data, source: "hub" })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(salesScripts)
+        .set({ ...compact(data), updatedAt: new Date() })
+        .where(and(eq(salesScripts.id, itemId), eq(salesScripts.projectId, pid)))
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(salesScripts)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(salesScripts.id, itemId), eq(salesScripts.projectId, pid)))
+        .returning({ id: salesScripts.id })
+        .then((r) => r.length > 0),
+  }),
+
+  "lead-magnets": listDef({
+    kind: "list",
+    label: "Lead magnet",
+    createSchema: leadMagnetCreate,
+    patchSchema: leadMagnetPatch,
+    list: (pid) =>
+      db
+        .select()
+        .from(leadMagnets)
+        .where(and(eq(leadMagnets.projectId, pid), isNull(leadMagnets.deletedAt)))
+        .orderBy(asc(leadMagnets.orderIdx), asc(leadMagnets.name)),
+    create: (pid, data) =>
+      db
+        .insert(leadMagnets)
+        .values({ projectId: pid, ...data, source: "hub" })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(leadMagnets)
+        .set(compact(data))
+        .where(and(eq(leadMagnets.id, itemId), eq(leadMagnets.projectId, pid)))
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(leadMagnets)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(leadMagnets.id, itemId), eq(leadMagnets.projectId, pid)))
+        .returning({ id: leadMagnets.id })
+        .then((r) => r.length > 0),
+  }),
 };
 
 // ─── Rejestr dzieci segmentu (scoped po segmentId) ───────────────────────────
@@ -843,6 +990,29 @@ const singletonEntities: Record<string, SingletonEntityDef> = {
         .values({ projectId: pid, ...data })
         .onConflictDoUpdate({
           target: brandVisual.projectId,
+          set: { ...compact(data), updatedAt: new Date() },
+        })
+        .returning()
+        .then((r) => r[0]),
+  }),
+
+  "copy-guidelines": singletonDef({
+    kind: "singleton",
+    label: "Wytyczne copy",
+    patchSchema: copyGuidelinesPatch,
+    get: (pid) =>
+      db
+        .select()
+        .from(copyGuidelines)
+        .where(eq(copyGuidelines.projectId, pid))
+        .limit(1)
+        .then((r) => r[0]),
+    upsert: (pid, data) =>
+      db
+        .insert(copyGuidelines)
+        .values({ projectId: pid, ...data })
+        .onConflictDoUpdate({
+          target: copyGuidelines.projectId,
           set: { ...compact(data), updatedAt: new Date() },
         })
         .returning()
