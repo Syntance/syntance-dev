@@ -192,7 +192,7 @@ export function FunnelClient({ projectId, projectName }: Props) {
     {
       key: "channelId",
       label: "Kanał",
-      type: "select",
+      type: "relation",
       primary: true,
       options: channelOptions,
     },

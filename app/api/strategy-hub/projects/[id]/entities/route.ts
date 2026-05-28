@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getStrategyHubAccess } from "@/lib/strategy-hub/context";
+import { and, eq, ilike, isNull, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   segments,
@@ -10,208 +10,164 @@ import {
   pages,
   userFlows,
 } from "@/db/schema";
-import { eq, and, isNull, ilike, or } from "drizzle-orm";
+import { requireApiAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 
-type EntityType =
-  | "segment"
-  | "purchase_stage"
-  | "funnel_element"
-  | "channel"
-  | "kpi"
-  | "page"
-  | "user_flow";
+interface Result {
+  id: string;
+  label: string;
+  meta?: string | null;
+}
 
+const LIMIT = 20;
+
+/**
+ * Uniwersalna wyszukiwarka encji dla <RelationPicker />.
+ * GET /entities?type=segment&q=...&segmentId=...
+ *
+ * Każdy typ enkapsuluje własne zapytanie (konkretne kolumny) — type-safe.
+ */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const access = await getStrategyHubAccess();
-  if (!access) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+  const auth = await requireApiAccess();
+  if (!auth.ok) return auth.response;
   const { id: projectId } = await params;
+
   const { searchParams } = new URL(req.url);
-  const type = searchParams.get("type") as EntityType;
-  const q = searchParams.get("q") ?? "";
+  const type = searchParams.get("type") ?? "";
+  const q = (searchParams.get("q") ?? "").trim();
   const segmentId = searchParams.get("segmentId") ?? undefined;
+  const like = q ? `%${q}%` : "%";
 
-  if (!type) return NextResponse.json({ error: "type is required" }, { status: 400 });
+  let results: Result[] = [];
 
-  const searchFilter = q
-    ? (col: Parameters<typeof ilike>[0]) => ilike(col, `%${q}%`)
-    : null;
-
-  try {
-    let results: { id: string; label: string; meta?: string }[] = [];
-
-    switch (type) {
-      case "segment": {
-        const rows = await db
-          .select({ id: segments.id, name: segments.name, priority: segments.priority })
-          .from(segments)
-          .where(
-            and(
-              eq(segments.projectId, projectId),
-              isNull(segments.deletedAt),
-              searchFilter ? searchFilter(segments.name) : undefined
-            )
+  switch (type) {
+    case "segment":
+      results = await db
+        .select({ id: segments.id, label: segments.name, meta: segments.code })
+        .from(segments)
+        .where(
+          and(
+            eq(segments.projectId, projectId),
+            isNull(segments.deletedAt),
+            ilike(segments.name, like)
           )
-          .limit(20);
-        results = rows.map((r) => ({
-          id: r.id,
-          label: r.name,
-          meta: r.priority ? `Priorytet ${r.priority}` : undefined,
-        }));
-        break;
-      }
+        )
+        .limit(LIMIT);
+      break;
 
-      case "purchase_stage": {
-        const rows = await db
-          .select({
-            id: purchaseStages.id,
-            name: purchaseStages.name,
-            phase: purchaseStages.phase,
-            segmentId: purchaseStages.segmentId,
-          })
-          .from(purchaseStages)
-          .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
-          .where(
-            and(
-              eq(segments.projectId, projectId),
-              isNull(purchaseStages.deletedAt),
-              segmentId ? eq(purchaseStages.segmentId, segmentId) : undefined,
-              searchFilter ? searchFilter(purchaseStages.name) : undefined
-            )
+    case "channel":
+      results = await db
+        .select({ id: channels.id, label: channels.name, meta: channels.type })
+        .from(channels)
+        .where(
+          and(
+            eq(channels.projectId, projectId),
+            isNull(channels.deletedAt),
+            ilike(channels.name, like)
           )
-          .limit(30);
-        results = rows.map((r) => ({
-          id: r.id,
-          label: r.name,
-          meta: r.phase ?? undefined,
-        }));
-        break;
-      }
+        )
+        .limit(LIMIT);
+      break;
 
-      case "funnel_element": {
-        const rows = await db
-          .select({
-            id: funnelElements.id,
-            name: funnelElements.name,
-            format: funnelElements.format,
-            status: funnelElements.status,
-          })
-          .from(funnelElements)
-          .innerJoin(purchaseStages, eq(funnelElements.stageId, purchaseStages.id))
-          .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
-          .where(
-            and(
-              eq(segments.projectId, projectId),
-              isNull(funnelElements.deletedAt),
-              segmentId ? eq(funnelElements.segmentId, segmentId) : undefined,
-              searchFilter ? searchFilter(funnelElements.name) : undefined
-            )
-          )
-          .limit(30);
-        results = rows.map((r) => ({
-          id: r.id,
-          label: r.name,
-          meta: r.format ?? r.status ?? undefined,
-        }));
-        break;
-      }
-
-      case "channel": {
-        const rows = await db
-          .select({ id: channels.id, name: channels.name, type: channels.type, icon: channels.icon })
-          .from(channels)
-          .where(
-            and(
-              eq(channels.projectId, projectId),
-              isNull(channels.deletedAt),
-              searchFilter
-                ? or(searchFilter(channels.name), searchFilter(channels.type!))
-                : undefined
-            )
-          )
-          .limit(30);
-        results = rows.map((r) => ({
-          id: r.id,
-          label: r.icon ? `${r.icon} ${r.name}` : r.name,
-          meta: r.type ?? undefined,
-        }));
-        break;
-      }
-
-      case "kpi": {
-        const rows = await db
-          .select({ id: kpis.id, name: kpis.name, category: kpis.category, unit: kpis.unit })
-          .from(kpis)
-          .where(
-            and(
-              eq(kpis.projectId, projectId),
-              isNull(kpis.deletedAt),
-              segmentId ? eq(kpis.segmentId, segmentId) : undefined,
-              searchFilter ? searchFilter(kpis.name) : undefined
-            )
-          )
-          .limit(30);
-        results = rows.map((r) => ({
-          id: r.id,
-          label: r.name,
-          meta: [r.category, r.unit].filter(Boolean).join(" · ") || undefined,
-        }));
-        break;
-      }
-
-      case "page": {
-        const rows = await db
-          .select({ id: pages.id, name: pages.name, urlPath: pages.urlPath, roleInFunnel: pages.roleInFunnel })
-          .from(pages)
-          .where(
-            and(
-              eq(pages.projectId, projectId),
-              isNull(pages.deletedAt),
-              searchFilter
-                ? or(searchFilter(pages.name), searchFilter(pages.urlPath!))
-                : undefined
-            )
-          )
-          .limit(30);
-        results = rows.map((r) => ({
-          id: r.id,
-          label: r.name,
-          meta: r.urlPath ?? r.roleInFunnel ?? undefined,
-        }));
-        break;
-      }
-
-      case "user_flow": {
-        const rows = await db
-          .select({ id: userFlows.id, name: userFlows.name, status: userFlows.status })
-          .from(userFlows)
-          .where(
-            and(
-              eq(userFlows.projectId, projectId),
-              isNull(userFlows.deletedAt),
-              segmentId ? eq(userFlows.segmentId, segmentId) : undefined,
-              searchFilter ? searchFilter(userFlows.name) : undefined
-            )
-          )
-          .limit(30);
-        results = rows.map((r) => ({
-          id: r.id,
-          label: r.name,
-          meta: r.status ?? undefined,
-        }));
-        break;
-      }
-
-      default:
-        return NextResponse.json({ error: "Unknown entity type" }, { status: 400 });
+    case "kpi": {
+      const filters: SQL[] = [
+        eq(kpis.projectId, projectId),
+        isNull(kpis.deletedAt),
+        ilike(kpis.name, like),
+      ];
+      if (segmentId) filters.push(eq(kpis.segmentId, segmentId));
+      results = await db
+        .select({ id: kpis.id, label: kpis.name, meta: kpis.category })
+        .from(kpis)
+        .where(and(...filters))
+        .limit(LIMIT);
+      break;
     }
 
-    return NextResponse.json({ results });
-  } catch (err) {
-    console.error("[entities] error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    case "page":
+      results = await db
+        .select({ id: pages.id, label: pages.name, meta: pages.urlPath })
+        .from(pages)
+        .where(
+          and(
+            eq(pages.projectId, projectId),
+            isNull(pages.deletedAt),
+            ilike(pages.name, like)
+          )
+        )
+        .limit(LIMIT);
+      break;
+
+    case "user_flow": {
+      const filters: SQL[] = [
+        eq(userFlows.projectId, projectId),
+        isNull(userFlows.deletedAt),
+        ilike(userFlows.name, like),
+      ];
+      if (segmentId) filters.push(eq(userFlows.segmentId, segmentId));
+      results = await db
+        .select({ id: userFlows.id, label: userFlows.name, meta: userFlows.type })
+        .from(userFlows)
+        .where(and(...filters))
+        .limit(LIMIT);
+      break;
+    }
+
+    case "purchase_stage": {
+      const filters: SQL[] = [
+        eq(segments.projectId, projectId),
+        isNull(purchaseStages.deletedAt),
+        ilike(purchaseStages.name, like),
+      ];
+      if (segmentId) filters.push(eq(purchaseStages.segmentId, segmentId));
+      results = await db
+        .select({
+          id: purchaseStages.id,
+          label: purchaseStages.name,
+          meta: purchaseStages.phase,
+        })
+        .from(purchaseStages)
+        .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
+        .where(and(...filters))
+        .limit(LIMIT);
+      break;
+    }
+
+    case "funnel_element": {
+      const filters: SQL[] = [
+        eq(segments.projectId, projectId),
+        isNull(funnelElements.deletedAt),
+        ilike(funnelElements.name, like),
+      ];
+      if (segmentId) filters.push(eq(funnelElements.segmentId, segmentId));
+      results = await db
+        .select({
+          id: funnelElements.id,
+          label: funnelElements.name,
+          meta: purchaseStages.name,
+        })
+        .from(funnelElements)
+        .innerJoin(
+          purchaseStages,
+          eq(funnelElements.stageId, purchaseStages.id)
+        )
+        .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
+        .where(and(...filters))
+        .limit(LIMIT);
+      break;
+    }
+
+    default:
+      return badRequest(`Unknown entity type: ${type}`);
   }
+
+  return NextResponse.json({
+    results: results.map((r) => ({
+      id: r.id,
+      label: r.label,
+      meta: r.meta ?? undefined,
+    })),
+  });
 }

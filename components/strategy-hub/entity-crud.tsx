@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { OptionCombobox } from "@/components/strategy-hub/option-combobox";
 
 export type FieldType =
   | "text"
@@ -14,7 +15,8 @@ export type FieldType =
   | "url"
   | "number"
   | "date"
-  | "select";
+  | "select"
+  | "relation";
 
 export interface FieldDef {
   key: string;
@@ -92,6 +94,22 @@ function Field({
           placeholder={field.placeholder}
           rows={3}
           className="text-sm"
+        />
+      </div>
+    );
+  }
+
+  if (field.type === "relation") {
+    return (
+      <div className="space-y-1">
+        <span className="text-xs font-medium text-muted-foreground">
+          {field.label}
+        </span>
+        <OptionCombobox
+          options={field.options ?? []}
+          value={str || null}
+          onChange={(v) => onChange(v)}
+          placeholder={field.placeholder ?? "Wybierz…"}
         />
       </div>
     );
@@ -269,7 +287,19 @@ function RecordCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-foreground/90 truncate">
-              {String(record[primary.key] ?? "—")}
+              {(() => {
+                const raw = record[primary.key];
+                if (
+                  (primary.type === "relation" || primary.type === "select") &&
+                  primary.options
+                ) {
+                  return (
+                    primary.options.find((o) => o.value === raw)?.label ??
+                    String(raw ?? "—")
+                  );
+                }
+                return String(raw ?? "—");
+              })()}
             </span>
             {badgeOpt && (
               <Badge
@@ -283,26 +313,34 @@ function RecordCard({
               </Badge>
             )}
           </div>
-          {secondary.map((f) => (
-            <p
-              key={f.key}
-              className="mt-1 text-xs text-muted-foreground line-clamp-2 whitespace-pre-wrap"
-            >
-              <span className="text-muted-foreground/60">{f.label}: </span>
-              {f.type === "url" ? (
-                <a
-                  href={String(record[f.key])}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-brand hover:underline break-all"
-                >
-                  {String(record[f.key])}
-                </a>
-              ) : (
-                String(record[f.key])
-              )}
-            </p>
-          ))}
+          {secondary.map((f) => {
+            const raw = record[f.key];
+            const label =
+              (f.type === "relation" || f.type === "select") && f.options
+                ? (f.options.find((o) => o.value === raw)?.label ??
+                  String(raw))
+                : String(raw);
+            return (
+              <p
+                key={f.key}
+                className="mt-1 text-xs text-muted-foreground line-clamp-2 whitespace-pre-wrap"
+              >
+                <span className="text-muted-foreground/60">{f.label}: </span>
+                {f.type === "url" ? (
+                  <a
+                    href={String(raw)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand hover:underline break-all"
+                  >
+                    {String(raw)}
+                  </a>
+                ) : (
+                  label
+                )}
+              </p>
+            );
+          })}
         </div>
         <div className="flex flex-col items-center gap-0.5 shrink-0">
           <button

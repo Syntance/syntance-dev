@@ -88,7 +88,7 @@ export function SalesClient({ projectId, projectName }: Props) {
     {
       key: "segmentId",
       label: "Segment",
-      type: "select",
+      type: "relation",
       options: segments,
       placeholder: "Bez segmentu",
     },
@@ -121,7 +121,7 @@ export function SalesClient({ projectId, projectName }: Props) {
     {
       key: "segmentId",
       label: "Segment",
-      type: "select",
+      type: "relation",
       options: segments,
       placeholder: "Bez segmentu",
     },
