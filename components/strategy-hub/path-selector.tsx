@@ -84,6 +84,13 @@ export function PathSelector({ projectId }: PathSelectorProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  function handleToggleOpen() {
+    setOpen((prev) => {
+      if (!prev) load(); // odśwież przy każdym otwarciu
+      return !prev;
+    });
+  }
+
   function setPath(id: string | null) {
     const params = new URLSearchParams(searchParams.toString());
     if (id) params.set("pathId", id);
@@ -147,7 +154,7 @@ export function PathSelector({ projectId }: PathSelectorProps) {
     <div ref={dropdownRef} className="relative px-2 py-1.5">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleToggleOpen}
         className={cn(
           "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm",
           "border border-sidebar-border bg-sidebar-accent/30",
