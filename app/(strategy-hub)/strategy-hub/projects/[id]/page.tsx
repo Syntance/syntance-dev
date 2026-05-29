@@ -16,6 +16,7 @@ import {
   Gauge,
   LayoutDashboard,
   Map as MapIcon,
+  GitBranch,
 } from "lucide-react";
 import { db } from "@/db";
 import { projects, businessStrategy, segments, kpis } from "@/db/schema";
@@ -23,6 +24,7 @@ import { parseStrategyListItems } from "@/lib/strategy-hub/business-strategy-lis
 import { eq, isNull, and, count } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StrategyPathsManager } from "@/components/strategy-hub/strategy-paths-manager";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -211,6 +213,18 @@ export default async function ProjectPage({ params }: Props) {
           value={String(kpiCount?.count ?? 0)}
           sub="wskaźników"
         />
+      </div>
+
+      {/* Ścieżki strategii */}
+      <div className="rounded-xl border border-border bg-card/40 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <GitBranch className="size-4 text-brand" />
+          <span className="font-medium text-sm">Ścieżki strategii</span>
+          <span className="text-xs text-muted-foreground ml-auto">
+            Równoległe strategie per projekt
+          </span>
+        </div>
+        <StrategyPathsManager projectId={id} />
       </div>
 
       {/* Strategy Canvas + Strategy Map CTA */}

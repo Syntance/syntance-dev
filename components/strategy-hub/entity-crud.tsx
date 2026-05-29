@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Trash2, Loader2, Check, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -401,7 +402,11 @@ export function EntityCrud({
   const [pending, startTransition] = useTransition();
   const [visMap, setVisMap] = useState<Record<string, VisibilityStatus>>({});
 
+  const searchParams = useSearchParams();
+  const pathId = searchParams.get("pathId");
+
   const base = basePath ?? apiBase(projectId, entity);
+  const baseWithPath = pathId ? `${base}?pathId=${encodeURIComponent(pathId)}` : base;
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -419,7 +424,7 @@ export function EntityCrud({
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(base, { signal: AbortSignal.timeout(8000) });
+      const res = await fetch(baseWithPath, { signal: AbortSignal.timeout(8000) });
       if (res.ok) {
         const json = await res.json();
         setItems(json.items ?? []);
@@ -427,17 +432,17 @@ export function EntityCrud({
     } catch (err) {
       console.error("load failed", err);
     }
-  }, [base]);
+  }, [baseWithPath]);
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch(base, { signal: ctrl.signal })
+    fetch(baseWithPath, { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : { items: [] }))
       .then((j) => setItems(j.items ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [base]);
+  }, [baseWithPath]);
 
   const handleAdd = (data: Record<string, unknown>) =>
     startTransition(async () => {
@@ -445,7 +450,7 @@ export function EntityCrud({
         const res = await fetch(base, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...defaults, ...data }),
+          body: JSON.stringify({ ...defaults, ...data, ...(pathId ? { pathId } : {}) }),
           signal: AbortSignal.timeout(8000),
         });
         if (res.ok) {

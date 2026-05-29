@@ -34,6 +34,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { useProject, useProjectIdFromPath } from "@/components/strategy-hub/project-context";
+import { PathSelector } from "@/components/strategy-hub/path-selector";
 
 const navItems = [
   {
@@ -173,6 +174,7 @@ export function NavSidebar() {
         {projectId && (
           <>
             <SidebarSeparator />
+            <PathSelector projectId={projectId} />
             <SidebarGroup>
               <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
                 Widoki

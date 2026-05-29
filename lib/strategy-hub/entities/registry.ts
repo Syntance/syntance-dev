@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   projectQuestions,
@@ -30,6 +30,18 @@ import {
   kpis,
   kpiSnapshots,
 } from "@/db/schema";
+
+/** Buduje warunek filtrowania po pathId (lub IS NULL gdy brak). */
+function pathFilter<T extends { pathId: unknown }>(
+  table: T,
+  pathId: string | null | undefined
+) {
+  if (!pathId) return undefined;
+  return or(
+    eq(table.pathId as Parameters<typeof eq>[0], pathId),
+    isNull(table.pathId as Parameters<typeof isNull>[0])
+  );
+}
 import { encryptSecret } from "@/lib/strategy-hub/crypto";
 
 /**
@@ -50,9 +62,11 @@ type Row = Record<string, unknown>;
 export interface ListEntityDef<TCreate = unknown, TPatch = unknown> {
   kind: "list";
   label: string;
+  /** Czy encja wspiera filtrowanie/przypisywanie do ścieżki strategii. */
+  supportsPath?: boolean;
   createSchema: z.ZodType<TCreate>;
   patchSchema: z.ZodType<TPatch>;
-  list(projectId: string): Promise<Row[]>;
+  list(projectId: string, pathId?: string | null): Promise<Row[]>;
   create(projectId: string, data: TCreate): Promise<Row>;
   update(projectId: string, itemId: string, data: TPatch): Promise<Row | undefined>;
   softDelete(projectId: string, itemId: string): Promise<boolean>;
@@ -144,6 +158,7 @@ const taskPatch = taskCreate.partial();
 
 const segmentCreate = z.object({
   name: z.string().min(1).max(255),
+  pathId: z.string().uuid().nullable().optional(),
   code: z.string().max(50).nullable().optional(),
   personaName: z.string().max(255).nullable().optional(),
   icon: z.string().max(10).nullable().optional(),
@@ -198,6 +213,7 @@ const riskPatch = riskCreate.partial();
 
 const channelCreate = z.object({
   name: z.string().min(1).max(255),
+  pathId: z.string().uuid().nullable().optional(),
   type: z.string().max(100).nullable().optional(),
   icon: z.string().max(10).nullable().optional(),
   costMonthly: z.number().int().nullable().optional(),
@@ -224,6 +240,7 @@ const activityPatch = activityCreate.partial();
 
 const pitchCreate = z.object({
   title: z.string().min(1).max(255),
+  pathId: z.string().uuid().nullable().optional(),
   segmentId: z.string().uuid().nullable().optional(),
   context: z.string().max(100).nullable().optional(),
   pitchMd: md(),
@@ -235,6 +252,7 @@ const pitchPatch = pitchCreate.partial();
 
 const scriptCreate = z.object({
   name: z.string().min(1).max(255),
+  pathId: z.string().uuid().nullable().optional(),
   context: z.string().max(100).nullable().optional(),
   scriptMd: md(),
   version: z.number().int().min(1).optional(),
@@ -245,6 +263,7 @@ const scriptPatch = scriptCreate.partial();
 
 const leadMagnetCreate = z.object({
   name: z.string().min(1).max(255),
+  pathId: z.string().uuid().nullable().optional(),
   segmentId: z.string().uuid().nullable().optional(),
   format: z.string().max(100).nullable().optional(),
   descriptionMd: md(),
@@ -324,6 +343,7 @@ const findingPatch = findingCreate.partial();
 
 const kpiCreate = z.object({
   name: z.string().min(1).max(255),
+  pathId: z.string().uuid().nullable().optional(),
   target: z.string().max(100).nullable().optional(),
   actual: z.string().max(100).nullable().optional(),
   unit: z.string().max(50).nullable().optional(),
@@ -602,14 +622,23 @@ const listEntities: Record<string, ListEntityDef> = {
   segments: listDef({
     kind: "list",
     label: "Segment",
+    supportsPath: true,
     createSchema: segmentCreate,
     patchSchema: segmentPatch,
-    list: (pid) =>
-      db
+    list: (pid, pathId) => {
+      const pf = pathFilter(segments, pathId);
+      return db
         .select()
         .from(segments)
-        .where(and(eq(segments.projectId, pid), isNull(segments.deletedAt)))
-        .orderBy(asc(segments.orderIdx), asc(segments.name)),
+        .where(
+          and(
+            eq(segments.projectId, pid),
+            isNull(segments.deletedAt),
+            pf
+          )
+        )
+        .orderBy(asc(segments.orderIdx), asc(segments.name));
+    },
     create: (pid, data) =>
       db
         .insert(segments)
@@ -635,14 +664,17 @@ const listEntities: Record<string, ListEntityDef> = {
   channels: listDef({
     kind: "list",
     label: "Kanał",
+    supportsPath: true,
     createSchema: channelCreate,
     patchSchema: channelPatch,
-    list: (pid) =>
-      db
+    list: (pid, pathId) => {
+      const pf = pathFilter(channels, pathId);
+      return db
         .select()
         .from(channels)
-        .where(and(eq(channels.projectId, pid), isNull(channels.deletedAt)))
-        .orderBy(asc(channels.name)),
+        .where(and(eq(channels.projectId, pid), isNull(channels.deletedAt), pf))
+        .orderBy(asc(channels.name));
+    },
     create: (pid, data) =>
       db
         .insert(channels)
@@ -722,14 +754,23 @@ const listEntities: Record<string, ListEntityDef> = {
   "sales-pitches": listDef({
     kind: "list",
     label: "Pitch sprzedażowy",
+    supportsPath: true,
     createSchema: pitchCreate,
     patchSchema: pitchPatch,
-    list: (pid) =>
-      db
+    list: (pid, pathId) => {
+      const pf = pathFilter(salesPitches, pathId);
+      return db
         .select()
         .from(salesPitches)
-        .where(and(eq(salesPitches.projectId, pid), isNull(salesPitches.deletedAt)))
-        .orderBy(asc(salesPitches.orderIdx), asc(salesPitches.createdAt)),
+        .where(
+          and(
+            eq(salesPitches.projectId, pid),
+            isNull(salesPitches.deletedAt),
+            pf
+          )
+        )
+        .orderBy(asc(salesPitches.orderIdx), asc(salesPitches.createdAt));
+    },
     create: (pid, data) =>
       db
         .insert(salesPitches)
@@ -755,14 +796,23 @@ const listEntities: Record<string, ListEntityDef> = {
   "sales-scripts": listDef({
     kind: "list",
     label: "Skrypt sprzedażowy",
+    supportsPath: true,
     createSchema: scriptCreate,
     patchSchema: scriptPatch,
-    list: (pid) =>
-      db
+    list: (pid, pathId) => {
+      const pf = pathFilter(salesScripts, pathId);
+      return db
         .select()
         .from(salesScripts)
-        .where(and(eq(salesScripts.projectId, pid), isNull(salesScripts.deletedAt)))
-        .orderBy(asc(salesScripts.orderIdx), asc(salesScripts.createdAt)),
+        .where(
+          and(
+            eq(salesScripts.projectId, pid),
+            isNull(salesScripts.deletedAt),
+            pf
+          )
+        )
+        .orderBy(asc(salesScripts.orderIdx), asc(salesScripts.createdAt));
+    },
     create: (pid, data) =>
       db
         .insert(salesScripts)
@@ -788,14 +838,23 @@ const listEntities: Record<string, ListEntityDef> = {
   "lead-magnets": listDef({
     kind: "list",
     label: "Lead magnet",
+    supportsPath: true,
     createSchema: leadMagnetCreate,
     patchSchema: leadMagnetPatch,
-    list: (pid) =>
-      db
+    list: (pid, pathId) => {
+      const pf = pathFilter(leadMagnets, pathId);
+      return db
         .select()
         .from(leadMagnets)
-        .where(and(eq(leadMagnets.projectId, pid), isNull(leadMagnets.deletedAt)))
-        .orderBy(asc(leadMagnets.orderIdx), asc(leadMagnets.name)),
+        .where(
+          and(
+            eq(leadMagnets.projectId, pid),
+            isNull(leadMagnets.deletedAt),
+            pf
+          )
+        )
+        .orderBy(asc(leadMagnets.orderIdx), asc(leadMagnets.name));
+    },
     create: (pid, data) =>
       db
         .insert(leadMagnets)
@@ -935,14 +994,17 @@ const listEntities: Record<string, ListEntityDef> = {
   kpis: listDef({
     kind: "list",
     label: "KPI",
+    supportsPath: true,
     createSchema: kpiCreate,
     patchSchema: kpiPatch,
-    list: (pid) =>
-      db
+    list: (pid, pathId) => {
+      const pf = pathFilter(kpis, pathId);
+      return db
         .select()
         .from(kpis)
-        .where(and(eq(kpis.projectId, pid), isNull(kpis.deletedAt)))
-        .orderBy(asc(kpis.category), asc(kpis.name)),
+        .where(and(eq(kpis.projectId, pid), isNull(kpis.deletedAt), pf))
+        .orderBy(asc(kpis.category), asc(kpis.name));
+    },
     create: (pid, data) =>
       db
         .insert(kpis)

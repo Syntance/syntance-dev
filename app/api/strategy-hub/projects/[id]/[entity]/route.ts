@@ -10,15 +10,16 @@ import {
 } from "@/lib/strategy-hub/entities/registry";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; entity: string }> }
 ) {
   const auth = await requireApiAccess();
   if (!auth.ok) return auth.response;
   const { id, entity } = await params;
+  const pathId = new URL(req.url).searchParams.get("pathId") || undefined;
 
   const list = getListEntity(entity);
-  if (list) return NextResponse.json({ items: await list.list(id) });
+  if (list) return NextResponse.json({ items: await list.list(id, pathId) });
 
   const singleton = getSingletonEntity(entity);
   if (singleton)

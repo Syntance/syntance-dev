@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { competitors } from "@/db/schema";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { requireApiAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 
@@ -10,6 +10,7 @@ const coord = z.number().min(-1).max(1);
 
 const createSchema = z.object({
   name: z.string().min(1).max(255),
+  pathId: z.string().uuid().optional().nullable(),
   url: z.string().url().optional().nullable(),
   type: z.enum(TYPES).optional(),
   segmentId: z.string().uuid().optional().nullable(),
@@ -23,17 +24,27 @@ const createSchema = z.object({
 });
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireApiAccess();
   if (!auth.ok) return auth.response;
   const { id } = await params;
+  const pathId = new URL(req.url).searchParams.get("pathId");
+  const pathFilter = pathId
+    ? or(eq(competitors.pathId, pathId), isNull(competitors.pathId))
+    : undefined;
 
   const rows = await db
     .select()
     .from(competitors)
-    .where(and(eq(competitors.projectId, id), isNull(competitors.deletedAt)))
+    .where(
+      and(
+        eq(competitors.projectId, id),
+        isNull(competitors.deletedAt),
+        pathFilter
+      )
+    )
     .orderBy(asc(competitors.createdAt));
 
   return NextResponse.json({ items: rows });

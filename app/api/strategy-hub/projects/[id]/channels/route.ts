@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStrategyHubAccess } from "@/lib/strategy-hub/context";
 import { db } from "@/db";
 import { channels } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 
 const channelSchema = z.object({
@@ -16,18 +16,23 @@ const channelSchema = z.object({
 });
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const access = await getStrategyHubAccess();
   if (!access) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: projectId } = await params;
+  const pathId = new URL(req.url).searchParams.get("pathId");
+
+  const pathFilter = pathId
+    ? or(eq(channels.pathId, pathId), isNull(channels.pathId))
+    : undefined;
 
   const rows = await db
     .select()
     .from(channels)
-    .where(and(eq(channels.projectId, projectId), isNull(channels.deletedAt)));
+    .where(and(eq(channels.projectId, projectId), isNull(channels.deletedAt), pathFilter));
 
   return NextResponse.json({ channels: rows });
 }

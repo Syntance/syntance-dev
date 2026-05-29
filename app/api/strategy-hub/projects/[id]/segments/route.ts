@@ -7,16 +7,17 @@ import {
 import { getListEntity } from "@/lib/strategy-hub/entities/registry";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireApiAccess();
   if (!auth.ok) return auth.response;
   const { id } = await params;
+  const pathId = new URL(req.url).searchParams.get("pathId") || undefined;
 
   const entity = getListEntity("segments");
   if (!entity) return notFound("Entity");
-  return NextResponse.json({ items: await entity.list(id) });
+  return NextResponse.json({ items: await entity.list(id, pathId) });
 }
 
 export async function POST(

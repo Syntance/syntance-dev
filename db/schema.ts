@@ -66,6 +66,35 @@ export const projects = pgTable(
   ]
 );
 
+// ─── Ścieżki strategii (równoległe strategie per projekt) ───────────────────
+
+/**
+ * Ścieżka strategii — pozwala prowadzić kilka równoległych strategii
+ * w ramach jednego projektu (np. rynek PL vs rynek DE, segment B2B vs B2C).
+ * Encje takie jak segmenty, kanały, KPI mogą być przypisane do konkretnej
+ * ścieżki lub pozostać "ogólne" (path_id IS NULL — widoczne we wszystkich ścieżkach).
+ */
+export const strategyPaths = pgTable(
+  "strategy_paths",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    color: varchar("color", { length: 30 }),
+    icon: varchar("icon", { length: 10 }),
+    isDefault: boolean("is_default").notNull().default(false),
+    orderIdx: integer("order_idx").notNull().default(0),
+    status: varchar("status", { length: 50 }).notNull().default("active"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("strategy_paths_project_idx").on(t.projectId)]
+);
+
 // ─── Strategia biznesowa (LEGACY — do usunięcia po migracji w PR 1.5) ───────
 
 export const businessStrategy = pgTable("business_strategy", {
@@ -95,6 +124,9 @@ export const businessProblems = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
     problemMd: text("problem_md").notNull(),
     ambitionMd: text("ambition_md"),
     ourSolutionMd: text("our_solution_md"),
@@ -162,6 +194,9 @@ export const competitors = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
     /** Główny segment dla którego ten konkurent jest istotny (opcjonalnie). */
     segmentId: uuid("segment_id"),
     name: varchar("name", { length: 255 }).notNull(),
@@ -197,6 +232,9 @@ export const objections = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
     segmentId: uuid("segment_id"),
     stage: varchar("stage", { length: 20 }),
     objectionMd: text("objection_md").notNull(),
@@ -225,6 +263,9 @@ export const segments = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
     code: varchar("code", { length: 50 }),
     name: varchar("name", { length: 255 }).notNull(),
     personaName: varchar("persona_name", { length: 255 }),
@@ -287,6 +328,9 @@ export const channels = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
     name: varchar("name", { length: 255 }).notNull(),
     type: varchar("type", { length: 100 }),
     icon: varchar("icon", { length: 10 }),
@@ -387,6 +431,9 @@ export const kpis = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
     segmentId: uuid("segment_id").references(() => segments.id, {
       onDelete: "set null",
     }),
@@ -893,6 +940,9 @@ export const salesPitches = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
     segmentId: uuid("segment_id").references(() => segments.id, {
       onDelete: "set null",
     }),
@@ -920,6 +970,9 @@ export const salesScripts = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
     context: varchar("context", { length: 100 }),
     name: varchar("name", { length: 255 }).notNull(),
     scriptMd: text("script_md"),
@@ -941,6 +994,9 @@ export const leadMagnets = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
     segmentId: uuid("segment_id").references(() => segments.id, {
       onDelete: "set null",
     }),
