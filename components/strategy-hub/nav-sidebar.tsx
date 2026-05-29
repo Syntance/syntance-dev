@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid,
   FileText,
@@ -20,6 +20,7 @@ import {
   Gauge,
   LayoutDashboard,
   Map as MapIcon,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -124,8 +125,14 @@ const strategyItems = (projectId: string) => [
 
 export function NavSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const projectFromContext = useProject();
   const projectIdFromPath = useProjectIdFromPath();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
 
   const projectId = projectFromContext?.id ?? projectIdFromPath;
 
@@ -247,8 +254,20 @@ export function NavSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border px-4 py-3">
-        <div className="flex items-center gap-2 min-w-0 group-data-[collapsible=icon]:justify-center">
+      <SidebarFooter className="border-t border-sidebar-border px-2 py-2">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={handleLogout}
+              tooltip="Wyloguj się"
+              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            >
+              <LogOut className="size-4" />
+              <span>Wyloguj się</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+        <div className="flex items-center gap-2 min-w-0 px-2 pb-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <div className="size-6 rounded-full bg-brand/20 border border-brand/30 flex items-center justify-center shrink-0">
             <span className="text-[10px] font-semibold text-brand">K</span>
           </div>
