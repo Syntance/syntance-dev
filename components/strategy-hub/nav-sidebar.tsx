@@ -254,26 +254,22 @@ export function NavSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border px-2 py-2">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={handleLogout}
-              tooltip="Wyloguj się"
-              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            >
-              <LogOut className="size-4" />
-              <span>Wyloguj się</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        <div className="flex items-center gap-2 min-w-0 px-2 pb-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+      <SidebarFooter className="border-t border-sidebar-border px-4 py-3">
+        <div className="flex items-center gap-2 min-w-0 group-data-[collapsible=icon]:justify-center">
           <div className="size-6 rounded-full bg-brand/20 border border-brand/30 flex items-center justify-center shrink-0">
             <span className="text-[10px] font-semibold text-brand">K</span>
           </div>
-          <span className="text-xs text-muted-foreground truncate group-data-[collapsible=icon]:hidden">
+          <span className="text-xs text-muted-foreground truncate group-data-[collapsible=icon]:hidden flex-1">
             Kamil · owner
           </span>
+          <button
+            type="button"
+            onClick={handleLogout}
+            aria-label="Wyloguj się"
+            className="shrink-0 group-data-[collapsible=icon]:hidden p-1 rounded-md text-muted-foreground/50 transition-colors hover:text-destructive hover:bg-destructive/10"
+          >
+            <LogOut className="size-3.5" />
+          </button>
         </div>
       </SidebarFooter>
     </Sidebar>
