@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { brandPositioning } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { requireApiAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 
 /** Quadrant współrzędne: -1.0 (lewo/dół) → 0 (środek) → 1.0 (prawo/góra). */
 const coord = z.number().min(-1).max(1);
@@ -30,9 +30,9 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const rows = await db
     .select()
@@ -46,9 +46,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());

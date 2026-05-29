@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireApiAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 import {
   getProjectVisibility,
   setVisibility,
@@ -17,9 +17,9 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
   return NextResponse.json(await getProjectVisibility(id));
 }
 
@@ -27,9 +27,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());

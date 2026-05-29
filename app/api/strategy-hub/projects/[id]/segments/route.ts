@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  requireApiAccess,
+  requireProjectAccess,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
@@ -10,9 +10,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
   const pathId = new URL(req.url).searchParams.get("pathId") || undefined;
 
   const entity = getListEntity("segments");
@@ -24,9 +24,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const entity = getListEntity("segments");
   if (!entity) return notFound("Entity");

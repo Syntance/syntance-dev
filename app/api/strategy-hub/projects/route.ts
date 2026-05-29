@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
-import { getStrategyHubAccess } from "@/lib/strategy-hub/context";
+import { getStrategyHubAccess, getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
-import { isNull, desc } from "drizzle-orm";
+import { and, eq, isNull, desc } from "drizzle-orm";
 
 export async function GET() {
   const access = await getStrategyHubAccess();
   if (!access)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
 
   const rows = await db
     .select({
@@ -18,7 +20,7 @@ export async function GET() {
       status: projects.status,
     })
     .from(projects)
-    .where(isNull(projects.deletedAt))
+    .where(and(isNull(projects.deletedAt), eq(projects.workspaceId, ws.id)))
     .orderBy(desc(projects.updatedAt));
 
   return NextResponse.json({ projects: rows });

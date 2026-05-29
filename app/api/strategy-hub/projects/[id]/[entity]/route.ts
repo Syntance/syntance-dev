@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  requireApiAccess,
+  requireProjectAccess,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
@@ -13,9 +13,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; entity: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id, entity } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
   const pathId = new URL(req.url).searchParams.get("pathId") || undefined;
 
   const list = getListEntity(entity);
@@ -32,9 +32,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; entity: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id, entity } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const list = getListEntity(entity);
   if (!list) return notFound("Entity");
@@ -51,9 +51,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; entity: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id, entity } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const singleton = getSingletonEntity(entity);
   if (!singleton) return notFound("Entity");

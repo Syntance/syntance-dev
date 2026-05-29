@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  requireApiAccess,
+  requireProjectAccess,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
@@ -8,11 +8,11 @@ import { getKpiChild } from "@/lib/strategy-hub/entities/registry";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ kpiId: string; child: string }> }
+  { params }: { params: Promise<{ id: string; kpiId: string; child: string }> }
 ) {
-  const auth = await requireApiAccess();
+  const { id, kpiId, child } = await params;
+  const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
-  const { kpiId, child } = await params;
 
   const entity = getKpiChild(child);
   if (!entity) return notFound("Entity");
@@ -21,11 +21,11 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ kpiId: string; child: string }> }
+  { params }: { params: Promise<{ id: string; kpiId: string; child: string }> }
 ) {
-  const auth = await requireApiAccess();
+  const { id, kpiId, child } = await params;
+  const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
-  const { kpiId, child } = await params;
 
   const entity = getKpiChild(child);
   if (!entity) return notFound("Entity");

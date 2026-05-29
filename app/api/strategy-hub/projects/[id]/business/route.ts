@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { sendStrategyUpdatedEmail } from "@/lib/email";
 import { getStrategyHubAccess } from "@/lib/strategy-hub/context";
+import { requireProjectAccess } from "@/lib/strategy-hub/api-helpers";
 import { getProjectClients } from "@/sanity/queries";
 
 const patchSchema = z.object({
@@ -19,6 +20,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const body = await req.json();
   const parsed = patchSchema.safeParse(body);
@@ -40,7 +43,6 @@ export async function PATCH(
       set: { ...data, updatedAt: new Date() },
     });
 
-  // Fire-and-forget email notification (nie blokuje odpowiedzi)
   notifyClients(id, Object.keys(data).join(", ")).catch((err) =>
     console.error("notifyClients", err)
   );

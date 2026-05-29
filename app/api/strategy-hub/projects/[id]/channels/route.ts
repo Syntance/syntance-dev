@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getStrategyHubAccess } from "@/lib/strategy-hub/context";
+import { requireProjectAccess } from "@/lib/strategy-hub/api-helpers";
 import { db } from "@/db";
 import { channels } from "@/db/schema";
 import { eq, and, isNull, or } from "drizzle-orm";
@@ -19,10 +19,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const access = await getStrategyHubAccess();
-  if (!access) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { id: projectId } = await params;
+  const auth = await requireProjectAccess(projectId);
+  if (!auth.ok) return auth.response;
   const pathId = new URL(req.url).searchParams.get("pathId");
 
   const pathFilter = pathId
@@ -41,10 +40,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const access = await getStrategyHubAccess();
-  if (!access) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { id: projectId } = await params;
+  const auth = await requireProjectAccess(projectId);
+  if (!auth.ok) return auth.response;
   const body = await req.json();
   const parsed = channelSchema.safeParse(body);
   if (!parsed.success) {
@@ -74,10 +72,9 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const access = await getStrategyHubAccess();
-  if (!access) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { id: projectId } = await params;
+  const auth = await requireProjectAccess(projectId);
+  if (!auth.ok) return auth.response;
   const { searchParams } = new URL(req.url);
   const channelId = searchParams.get("channelId");
 

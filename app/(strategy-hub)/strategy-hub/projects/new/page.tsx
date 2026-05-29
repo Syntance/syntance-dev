@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { db } from "@/db";
-import { projects, businessStrategy, workspaces } from "@/db/schema";
+import { projects, businessStrategy } from "@/db/schema";
+import { requireStrategyHubAccess, getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
 
 export const metadata = { title: "Nowy projekt" };
 
@@ -22,19 +23,13 @@ async function createProject(formData: FormData) {
 
   if (!name || !slug) return;
 
-  // Upewnij się że workspace istnieje (w MVP używamy jednego)
-  let ws = await db.select().from(workspaces).limit(1);
-  if (ws.length === 0) {
-    ws = await db
-      .insert(workspaces)
-      .values({ name: "Syntance", ownerId: "00000000-0000-0000-0000-000000000001" })
-      .returning();
-  }
+  const access = await requireStrategyHubAccess();
+  const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
 
   const [project] = await db
     .insert(projects)
     .values({
-      workspaceId: ws[0].id,
+      workspaceId: ws.id,
       name,
       slug: slug.toLowerCase().replace(/\s+/g, "-"),
       clientName: clientName || null,

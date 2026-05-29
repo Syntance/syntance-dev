@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { competitors } from "@/db/schema";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
-import { requireApiAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 
 const TYPES = ["direct", "indirect", "none"] as const;
 const coord = z.number().min(-1).max(1);
@@ -27,9 +27,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
   const pathId = new URL(req.url).searchParams.get("pathId");
   const pathFilter = pathId
     ? or(eq(competitors.pathId, pathId), isNull(competitors.pathId))
@@ -54,9 +54,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());

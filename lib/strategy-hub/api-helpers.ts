@@ -1,6 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { getStrategyHubAccess } from "@/lib/strategy-hub/context";
+import { getStrategyHubAccess, assertProjectAccess } from "@/lib/strategy-hub/context";
 
 /**
  * Sprawdza dostęp do Strategy Hub w API route.
@@ -15,6 +15,26 @@ export async function requireApiAccess() {
     };
   }
   return { ok: true as const, access };
+}
+
+/**
+ * Sprawdza dostęp do konkretnego projektu — weryfikuje workspace admina.
+ * Zastępuje requireApiAccess() we wszystkich route'ach pod /projects/[id]/.
+ */
+export async function requireProjectAccess(projectId: string) {
+  const check = await assertProjectAccess(projectId);
+  if (!check.ok) {
+    const status = check.status;
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: status === 401 ? "Unauthorized" : "Project not found" },
+        { status }
+      ),
+    };
+  }
+  const { ok: _ok, ...rest } = check;
+  return { ok: true as const, ...rest };
 }
 
 /**

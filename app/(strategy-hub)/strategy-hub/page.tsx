@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
-import { isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
+import { requireStrategyHubAccess, getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Aktywny",
@@ -23,12 +24,12 @@ const STATUS_COLORS: Record<
   archived: "secondary",
 };
 
-async function getProjects() {
+async function getProjects(workspaceId: string) {
   try {
     return await db
       .select()
       .from(projects)
-      .where(isNull(projects.deletedAt))
+      .where(and(isNull(projects.deletedAt), eq(projects.workspaceId, workspaceId)))
       .orderBy(projects.createdAt);
   } catch {
     return [];
@@ -36,7 +37,9 @@ async function getProjects() {
 }
 
 export default async function StrategyHubPage() {
-  const allProjects = await getProjects();
+  const access = await requireStrategyHubAccess();
+  const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
+  const allProjects = await getProjects(ws.id);
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">

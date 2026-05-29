@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getStrategyHubAccess } from "@/lib/strategy-hub/context";
+import { requireProjectAccess } from "@/lib/strategy-hub/api-helpers";
 import { db } from "@/db";
 import {
   funnelElements,
@@ -21,10 +21,9 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; elementId: string }> }
 ) {
-  const access = await getStrategyHubAccess();
-  if (!access) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { elementId } = await params;
+  const { id, elementId } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const [channelRows, kpiRows] = await Promise.all([
     db
@@ -48,10 +47,10 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; elementId: string }> }
 ) {
-  const access = await getStrategyHubAccess();
-  if (!access) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { id: projectId, elementId } = await params;
+  const auth = await requireProjectAccess(projectId);
+  if (!auth.ok) return auth.response;
+
   const body = await req.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { objections } from "@/db/schema";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
-import { requireApiAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 
 const STAGES = ["TOFU", "MOFU", "BOFU", "retention"] as const;
 const STATUSES = ["active", "resolved", "needs_proof"] as const;
@@ -24,9 +24,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
   const pathId = new URL(req.url).searchParams.get("pathId");
   const pathFilter = pathId
     ? or(eq(objections.pathId, pathId), isNull(objections.pathId))
@@ -51,9 +51,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id } = await params;
+  const auth = await requireProjectAccess(id);
+  if (!auth.ok) return auth.response;
 
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());

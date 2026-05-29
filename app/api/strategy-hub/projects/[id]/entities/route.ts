@@ -10,7 +10,7 @@ import {
   pages,
   userFlows,
 } from "@/db/schema";
-import { requireApiAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 
 interface Result {
   id: string;
@@ -30,9 +30,9 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireApiAccess();
-  if (!auth.ok) return auth.response;
   const { id: projectId } = await params;
+  const auth = await requireProjectAccess(projectId);
+  if (!auth.ok) return auth.response;
 
   const { searchParams } = new URL(req.url);
   const type = searchParams.get("type") ?? "";

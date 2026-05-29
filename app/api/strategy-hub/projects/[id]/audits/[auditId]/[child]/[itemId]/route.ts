@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  requireApiAccess,
+  requireProjectAccess,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
@@ -10,11 +10,11 @@ export async function PATCH(
   req: NextRequest,
   {
     params,
-  }: { params: Promise<{ auditId: string; child: string; itemId: string }> }
+  }: { params: Promise<{ id: string; auditId: string; child: string; itemId: string }> }
 ) {
-  const auth = await requireApiAccess();
+  const { id, auditId, child, itemId } = await params;
+  const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
-  const { auditId, child, itemId } = await params;
 
   const entity = getAuditChild(child);
   if (!entity) return notFound("Entity");
@@ -32,11 +32,11 @@ export async function DELETE(
   _req: NextRequest,
   {
     params,
-  }: { params: Promise<{ auditId: string; child: string; itemId: string }> }
+  }: { params: Promise<{ id: string; auditId: string; child: string; itemId: string }> }
 ) {
-  const auth = await requireApiAccess();
+  const { id, auditId, child, itemId } = await params;
+  const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
-  const { auditId, child, itemId } = await params;
 
   const entity = getAuditChild(child);
   if (!entity) return notFound("Entity");
