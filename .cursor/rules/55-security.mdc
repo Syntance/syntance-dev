@@ -1,6 +1,13 @@
 ---
-description: Bezpieczeństwo kodu — OWASP, auth, rate limit, supply chain
-alwaysApply: true
+description: Bezpieczeństwo — OWASP, auth, walidacja, CSP/headers, rate limit, supply chain
+globs:
+  - "src/app/**/route.ts"
+  - "src/**/actions.ts"
+  - "src/**/actions/**"
+  - "src/middleware.ts"
+  - "src/lib/**/*.ts"
+  - "next.config.ts"
+updated: 2026-05
 ---
 
 ## Mindset
@@ -10,11 +17,10 @@ alwaysApply: true
 
 ## Input validation
 - ZAWSZE **Zod** na granicy: Server Action input, API route body, URL params, webhook payload, form.
-- Jeden schema client + server (`src/lib/validation/*.ts`). Nigdy dwie wersje.
-- NEVER `as unknown as T` jako escape od walidacji.
-- `dangerouslySetInnerHTML` TYLKO po `DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b','i','a','p','br'] })`.
+- Jeden schema client + server (`src/lib/validation/*.ts`). Nigdy dwie wersje. NEVER `as unknown as T` jako escape od walidacji.
+- `dangerouslySetInnerHTML` TYLKO po `DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b','i','a','p','br'] })`. Na serwerze DOMPurify wymaga DOM — użyj `isomorphic-dompurify` (jsdom), nie gołego `dompurify`.
 - URL od usera: walidacja schemy (`https:` only), blacklist `javascript:`, `data:`, `file:`.
-- Rich text editor (Tiptap): sanityzuj PRZED zapisem do DB, nie przed render (protection at rest).
+- Rich text (Tiptap): sanityzuj PRZED zapisem do DB (protection at rest), nie tylko przed render.
 
 ## XSS / CSRF
 - Next App Router escape'uje JSX → zero injection JEŚLI nie używasz `dangerouslySetInnerHTML` / `eval` / `Function()`.
@@ -23,78 +29,69 @@ alwaysApply: true
 - Cookies: `httpOnly`, `secure`, `sameSite: 'lax'` (strict dla auth), prefix `__Host-` dla session.
 
 ## SQL injection
-- **Prisma / Drizzle** — ORM typed, prepared statements wbudowane.
-- Raw SQL tylko przez tagged template (`$queryRaw`) — parametryzowany.
+- **Prisma / Drizzle** — ORM typed, prepared statements wbudowane. Raw SQL tylko przez tagged template (`$queryRaw`), parametryzowany.
 - Medusa: `QueryService` + filters object, nigdy raw SQL z user inputem.
 
 ## SSRF (Server-Side Request Forgery)
-- Każdy `fetch()` z user-controlled URL → walidacja schemy + IP blacklist: `127.0.0.0/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16` (AWS metadata!), `::1`, `fc00::/7`.
-- `AbortSignal.timeout(5_000)` — NEVER fetch bez timeoutu.
-- Redirects: `redirect: 'error'` lub manual walidacja docelowego URL.
+- `fetch` z user-controlled URL: zresolwuj DNS i waliduj **ROZWIĄZANY IP**, nie sam host. Guard na **DNS rebinding** (resolve raz → łącz po IP, albo `lookup` pinning).
+- Blacklist IP: `127.0.0.0/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16` (AWS metadata!), `::1`, `fc00::/7`.
+- `AbortSignal.timeout(5_000)` — NEVER fetch bez timeoutu. `redirect: 'error'` lub manual walidacja celu redirectu (re-validate IP po redirect).
 - OG scraping: dedykowany service (microlink.io), nie własny fetch.
 
 ## Auth
-- **Better Auth** (2025 standard) lub **NextAuth v5**. Nigdy custom JWT handling.
-- Password: Argon2id (bcrypt legacy), min 12 znaków, zxcvbn strength check client-side.
+- **Better Auth** lub **NextAuth v5**. Nigdy custom JWT handling.
+- Password: Argon2id, min 12 znaków, zxcvbn strength check client-side.
 - MFA: TOTP + backup codes. Admin panel = MFA obowiązkowo.
-- Session: server-side (DB-backed) dla webu, JWT tylko dla API tokens.
-- Session rotation: co 24h nowy ID, invaliduj stare. Logout = hard delete.
+- Session: server-side (DB-backed) dla webu, JWT tylko dla API tokens. Rotacja co 24h, logout = hard delete.
 - `__Host-session` cookie: httpOnly + secure + sameSite strict + path `/` + BEZ `domain`.
-- Login rate limit: 5 prób / 15 min per IP + per email → CAPTCHA (hCaptcha, nie Google reCAPTCHA — tracker).
+- Login rate limit: 5 prób / 15 min per IP + per email → CAPTCHA (hCaptcha, nie reCAPTCHA — tracker).
 
 ## Rate limiting (Upstash Ratelimit w middleware)
-- Public API: 60 req/min per IP.
-- Auth endpoints: 5 / 15 min per IP + email.
-- Mutations (POST/PUT/DELETE): 30 / min per session.
-- Webhooks: podpis zamiast rate limit (signature verification).
-- Response 429 + `Retry-After` header + copy PL.
+- Public API: 60 req/min per IP. Auth: 5 / 15 min per IP + email. Mutacje: 30 / min per session.
+- Webhooks: podpis zamiast rate limit. Response 429 + `Retry-After` + copy PL.
 
 ## File upload
 - ZAWSZE signed URLs (S3/R2). NIGDY upload do własnego API (DDoS vector).
-- Walidacja MIME PRZED signed URL (`image/jpeg`, `image/webp`, `application/pdf`).
-- Max server-side: 10 MB image, 25 MB PDF, 100 MB video.
-- Post-upload: re-validate MIME po magic bytes (`file-type` lib), nie po extension.
-- Antywirus: ClamAV dla large files, Cloudflare Image Resizing dla obrazów (auto-scan).
-- SVG upload od usera → ZAKAZ (XSS w `<script>`). Jeśli konieczny → DOMPurify w SVG mode.
+- Walidacja MIME PRZED signed URL. Post-upload: re-validate po magic bytes (`file-type`), nie po extension.
+- Max: 10 MB image, 25 MB PDF, 100 MB video. Antywirus ClamAV dla large files.
+- SVG od usera → ZAKAZ (XSS w `<script>`). Jeśli konieczny → DOMPurify w SVG mode.
 
 ## Env variables (T3 Env)
-- **@t3-oss/env-nextjs** — walidacja Zod + split client/server.
-- `NEXT_PUBLIC_*` TYLKO dla true-public (GA ID, Sentry DSN). NIGDY sekrety.
-- W kodzie: `import { env } from '@/env'`. Nie `process.env.X`.
-- Build fails gdy required env brakuje — nie deploy bez.
+- **@t3-oss/env-nextjs** — walidacja Zod + split client/server. W kodzie `import { env } from '@/env'`, nie `process.env.X`.
+- `NEXT_PUBLIC_*` TYLKO dla true-public (GA ID, Sentry DSN). NIGDY sekrety. Build fails gdy brakuje required env.
 
-## CSP — szczegóły
-- Nonce-based, NIE `'unsafe-inline'`. Middleware generuje per-request nonce → przekazuje do `<script nonce>`.
-- `report-uri` / `report-to` → Sentry security integration, loguj violations.
-- Start: `Content-Security-Policy-Report-Only` przez tydzień → enforcement.
-- **Trusted Types**: `require-trusted-types-for 'script'` dla max DOM XSS protection (Chrome/Edge).
+## HTTP headers (single source — `next.config.ts` / middleware)
+- **CSP**: `script-src` nonce-based + `'strict-dynamic'`, NIE `'unsafe-inline'`. ALE `style-src` MUSI mieć `'unsafe-inline'` (lub hashe) — Framer Motion/GSAP wstrzykują inline `style` (patrz 00-core rozstrzygnięcia).
+- Middleware generuje per-request nonce → `<script nonce>`. Start: `Content-Security-Policy-Report-Only` przez tydzień → enforcement.
+- `report-to` → Sentry security integration. **Trusted Types**: `require-trusted-types-for 'script'` (Chrome/Edge).
+- **HSTS**: `max-age=63072000; includeSubDomains; preload`.
+- **Permissions-Policy**: `camera=(), microphone=(), geolocation=(), interest-cohort=()`.
+- **Cross-Origin-Opener-Policy**: `same-origin`. **X-Content-Type-Options**: `nosniff`. **Referrer-Policy**: `strict-origin-when-cross-origin`.
 
 ## SRI (Subresource Integrity)
-- Każdy zewnętrzny `<script src="cdn...">` → `integrity="sha384-..."` + `crossorigin="anonymous"`.
-- CDN bez hash → self-host albo skip. Nie ładuj bez SRI.
+- Każdy zewnętrzny `<script src="cdn...">` → `integrity="sha384-..."` + `crossorigin="anonymous"`. CDN bez hash → self-host albo skip.
+
+## Secrets
+- Nigdy w repo, nawet `.env.local`. Doppler / Vercel ENV only.
+- GitHub secret scanning + push protection + Dependabot ON.
+- Rotacja kwartalna; natychmiast przy leak / odejściu pracownika (patrz 90-release).
 
 ## Supply chain
 - `pnpm install --frozen-lockfile` w CI. NEVER `pnpm install` bez lockfile w prod.
-- **socket.dev** PR integration — blokuje merge gdy dep ma malware risk score > 5.
-- **pnpm audit** w CI (fail on critical). `--prod` dla runtime scope.
-- Renovate: minor/patch grupowane tygodniowo, major osobno z review.
-- `pnpm why <pkg>` PRZED każdym nowym `add`. Chain > 10 poziomów = dependency hell alert.
-- `ignore-scripts=true` w `.npmrc`, unblock per-package (zakaz postinstall malware).
-- **npm provenance** (`npm publish --provenance`) dla własnych paczek.
+- **socket.dev** PR integration — blokuje merge gdy dep ma malware risk. **pnpm audit** w CI (fail on critical).
+- Renovate: minor/patch grupowane tygodniowo, major osobno z review. `pnpm why <pkg>` PRZED każdym `add`.
+- `ignore-scripts=true` w `.npmrc`, unblock per-package. **npm provenance** dla własnych paczek.
 
 ## API security
 - Webhook signatures: HMAC-SHA256, constant-time compare (`crypto.timingSafeEqual`), NEVER `===` na digest.
 - Idempotency key: klient generuje UUID, server zapisuje TTL 24h, duplikat → 200 z oryginalnym response.
-- API versioning: `/api/v1/*` od pierwszego releasu. Break = `/api/v2/*`, stare 6 miesięcy deprecated.
+- API versioning: `/api/v1/*` od pierwszego releasu.
 
 ## Monitoring bezpieczeństwa
-- Sentry: CSP violations + PII scrubbing w `beforeSend` (email, phone, address, postal, IP).
-- Alert: CSP violation rate > 100/h (coś się psuje lub atak).
-- Alert: 401/403 rate > 5% / 5 min (brute force).
-- Alert: unique 4xx IPs > 1000/h (scanner).
-- GitHub: secret scanning ON + push protection ON + private vuln reporting ON.
+- Sentry: CSP violations + PII scrubbing w `beforeSend` (email, phone, address, IP).
+- Alerty: CSP violation rate > 100/h; 401/403 > 5% / 5 min (brute force); unique 4xx IPs > 1000/h (scanner).
+- GitHub: secret scanning + push protection + private vuln reporting ON.
 
 ## Audyt
 - CI staging: **OWASP ZAP** automated scan pre-release.
-- Raz w roku: external pentest (Securitum, TestArmy) dla projektów > 100k PLN budget.
-- `/.well-known/security.txt` z kontaktem security (RFC 9116).
+- Raz w roku: external pentest dla projektów > 100k PLN budget. `/.well-known/security.txt` (RFC 9116).

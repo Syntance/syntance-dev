@@ -1,0 +1,51 @@
+---
+description: Rendering i dane w Next.js 16 — RSC, caching, Server Actions, data fetching
+globs:
+  - "src/**/*.ts"
+  - "src/**/*.tsx"
+  - "next.config.ts"
+updated: 2026-05
+---
+
+## RSC vs Client (granica)
+- Domyślnie Server Component. `"use client"` TYLKO gdy: stan, efekt, event handler, browser API, animacja, context provider.
+- Granicę `"use client"` stawiaj JAK NAJNIŻEJ w drzewie. Nie oznaczaj całej strony, oznacz mały interaktywny liść.
+- Server Components mogą importować Client Components, nie odwrotnie. Dane przekazuj jako serializowalne props (nie funkcje, nie klasy).
+- Ciężkie sekcje klienckie → `<Suspense>` + `dynamic(ssr:false)` żeby nie blokować hydration (INP).
+
+## Data fetching (server)
+- Fetch danych w Server Components / Route Handlers, nie w `useEffect`. Bliżej miejsca użycia (component-level), nie prop drilling z page.
+- `fetch()` ma wbudowany cache + dedup w obrębie requestu. Mutacje: `{ cache: 'no-store' }` lub `revalidate`.
+- Równoległość: `Promise.all([...])` dla niezależnych zapytań. Sekwencja tylko gdy realna zależność.
+- KAŻDY zewnętrzny `fetch` z `AbortSignal.timeout(5_000)` (patrz 55-security, 60-quality).
+
+## Cache Components (Next 16)
+- Dyrektywa `'use cache'` na funkcji / komponencie / module zamiast `unstable_cache`.
+- `cacheLife('hours' | 'days' | custom profile)` — czas życia cache.
+- `cacheTag('product-' + id)` + `revalidateTag('product-' + id)` w Server Action po mutacji — precyzyjna inwalidacja, nie cały route.
+- PPR (Partial Prerendering): statyczna skorupa prerenderowana + dynamiczne dziury w `<Suspense>`. Hero/nav statyczne, dane usera/koszyk dynamiczne.
+- `connection()` / `cookies()` / `headers()` wymuszają dynamiczny render — izoluj je w `<Suspense>`, nie w korzeniu strony.
+
+## Server Actions (mutacje)
+- Mutacje przez Server Actions (`"use server"`), nie własne API routes (chyba że webhook / third-party / public API).
+- Input ZAWSZE walidowany Zodem na wejściu akcji (patrz 55-security). Akcja zwraca typed result `{ ok, data } | { ok:false, error }`, nie rzuca surowo do UI.
+- Po mutacji: `revalidateTag` / `revalidatePath` zamiast ręcznego refetchu.
+- Formularze: `useActionState` + progressive enhancement (działa bez JS). `useOptimistic` dla optymistycznego UI.
+- CSRF chroniony automatycznie (origin check + encrypted action ID) — NIGDY nie wyłączaj.
+
+## Client state & data
+- Server state (z API/DB) na kliencie → **TanStack Query** (`@tanstack/react-query`): cache, dedup, retry, stale-while-revalidate. NIE trzymaj danych serwerowych w `useState`/Zustand.
+- UI/client state → **Zustand** (lub Jotai) gdy Context nie wystarcza. URL state → **nuqs**.
+- Nie duplikuj źródła prawdy: dane serwerowe = TanStack Query/RSC, stan UI = Zustand, stan w URL = nuqs.
+- React 19: `use()` do czytania promise/context w renderze; `useOptimistic`, `useActionState` ograniczają boilerplate.
+
+## Routing & metadata
+- `generateMetadata` per route (dynamiczne SEO). `generateStaticParams` dla SSG dynamicznych ścieżek.
+- `loading.tsx` (Suspense fallback) + `error.tsx` (error boundary) + `not-found.tsx` per segment.
+- Route Handlers (`route.ts`) tylko dla: webhooks, public API, OG images, third-party callbacks.
+
+## Rendering strategy — decyzja
+- Treść statyczna / marketing → statyczny prerender (default) + ISR przez `cacheLife`/`revalidate`.
+- Dane per-user (koszyk, konto) → dynamiczny render w `<Suspense>` (PPR shell statyczny).
+- Real-time (stock, ceny live) → client fetch z TanStack Query + krótki `staleTime`.
+- Każda nietrywialna decyzja render/cache → ADR.

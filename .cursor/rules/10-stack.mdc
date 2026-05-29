@@ -1,11 +1,11 @@
 ---
-description: Biblioteki i skąd kopiować
-alwaysApply: true
+description: Biblioteki i skąd kopiować — ładuj gdy dobierasz bibliotekę, komponent, CMS lub źródło assetów
+updated: 2026-05
 ---
 
 ## Core stack
-- Next.js 16 + React 19 + TS 5.9+ strict + Tailwind v4 + Shadcn.
-- **Framer Motion** (Motion) — UI spring, layout, gestures, AnimatePresence.
+- Next.js 16 + React 19 + TS strict + Tailwind v4 + Shadcn.
+- **Motion** (`motion/react`, dawniej Framer Motion) — UI spring, layout, gestures, AnimatePresence.
 - **GSAP** + ScrollTrigger + SplitText — timeline, scroll-scrub, pin, split.
 - **Lenis** — smooth scroll (`ReactLenis` z `lenis/react`).
 - **React Three Fiber** + **drei** + **@react-three/postprocessing** — 3D.

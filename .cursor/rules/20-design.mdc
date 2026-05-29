@@ -4,6 +4,7 @@ globs:
   - "src/**/*.tsx"
   - "src/styles/**/*.css"
   - "src/app/globals.css"
+updated: 2026-05
 ---
 
 ## Paleta (OKLCH, nie HSL)
@@ -46,12 +47,10 @@ globs:
 - `--shadow-xl`: `0 48px 96px -32px oklch(0.2 0.05 260 / 0.25)`
 - `--shadow-glow`: `0 0 64px oklch(<akcent> / 0.4)` — tylko hero / CTA primary.
 
-## Ikony
-- Default set: **Iconsax** (iconsax.io — 6000+ ikon, 6 styles). Import tylko używane ikony.
-- Alt: custom SVG set ≥ 12 ikon z tego samego DNA co typografia (grubość, optical size, radius).
+## Ikony (decyzja designowa — pipeline w 80-assets)
+- Default set: **Iconsax** (6 styles). Alt: custom SVG set ≥ 12 ikon z tego samego DNA co typografia (grubość, optical size, radius).
 - **Zakazane**: Lucide / Heroicons w hero / nav bez override (`stroke-width: 1`, custom size).
-- SVG sprite (`/public/icons/sprite.svg`) z `<symbol>` + `<use>`. Nie inline każda.
-- Optymalizacja: `svgo` z preset-default.
+- Format/sprite/optymalizacja (SVG sprite, svgo) — patrz 80-assets (single source).
 
 ## Tekstura
 - Grain overlay SVG noise: `opacity: 0.05–0.08`, `mix-blend-mode: overlay`, `pointer-events: none`, `position: fixed; inset: 0`.

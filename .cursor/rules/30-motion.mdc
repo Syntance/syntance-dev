@@ -4,6 +4,7 @@ globs:
   - "src/**/*.tsx"
   - "src/lib/gsap.ts"
   - "src/lib/theatre.ts"
+updated: 2026-05
 ---
 
 ## Hierarchia (kiedy czego)
@@ -31,10 +32,13 @@ globs:
 - `::view-transition-old(root)` + `::view-transition-new(root)` choreography — nie tylko fade, minimum mask-reveal albo slide + scale.
 - `viewTransitionName` na wspólnych elementach (hero image → product detail) — native FLIP.
 
-## Preloader (3-aktowa)
+## Preloader (3-aktowa) — NIE blokuje LCP
+- KLUCZOWE: element LCP (hero headline/obraz) jest w DOM od razu, preloader to overlay NAD nim. Patrz 00-core rozstrzygnięcia.
 1. 0–300ms: brand mark appear (mask-reveal, nie opacity).
-2. 300–1200ms: progress indicator (numeric counter albo line-growth). Min. 800ms nawet gdy cache.
-3. 1200–1800ms: exit z mask-reveal → hero enter.
+2. 300–800ms: progress indicator (numeric counter albo line-growth).
+3. 800–1200ms: exit z mask-reveal → hero reveal.
+- Pierwsza wizyta: pełne intro (≤ 1200ms). Powrót / z cache: ≤ 600ms lub skip (`sessionStorage`).
+- Budżet LCP < 2.0s OBEJMUJE preloader — nie przekraczaj.
 - **NIGDY** spinner / generic loader / skeleton UI jako hero loader.
 
 ## Custom cursor

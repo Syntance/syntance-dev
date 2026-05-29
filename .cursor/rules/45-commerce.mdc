@@ -1,0 +1,54 @@
+---
+description: E-commerce / sklepy — architektura, PDP/PLP, koszyk, checkout, płatności PL, search, podatki, wysyłka
+updated: 2026-05
+---
+
+## Stack handlowy (wybór)
+- **Medusa 2.x** (self-host, headless, TS) — pełna kontrola, custom logika, marketplace, B2B. Default dla ambitnych sklepów PL.
+- **Shopify + Hydrogen/Storefront API** — gdy klient chce gotowy backend/płatności/fulfillment i mniej devops.
+- **Stripe + własny katalog** — gdy mało SKU, prosty produkt cyfrowy/subskrypcja.
+- Frontend zawsze Next.js 16 (storefront) — niezależnie od backendu. Backend przez typed SDK/API, nigdy fetch bez typów.
+
+## PLP (listing)
+- SSR/ISR pierwszego ekranu (SEO + LCP). Filtry/sort w URL (**nuqs**) — shareowalne, indeksowalne.
+- Paginacja lub infinite scroll z `<button>` „Załaduj więcej" (a11y) + zachowanie scroll position po powrocie z PDP.
+- Każda karta: obraz (next/image, blur placeholder), nazwa, cena, badge (promo/nowość), szybki add-to-cart gdzie sensowne.
+- Pusty wynik filtra: jasny komunikat + reset filtra, nie biała strona.
+
+## PDP (karta produktu)
+- Above the fold: galeria, nazwa, cena (z ceną sprzed promo wg omnibus, patrz 56-legal), wariant, ilość, primary CTA „Dodaj do koszyka".
+- Galeria: zoom, wiele zdjęć, AVIF + blur. 3D/AR tylko gdy realnie pomaga decyzji (patrz 40-3d „when NOT to use").
+- Dostępność wariantów/stanu magazynu na żywo. Out-of-stock → „Powiadom mnie", nie martwy przycisk.
+- Dowód: oceny/recenzje (z `Review` JSON-LD), trust (zwroty, wysyłka, bezpieczne płatności).
+- `Product` + `Offer` + `AggregateRating` JSON-LD. Breadcrumbs + `BreadcrumbList`.
+
+## Koszyk i checkout
+- Add-to-cart optymistyczny (`useOptimistic`) + mini-cart drawer, bez full page reload.
+- Checkout: jak najmniej kroków, guest checkout domyślnie, konto opcjonalne. Progress wskaźnik gdy multi-step.
+- Pola: autocomplete (`shipping`/`billing`), walidacja inline, kod pocztowy → autouzupełnienie miasta (PL: API GUS/poczta).
+- Koszty (wysyłka, podatek) widoczne PRZED ostatnim krokiem — brak ukrytych opłat (zaufanie + DSA).
+- Abandoned cart: zapis koszyka (cookie/DB), email recovery (Resend) po zgodzie marketingowej.
+
+## Płatności (PL/EU)
+- **Stripe** (karty, Apple/Google Pay) + lokalne PL: **Przelewy24 / PayU / Tpay** (BLIK, szybkie przelewy — w PL BLIK to must-have).
+- Webhook płatności: weryfikacja podpisu HMAC + idempotency key (patrz 55-security). Stan zamówienia zmienia tylko webhook, nie redirect z bramki.
+- 3DS / SCA obsłużone (PSD2). Kwoty w groszach (integer), nigdy float. Waluta explicit (PLN/EUR).
+- Faktura: integracja (Fakturownia/inFakt) po opłaceniu. Retencja faktur 5 lat (PL tax, patrz 56-legal).
+
+## Search
+- **Meilisearch** (self-host, szybki, typo-tolerant) lub **Algolia** (managed, większa skala). Nie LIKE w SQL dla full-text.
+- Instant search z debounce, sugestie, synonimy, filtry fasetowe. Pusty/zero-result → propozycje alternatyw.
+
+## Podatki, wysyłka, zwroty (PL)
+- VAT: stawki per kategoria, ceny brutto dla B2C (z rozbiciem), netto+VAT dla B2B. OSS dla sprzedaży do innych krajów UE.
+- Wysyłka PL: **InPost Paczkomaty** (must-have), kurier (DPD/DHL/InPost Kurier). Widget wyboru paczkomatu w checkout.
+- Zwroty: prawo odstąpienia 14 dni B2C (patrz 56-legal), formularz zwrotu + etykieta.
+
+## Analytics e-commerce
+- GA4 + PostHog: `view_item`, `add_to_cart`, `begin_checkout`, `add_payment_info`, `purchase` (z `value`, `currency`, `items`). Po zgodzie (Consent Mode v2).
+- Mierz: conversion rate, AOV, cart abandonment rate, drop-off per krok checkout.
+
+## Wydajność i stabilność handlu
+- Ceny/stany krytyczne: krótki cache + `revalidateTag` po zmianie (patrz 15-rendering). Nigdy stale cena w checkout.
+- Checkout/payment flow za graceful degradation + circuit breaker (patrz 60-quality). Bramka pada → „chwilowo niedostępne", nie crash.
+- Load test checkout przed Black Friday/promocją (patrz 90-release).

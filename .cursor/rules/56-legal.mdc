@@ -1,6 +1,6 @@
 ---
-description: Wymagania prawne PL/EU — EAA, GDPR, DSA, prawa konsumenta
-alwaysApply: true
+description: Wymagania prawne PL/EU — EAA, GDPR, DSA, prawa konsumenta, cookies — ładuj dla compliance, stopki, checkout, formularzy zgód
+updated: 2026-05
 ---
 
 ## EAA — European Accessibility Act (obowiązkowy od 28.06.2025)
@@ -40,11 +40,14 @@ Każdy user w UE ma prawo do:
 - **Regulamin** + **Polityka prywatności** — linki w stopce + checkbox przed submit w checkoucie.
 - **Ustawa omnibus** 2023 (ceny): „Najniższa cena z 30 dni przed obniżką" przy każdej promocji.
 
-## Prawo telekomunikacyjne art. 173 — cookies
+## Prawo telekomunikacyjne art. 173 — cookies (implementacja)
 - Zgoda **opt-in** (aktywna), nie pre-checked.
-- Trzy przyciski równoważne: **Akceptuj / Odrzuć / Dostosuj**. NIGDY tylko „Akceptuj" + małe „Dostosuj".
+- Trzy przyciski równoważne: **Akceptuj / Odrzuć / Dostosuj**. NIGDY tylko „Akceptuj" + małe „Dostosuj". NIGDY „X" jako dismiss.
 - UODO stanowisko 2023: dark patterns (ukryte „Odrzuć", kolorowy „Akceptuj") = kara.
-- Banner NIE blokuje scroll — content dostępny od razu.
+- Banner NIE blokuje scroll — content dostępny od razu. Widoczny przy 1. wizycie, ukryty po wyborze (localStorage) z opcją re-open w stopce.
+- Narzędzie: **Klaro** (self-hosted, OSS) default lub **Cookiebot** (paid). Kategorie: Necessary (zawsze) / Analytics / Marketing / Preferences.
+- **Consent gate**: GA / Meta Pixel / PostHog / Hotjar ładują się TYLKO po `consent.analytics === true` (z Partytown, patrz 50-perf-a11y). **Consent Mode v2** dla Google.
+- **Data retention** explicite: GA max 14 mies., PostHog 12, Sentry 90 dni.
 
 ## DSA — Digital Services Act (EU, od 17.02.2024)
 - **Punkt kontaktowy** dla userów + dla władz (email w stopce).

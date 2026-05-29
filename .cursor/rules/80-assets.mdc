@@ -1,8 +1,9 @@
 ---
-description: Asset pipeline — obrazy, video, fonty, 3D, ikony
+description: Asset pipeline (single source) — obrazy, video, fonty, 3D, ikony
 globs:
   - "public/**"
   - "src/**/*.tsx"
+updated: 2026-05
 ---
 
 ## Obrazy

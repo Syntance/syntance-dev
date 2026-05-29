@@ -1,9 +1,9 @@
 ---
-description: R3F, shadery, asset pipeline, postprocessing
+description: R3F, shadery, sceny 3D, postprocessing
 globs:
   - "src/components/3d/**"
-  - "src/**/*.tsx"
   - "src/**/*.glsl"
+updated: 2026-05
 ---
 
 ## Setup
@@ -11,15 +11,11 @@ globs:
 - Canvas: `dpr={[1, 2]}`, `gl={GL_OPTS}`, `frameloop="demand"` lub `"never"` + manual `invalidate()`.
 - `GL_OPTS = { antialias: true, toneMapping: ACESFilmicToneMapping, powerPreference: "high-performance", stencil: false, depth: true }`.
 - Placeholder: PNG poster niskiej rozdzielczości (screen-grab sceny, 80 KB max).
-- Mobile < 768px lub `navigator.deviceMemory < 4` → zamiast sceny PNG poster + CSS animacja.
+- Fallback słabego urządzenia → PNG poster + CSS animacja. Detekcja: `matchMedia('(pointer:coarse)')` + viewport < 768px + `navigator.connection?.saveData` + FPS probe (NIE sam `navigator.deviceMemory` — brak w Safari/iOS; patrz 00-core rozstrzygnięcia).
 
-## Asset pipeline
-- Modele: `.glb` max 1.5 MB, max 20–50k tris, jeden materiał per obiekt.
-- Kompresja: `gltf-transform optimize in.glb out.glb --compress meshopt --texture-compress ktx2 --simplify`.
-- Textury: **KTX2 / Basis** — 70% mniejsze niż PNG, GPU-decoded. `useKTX2()` z drei.
-- **Draco** (geometria) + **Meshopt** (animacje) — oba.
-- HDR: **Gainmap** (`.jpg` + gainmap) zamiast klasycznego `.hdr` — 70% mniejsze, iOS friendly.
-- HDRi 1–2K z polyhaven.com / Gainmap generator: `<Environment files="/hdr/studio-gainmap.jpg" />`.
+## Asset pipeline (formaty/limity/kompresja — single source: 80-assets)
+- W skrócie: `.glb` ≤ 1.5 MB, KTX2/Basis textury, Gainmap zamiast `.hdr`, `gltf-transform optimize`.
+- Runtime: `useKTX2()` z drei, `<Environment files="/hdr/studio-gainmap.jpg" />`. Pełna specyfikacja i hosting → 80-assets.
 
 ## Spline workflow (spline.design)
 - Design sceny w Spline → **Export → .glb** → pipeline (`gltf-transform`).
@@ -66,7 +62,7 @@ globs:
 ## When NOT to use 3D (restraint)
 - Produkt można pokazać zdjęciem + motion → użyj zdjęcia + Framer. Zawsze lżej.
 - Hero ma być indexowalny przez Google → 3D scena nie jest. Static render jako fallback/poster.
-- Target device mobile < 4 GB RAM (`navigator.deviceMemory < 4`) → PNG poster, nie scena.
+- Target device słaby / mobile / `saveData` (detekcja jak wyżej, nie sam `deviceMemory`) → PNG poster, nie scena.
 - Content CMS-driven → 3D nie skaluje się. Użyj static assetów.
 - Budget < 200 KB initial JS → 3D sam zjada 150 KB (three + r3f). Skip.
 - Brak hero momentu, który 3D naprawdę wzmacnia → nie dodawaj dla „wow". To rani.

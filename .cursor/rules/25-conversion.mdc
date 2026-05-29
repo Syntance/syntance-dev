@@ -1,0 +1,49 @@
+---
+description: Konwersja, CRO, strategia i UX research — ładuj gdy projektujesz strukturę strony, hero, CTA, funnel lub formularze
+updated: 2026-05
+---
+
+## Strategia przed pikselem
+- Zdefiniuj PRZED kodem: ICP (kto), JTBD (po co przychodzi), value proposition (1 zdanie), primary conversion action per strona, sukces mierzalny (north-star metric).
+- Mapa funnela: awareness → interest → decision → action. Każda sekcja popycha do następnego kroku, nie jest ozdobą.
+- Hierarchia stron: landing (1 cel), PDP (dodanie do koszyka), pricing (wybór planu), kontakt (lead). Jeden cel = jedna primary akcja.
+- Brief konwersji: jaka decyzja usera, jakie obiekcje blokują, jaki dowód je rozbraja.
+
+## Hero (pierwszy ekran)
+- Value proposition czytelna w 5s: CO to jest, DLA KOGO, DLACZEGO lepsze. Nie hasło-zagadka.
+- Jedno primary CTA above the fold, wizualnie dominujące (kontrast + rozmiar + pozycja). Secondary CTA wyraźnie słabsze (ghost/link).
+- Hero pokazuje produkt/wynik, nie abstrakcję. Pokaż „after state" usera.
+- Motion/3D w hero NIGDY nie opóźnia czytelności value prop ani klikalności CTA (patrz 00-core rozstrzygnięcia).
+
+## CTA — dyscyplina
+- Czasownik + wynik: „Zobacz jak zbudowaliśmy X", „Załóż konto w 2 min" > „Get Started" / „Submit".
+- Jedna primary akcja per widok. Powtarzaj to samo CTA w dół strony (po każdej sekcji-dowodzie), nie mnóż różnych.
+- Fitts's law: CTA duże, blisko naturalnego ruchu kciuka na mobile (dolna 1/3), target ≥ 44×44px (WCAG min 24, konwersja chce więcej).
+- Mikrocopy pod CTA rozbraja ryzyko: „Bez karty", „Anuluj w każdej chwili", „Odpowiedź w 24h".
+
+## Redukcja tarcia
+- Każde pole formularza = koszt. Tylko niezbędne. Email-first, resztę progresywnie.
+- Formularz: jedna kolumna, labels nad polem, inline walidacja po blur (nie po submit), autocomplete attrs, odpowiedni `inputmode`/`type` (mobile keyboard).
+- Zero zbędnych kroków przed wartością. Guest checkout zawsze dostępny (konto opcjonalne PO zakupie).
+- Czas ładowania = konwersja: każde 100ms LCP to mierzalny spadek. Perf (50-perf-a11y) jest funkcją konwersji, nie tylko techniczną.
+
+## Dowód i zaufanie
+- Social proof blisko CTA: liczby konkretne („3 200 firm"), logo klientów, testimoniale z twarzą + nazwiskiem + rolą.
+- Trust signals w checkout/pricing: zabezpieczenia płatności, polityka zwrotów, gwarancje, realny kontakt.
+- Obiekcje rozbrajaj inline: FAQ przy cenniku, „jak to działa" przy złożonym produkcie, porównanie z alternatywą.
+- Urgency/scarcity TYLKO prawdziwa (realny stan magazynu, realny deadline promocji). Fake urgency = dark pattern, zakazane (DSA, patrz 56-legal).
+
+## Pomiar i iteracja
+- Event taxonomy zaprojektowana z góry: `cta_click`, `form_start`, `form_submit`, `checkout_step`, `purchase`. Spójne nazwy, dokumentowane.
+- Funnel + conversion rate w PostHog. Session replay (sampled) na drop-off points.
+- A/B testy przez PostHog Feature Flags na hipotezach, nie losowo. Jedna zmienna na test, istotność statystyczna przed wnioskiem.
+- Heatmapy / scroll depth dla long-form i landingów.
+- Mierz na realnym ruchu (RUM), nie na opiniach.
+
+## A11y = konwersja
+- Niedostępny element to stracony user i ryzyko prawne (EAA). Keyboard + screen reader + kontrast to też CRO.
+- Błędy formularza dostępne (`aria-live`, focus na pierwszym błędzie) — inaczej user porzuca.
+
+## Trade-off estetyka ↔ konwersja
+- Gdy „wow" walczy z jasnością celu: wygrywa jasność na stronach transakcyjnych (pricing, checkout, PDP), „wow" dostaje przestrzeń na hero/case studies/about.
+- Custom cursor / heavy motion na ścieżce zakupowej tylko jeśli NIE wydłużają task completion. Testuj task success rate.
