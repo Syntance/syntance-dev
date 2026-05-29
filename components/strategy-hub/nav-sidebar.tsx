@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutGrid,
   FileText,
@@ -128,6 +129,14 @@ export function NavSidebar() {
   const router = useRouter();
   const projectFromContext = useProject();
   const projectIdFromPath = useProjectIdFromPath();
+  const [user, setUser] = useState<{ name: string; email: string; role: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => { if (d.user) setUser(d.user); })
+      .catch(() => null);
+  }, []);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -257,10 +266,12 @@ export function NavSidebar() {
       <SidebarFooter className="border-t border-sidebar-border px-4 py-3">
         <div className="flex items-center gap-2 min-w-0 group-data-[collapsible=icon]:justify-center">
           <div className="size-6 rounded-full bg-brand/20 border border-brand/30 flex items-center justify-center shrink-0">
-            <span className="text-[10px] font-semibold text-brand">K</span>
+            <span className="text-[10px] font-semibold text-brand">
+              {user ? user.name[0].toUpperCase() : "?"}
+            </span>
           </div>
           <span className="text-xs text-muted-foreground truncate group-data-[collapsible=icon]:hidden flex-1">
-            Kamil · owner
+            {user ? `${user.name} · ${user.role}` : "…"}
           </span>
           <button
             type="button"
