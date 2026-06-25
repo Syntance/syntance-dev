@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Sparkles,
   LayoutDashboard,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -197,6 +198,17 @@ function CommandPalette({
                 </CommandGroup>
               </>
             )}
+
+            <CommandSeparator />
+            <CommandGroup heading="Custom Apps">
+              <CommandItem
+                value="liczenie godzin time tracking"
+                onSelect={() => go("/strategy-hub/apps/time-tracking")}
+              >
+                <Clock />
+                <span>Liczenie godzin</span>
+              </CommandItem>
+            </CommandGroup>
 
             <CommandSeparator />
             <CommandGroup heading="Przejdź do">

@@ -57,6 +57,7 @@ export const projects = pgTable(
     notionPageUrl: text("notion_page_url"),
     clientAccessToken: text("client_access_token"),
     clientAccessExpiresAt: timestamp("client_access_expires_at"),
+    hourlyRate: real("hourly_rate"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     deletedAt: timestamp("deleted_at"),
@@ -1151,6 +1152,32 @@ export const changeHistory = pgTable(
   (t) => [index("change_history_project_idx").on(t.projectId)]
 );
 
+// ─── Time tracking (Custom Apps) ─────────────────────────────────────────────
+
+export const timeEntries = pgTable(
+  "time_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userEmail: varchar("user_email", { length: 255 }).notNull(),
+    comment: text("comment"),
+    startedAt: timestamp("started_at").notNull(),
+    endedAt: timestamp("ended_at"),
+    durationMinutes: integer("duration_minutes"),
+    workType: varchar("work_type", { length: 20 }).notNull().default("development"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [
+    index("time_entries_project_idx").on(t.projectId),
+    index("time_entries_user_idx").on(t.userEmail),
+    index("time_entries_started_idx").on(t.startedAt),
+  ]
+);
+
 // ─── Relations ────────────────────────────────────────────────────────────────
 
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
@@ -1217,6 +1244,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   siteMaintenanceCosts: many(siteMaintenanceCosts),
   siteAudits: many(siteAudits),
   changeHistory: many(changeHistory),
+  timeEntries: many(timeEntries),
 }));
 
 export const businessProblemsRelations = relations(
@@ -1604,5 +1632,12 @@ export const kpiSnapshotsRelations = relations(kpiSnapshots, ({ one }) => ({
   kpi: one(kpis, {
     fields: [kpiSnapshots.kpiId],
     references: [kpis.id],
+  }),
+}));
+
+export const timeEntriesRelations = relations(timeEntries, ({ one }) => ({
+  project: one(projects, {
+    fields: [timeEntries.projectId],
+    references: [projects.id],
   }),
 }));

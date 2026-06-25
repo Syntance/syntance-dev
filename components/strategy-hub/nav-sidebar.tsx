@@ -22,6 +22,8 @@ import {
   LayoutDashboard,
   Map as MapIcon,
   LogOut,
+  Clock,
+  Puzzle,
 } from "lucide-react";
 import {
   Sidebar,
@@ -44,6 +46,15 @@ const navItems = [
     href: "/strategy-hub",
     icon: LayoutGrid,
     exact: true,
+  },
+];
+
+const customAppItems = [
+  {
+    label: "Liczenie godzin",
+    description: "Timer · wpisy · rozliczenia",
+    href: "/strategy-hub/apps/time-tracking",
+    icon: Clock,
   },
 ];
 
@@ -232,6 +243,39 @@ export function NavSidebar() {
             </SidebarGroup>
           </>
         )}
+
+        <SidebarSeparator />
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden flex items-center gap-1.5">
+            <Puzzle className="size-3.5 text-brand/80" />
+            Custom Apps
+          </SidebarGroupLabel>
+          <SidebarMenu>
+            {customAppItems.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  render={<Link href={item.href} />}
+                  isActive={isActive(item.href)}
+                  tooltip={item.label}
+                  className="h-auto py-2.5 group-data-[collapsible=icon]:py-2"
+                >
+                  <item.icon className="size-4 shrink-0" />
+                  <span className="flex flex-col items-start gap-0.5 min-w-0 group-data-[collapsible=icon]:hidden">
+                    <span className="truncate font-medium leading-none">
+                      {item.label}
+                    </span>
+                    {"description" in item && item.description ? (
+                      <span className="truncate text-[10px] font-normal text-muted-foreground leading-none">
+                        {item.description}
+                      </span>
+                    ) : null}
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
 
         <SidebarSeparator />
 

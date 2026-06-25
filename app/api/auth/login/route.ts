@@ -119,11 +119,25 @@ export async function POST(req: NextRequest) {
       );
     }
   } else {
-    if (!(await verifyPassword(password, localClient.passwordHash))) {
-      return NextResponse.json(
-        { error: "Nieprawidłowe hasło" },
-        { status: 401 }
-      );
+    const localPasswordOk = await verifyPassword(
+      password,
+      localClient.passwordHash
+    );
+
+    if (!localPasswordOk) {
+      const sanityPassword = sanityClient.password;
+
+      if (sanityPassword && password === sanityPassword) {
+        localClient = await prisma.clientUser.update({
+          where: { email },
+          data: { passwordHash: await hashPassword(password) },
+        });
+      } else {
+        return NextResponse.json(
+          { error: "Nieprawidłowe hasło" },
+          { status: 401 }
+        );
+      }
     }
   }
 
