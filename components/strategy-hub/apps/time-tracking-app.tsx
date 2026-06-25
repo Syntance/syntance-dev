@@ -10,12 +10,21 @@ import {
   BarChart3,
   Trash2,
   Loader2,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type {
   SummaryResult,
   TimeEntryRow,
@@ -125,6 +134,18 @@ export function TimeTrackingApp() {
   const [summaryProjectId, setSummaryProjectId] = useState("");
 
   const [listProjectId, setListProjectId] = useState("");
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<TimeEntryRow | null>(null);
+  const [editProjectId, setEditProjectId] = useState("");
+  const [editWorkType, setEditWorkType] = useState<WorkType>("development");
+  const [editStart, setEditStart] = useState<DateTimeValue>(() =>
+    toDateTimeValue()
+  );
+  const [editEnd, setEditEnd] = useState<DateTimeValue>(() =>
+    toDateTimeValue()
+  );
+  const [editComment, setEditComment] = useState("");
 
   const [tick, setTick] = useState(0);
 
@@ -354,12 +375,79 @@ export function TimeTrackingApp() {
     }
   }
 
+  function openEditEntry(entry: TimeEntryRow) {
+    setEditingEntry(entry);
+    setEditProjectId(entry.projectId);
+    setEditWorkType(entry.workType);
+    setEditStart(toDateTimeValue(new Date(entry.startedAt)));
+    setEditEnd(
+      entry.endedAt
+        ? toDateTimeValue(new Date(entry.endedAt))
+        : toDateTimeValue()
+    );
+    setEditComment(entry.comment ?? "");
+    setEditOpen(true);
+  }
+
+  function closeEditEntry() {
+    setEditOpen(false);
+    setEditingEntry(null);
+  }
+
+  async function handleEditSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingEntry) return;
+    if (!editProjectId) {
+      setError("Wybierz projekt");
+      return;
+    }
+
+    const isActive = activeEntry?.id === editingEntry.id;
+    const startedAt = dateTimeValueToIso(editStart);
+    const endedAtIso = isActive ? null : dateTimeValueToIso(editEnd);
+
+    if (endedAtIso && new Date(endedAtIso) <= new Date(startedAt)) {
+      setError("Godzina zakończenia musi być późniejsza niż rozpoczęcia.");
+      return;
+    }
+
+    setActionLoading(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `/api/strategy-hub/time-tracking/${editingEntry.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: editProjectId,
+            workType: editWorkType,
+            comment: editComment.trim() === "" ? null : editComment.trim(),
+            startedAt,
+            ...(endedAtIso ? { endedAt: endedAtIso } : {}),
+          }),
+        }
+      );
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Nie udało się zapisać zmian");
+        return;
+      }
+      closeEditEntry();
+      await loadEntries();
+      if (tab === "summary") await loadSummary();
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function handleDelete(entryId: string) {
     if (!window.confirm("Usunąć ten wpis?")) return;
     await fetch(`/api/strategy-hub/time-tracking/${entryId}`, {
       method: "DELETE",
     });
     await loadEntries();
+    if (tab === "summary") await loadSummary();
   }
 
   if (loading) {
@@ -618,7 +706,7 @@ export function TimeTrackingApp() {
                       <th className="px-4 py-3 font-medium">Koniec</th>
                       <th className="px-4 py-3 font-medium">Czas</th>
                       <th className="px-4 py-3 font-medium">Zadanie / komentarz</th>
-                      <th className="px-4 py-3 font-medium w-10" />
+                      <th className="px-4 py-3 font-medium w-20" />
                     </tr>
                   </thead>
                   <tbody>
@@ -655,16 +743,26 @@ export function TimeTrackingApp() {
                             {entry.comment || "—"}
                           </td>
                           <td className="px-4 py-3">
-                            {!activeEntry || entry.id !== activeEntry.id ? (
+                            <div className="flex items-center gap-0.5">
                               <button
                                 type="button"
-                                onClick={() => void handleDelete(entry.id)}
-                                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                aria-label="Usuń wpis"
+                                onClick={() => openEditEntry(entry)}
+                                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                                aria-label="Edytuj wpis"
                               >
-                                <Trash2 className="size-4" />
+                                <Pencil className="size-4" />
                               </button>
-                            ) : null}
+                              {!activeEntry || entry.id !== activeEntry.id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDelete(entry.id)}
+                                  className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                  aria-label="Usunąć wpis"
+                                >
+                                  <Trash2 className="size-4" />
+                                </button>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -849,6 +947,87 @@ export function TimeTrackingApp() {
           )}
         </div>
       )}
+
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          if (!open) closeEditEntry();
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edytuj wpis</DialogTitle>
+            <DialogDescription>
+              Zmień projekt, typ pracy, daty lub komentarz.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <CustomSelect
+              options={projects.map((p) => ({
+                value: p.id,
+                label: p.name,
+                icon: p.icon,
+              }))}
+              value={editProjectId}
+              onChange={setEditProjectId}
+              label="Projekt"
+              placeholder="Wybierz projekt…"
+            />
+            <WorkTypeSelector value={editWorkType} onChange={setEditWorkType} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <DateTimeField
+                label="Start"
+                value={editStart}
+                onChange={setEditStart}
+              />
+              {editingEntry && activeEntry?.id === editingEntry.id ? (
+                <div className="space-y-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Koniec
+                  </span>
+                  <div className="rounded-xl border border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
+                    Timer w trakcie — zatrzymaj pracę, aby ustawić godzinę
+                    zakończenia.
+                  </div>
+                </div>
+              ) : (
+                <DateTimeField
+                  label="Koniec"
+                  value={editEnd}
+                  onChange={setEditEnd}
+                />
+              )}
+            </div>
+            <Textarea
+              placeholder="Co zrobiłeś?"
+              value={editComment}
+              onChange={(e) => setEditComment(e.target.value)}
+              rows={3}
+            />
+            <DialogFooter className="border-t-0 bg-transparent p-0 sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeEditEntry}
+                disabled={actionLoading}
+              >
+                Anuluj
+              </Button>
+              <Button
+                type="submit"
+                disabled={actionLoading}
+                className="bg-brand hover:bg-brand/90 text-white"
+              >
+                {actionLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  "Zapisz zmiany"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
