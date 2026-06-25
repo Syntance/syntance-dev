@@ -18,7 +18,8 @@ export async function GET() {
       icon: projects.icon,
       slug: projects.slug,
       status: projects.status,
-      hourlyRate: projects.hourlyRate,
+      hourlyRateDevelopment: projects.hourlyRateDevelopment,
+      hourlyRateMaintenance: projects.hourlyRateMaintenance,
     })
     .from(projects)
     .where(and(isNull(projects.deletedAt), eq(projects.workspaceId, ws.id)))

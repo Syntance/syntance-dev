@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { WorkType } from "./time-tracking-types";
+
 export {
   WORK_TYPES,
   WORK_TYPE_LABELS,
@@ -37,3 +39,16 @@ export function toDateKey(date: Date): string {
 export function toMonthKey(date: Date): string {
   return date.toISOString().slice(0, 7);
 }
+
+export function resolveHourlyRate(
+  workType: WorkType,
+  rates: {
+    hourlyRateDevelopment: number | null;
+    hourlyRateMaintenance: number | null;
+  }
+): number | null {
+  return workType === "maintenance"
+    ? rates.hourlyRateMaintenance
+    : rates.hourlyRateDevelopment;
+}
+

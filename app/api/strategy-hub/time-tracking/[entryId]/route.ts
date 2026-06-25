@@ -11,6 +11,7 @@ import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
 import {
   computeDurationMinutes,
   isWorkType,
+  resolveHourlyRate,
   type TimeEntryRow,
 } from "@/lib/strategy-hub/time-tracking";
 import { and, eq, isNull } from "drizzle-orm";
@@ -27,9 +28,11 @@ function mapEntry(
   row: typeof timeEntries.$inferSelect & {
     projectName: string;
     projectIcon: string | null;
-    hourlyRate: number | null;
+    hourlyRateDevelopment: number | null;
+    hourlyRateMaintenance: number | null;
   }
 ): TimeEntryRow {
+  const workType = isWorkType(row.workType) ? row.workType : "development";
   return {
     id: row.id,
     projectId: row.projectId,
@@ -37,11 +40,14 @@ function mapEntry(
     projectIcon: row.projectIcon,
     userEmail: row.userEmail,
     comment: row.comment,
-    workType: isWorkType(row.workType) ? row.workType : "development",
+    workType,
     startedAt: row.startedAt.toISOString(),
     endedAt: row.endedAt?.toISOString() ?? null,
     durationMinutes: row.durationMinutes,
-    hourlyRate: row.hourlyRate,
+    hourlyRate: resolveHourlyRate(workType, {
+      hourlyRateDevelopment: row.hourlyRateDevelopment,
+      hourlyRateMaintenance: row.hourlyRateMaintenance,
+    }),
   };
 }
 
@@ -52,7 +58,8 @@ async function getEntryForUser(entryId: string, email: string) {
       entry: timeEntries,
       projectName: projects.name,
       projectIcon: projects.icon,
-      hourlyRate: projects.hourlyRate,
+      hourlyRateDevelopment: projects.hourlyRateDevelopment,
+      hourlyRateMaintenance: projects.hourlyRateMaintenance,
       workspaceId: projects.workspaceId,
     })
     .from(timeEntries)
@@ -121,14 +128,16 @@ export async function PATCH(
 
   let projectName = row.projectName;
   let projectIcon = row.projectIcon;
-  let hourlyRate = row.hourlyRate;
+  let hourlyRateDevelopment = row.hourlyRateDevelopment;
+  let hourlyRateMaintenance = row.hourlyRateMaintenance;
 
   if (parsed.data.projectId && parsed.data.projectId !== row.entry.projectId) {
     const projectRows = await db
       .select({
         name: projects.name,
         icon: projects.icon,
-        hourlyRate: projects.hourlyRate,
+        hourlyRateDevelopment: projects.hourlyRateDevelopment,
+        hourlyRateMaintenance: projects.hourlyRateMaintenance,
         workspaceId: projects.workspaceId,
       })
       .from(projects)
@@ -147,7 +156,8 @@ export async function PATCH(
     }
     projectName = project.name;
     projectIcon = project.icon;
-    hourlyRate = project.hourlyRate;
+    hourlyRateDevelopment = project.hourlyRateDevelopment;
+    hourlyRateMaintenance = project.hourlyRateMaintenance;
   }
 
   return NextResponse.json({
@@ -155,7 +165,8 @@ export async function PATCH(
       ...updated,
       projectName,
       projectIcon,
-      hourlyRate,
+      hourlyRateDevelopment,
+      hourlyRateMaintenance,
     }),
   });
 }

@@ -11,6 +11,7 @@ import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
 import {
   computeDurationMinutes,
   isWorkType,
+  resolveHourlyRate,
   type TimeEntryRow,
 } from "@/lib/strategy-hub/time-tracking";
 import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
@@ -43,9 +44,11 @@ function mapEntry(
   row: typeof timeEntries.$inferSelect & {
     projectName: string;
     projectIcon: string | null;
-    hourlyRate: number | null;
+    hourlyRateDevelopment: number | null;
+    hourlyRateMaintenance: number | null;
   }
 ): TimeEntryRow {
+  const workType = isWorkType(row.workType) ? row.workType : "development";
   return {
     id: row.id,
     projectId: row.projectId,
@@ -53,11 +56,14 @@ function mapEntry(
     projectIcon: row.projectIcon,
     userEmail: row.userEmail,
     comment: row.comment,
-    workType: isWorkType(row.workType) ? row.workType : "development",
+    workType,
     startedAt: row.startedAt.toISOString(),
     endedAt: row.endedAt?.toISOString() ?? null,
     durationMinutes: row.durationMinutes,
-    hourlyRate: row.hourlyRate,
+    hourlyRate: resolveHourlyRate(workType, {
+      hourlyRateDevelopment: row.hourlyRateDevelopment,
+      hourlyRateMaintenance: row.hourlyRateMaintenance,
+    }),
   };
 }
 
@@ -107,7 +113,8 @@ export async function GET(req: NextRequest) {
       entry: timeEntries,
       projectName: projects.name,
       projectIcon: projects.icon,
-      hourlyRate: projects.hourlyRate,
+      hourlyRateDevelopment: projects.hourlyRateDevelopment,
+      hourlyRateMaintenance: projects.hourlyRateMaintenance,
     })
     .from(timeEntries)
     .innerJoin(projects, eq(timeEntries.projectId, projects.id))
@@ -120,7 +127,8 @@ export async function GET(req: NextRequest) {
         ...r.entry,
         projectName: r.projectName,
         projectIcon: r.projectIcon,
-        hourlyRate: r.hourlyRate,
+        hourlyRateDevelopment: r.hourlyRateDevelopment,
+        hourlyRateMaintenance: r.hourlyRateMaintenance,
       })
     ),
   });
@@ -176,7 +184,8 @@ export async function POST(req: NextRequest) {
           ...entry,
           projectName: project.name,
           projectIcon: project.icon,
-          hourlyRate: project.hourlyRate,
+          hourlyRateDevelopment: project.hourlyRateDevelopment,
+          hourlyRateMaintenance: project.hourlyRateMaintenance,
         }),
       },
       { status: 201 }
@@ -210,7 +219,8 @@ export async function POST(req: NextRequest) {
         entry: timeEntries,
         projectName: projects.name,
         projectIcon: projects.icon,
-        hourlyRate: projects.hourlyRate,
+        hourlyRateDevelopment: projects.hourlyRateDevelopment,
+        hourlyRateMaintenance: projects.hourlyRateMaintenance,
         workspaceId: projects.workspaceId,
       })
       .from(timeEntries)
@@ -252,7 +262,8 @@ export async function POST(req: NextRequest) {
         ...updated,
         projectName: row.projectName,
         projectIcon: row.projectIcon,
-        hourlyRate: row.hourlyRate,
+        hourlyRateDevelopment: row.hourlyRateDevelopment,
+        hourlyRateMaintenance: row.hourlyRateMaintenance,
       }),
     });
   }
@@ -289,7 +300,8 @@ export async function POST(req: NextRequest) {
         ...entry,
         projectName: project.name,
         projectIcon: project.icon,
-        hourlyRate: project.hourlyRate,
+        hourlyRateDevelopment: project.hourlyRateDevelopment,
+        hourlyRateMaintenance: project.hourlyRateMaintenance,
       }),
     },
     { status: 201 }

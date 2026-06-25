@@ -34,14 +34,20 @@ export interface WorkTypeSummary {
   workType: WorkType;
   minutes: number;
   hours: number;
+  hourlyRate: number | null;
   amount: number | null;
   entryCount: number;
+}
+
+export interface ProjectHourlyRates {
+  development: number | null;
+  maintenance: number | null;
 }
 
 export interface SummaryResult {
   totalMinutes: number;
   totalHours: number;
-  hourlyRate: number | null;
+  hourlyRates: ProjectHourlyRates;
   totalAmount: number | null;
   entryCount: number;
   byWorkType: WorkTypeSummary[];

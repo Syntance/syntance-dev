@@ -51,7 +51,8 @@ interface ProjectOption {
   id: string;
   name: string;
   icon: string | null;
-  hourlyRate?: number | null;
+  hourlyRateDevelopment?: number | null;
+  hourlyRateMaintenance?: number | null;
 }
 
 type TabKey = "timer" | "list" | "summary";
@@ -118,7 +119,8 @@ export function TimeTrackingApp() {
 
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [timerComment, setTimerComment] = useState("");
-  const [hourlyRateInput, setHourlyRateInput] = useState("");
+  const [devRateInput, setDevRateInput] = useState("");
+  const [maintenanceRateInput, setMaintenanceRateInput] = useState("");
 
   const [manualStart, setManualStart] = useState<DateTimeValue>(() =>
     toDateTimeValue()
@@ -258,28 +260,50 @@ export function TimeTrackingApp() {
 
   useEffect(() => {
     const project = projects.find((p) => p.id === selectedProjectId);
-    if (project?.hourlyRate != null) {
-      setHourlyRateInput(String(project.hourlyRate));
-    }
+    setDevRateInput(
+      project?.hourlyRateDevelopment != null
+        ? String(project.hourlyRateDevelopment)
+        : ""
+    );
+    setMaintenanceRateInput(
+      project?.hourlyRateMaintenance != null
+        ? String(project.hourlyRateMaintenance)
+        : ""
+    );
   }, [selectedProjectId, projects]);
 
-  async function saveHourlyRate() {
+  async function saveHourlyRates() {
     if (!selectedProjectId) return;
     setActionLoading(true);
     setError("");
     try {
-      const rate = hourlyRateInput.trim() === "" ? null : Number(hourlyRateInput);
+      const devRate =
+        devRateInput.trim() === "" ? null : Number(devRateInput);
+      const maintenanceRate =
+        maintenanceRateInput.trim() === "" ? null : Number(maintenanceRateInput);
+
+      if (
+        (devRate != null && Number.isNaN(devRate)) ||
+        (maintenanceRate != null && Number.isNaN(maintenanceRate))
+      ) {
+        setError("Podaj poprawne stawki (liczby ≥ 0).");
+        return;
+      }
+
       const res = await fetch(
         `/api/strategy-hub/projects/${selectedProjectId}/hourly-rate`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ hourlyRate: rate }),
+          body: JSON.stringify({
+            hourlyRateDevelopment: devRate,
+            hourlyRateMaintenance: maintenanceRate,
+          }),
         }
       );
       if (!res.ok) {
         const data = (await res.json()) as { error?: string };
-        setError(data.error ?? "Nie udało się zapisać stawki");
+        setError(data.error ?? "Nie udało się zapisać stawek");
         return;
       }
       await loadProjects();
@@ -587,7 +611,7 @@ export function TimeTrackingApp() {
             )}
           </Card>
 
-          <Card title="Stawka godzinowa klienta">
+          <Card title="Stawki godzinowe klienta">
             <div className="flex flex-wrap items-end gap-3">
               <CustomSelect
                 options={projects.map((p) => ({
@@ -602,24 +626,40 @@ export function TimeTrackingApp() {
                 className="min-w-[200px]"
               />
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">PLN / h</label>
+                <label className="text-xs text-muted-foreground">
+                  Development · PLN / h
+                </label>
                 <Input
                   type="number"
                   min={0}
                   step={0.01}
-                  value={hourlyRateInput}
-                  onChange={(e) => setHourlyRateInput(e.target.value)}
+                  value={devRateInput}
+                  onChange={(e) => setDevRateInput(e.target.value)}
                   placeholder="np. 150"
+                  className="w-32"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">
+                  Utrzymanie · PLN / h
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={maintenanceRateInput}
+                  onChange={(e) => setMaintenanceRateInput(e.target.value)}
+                  placeholder="np. 100"
                   className="w-32"
                 />
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={saveHourlyRate}
+                onClick={saveHourlyRates}
                 disabled={actionLoading || !selectedProjectId}
               >
-                Zapisz stawkę
+                Zapisz stawki
               </Button>
             </div>
           </Card>
@@ -823,21 +863,29 @@ export function TimeTrackingApp() {
 
           {summary && (
             <>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard
                   label="Łącznie godzin"
                   value={`${(summary.totalMinutes / 60).toFixed(2)} h`}
                 />
                 <StatCard
-                  label="Stawka"
+                  label="Stawka · development"
                   value={
-                    summary.hourlyRate != null
-                      ? formatPln(summary.hourlyRate) + " / h"
+                    summary.hourlyRates.development != null
+                      ? formatPln(summary.hourlyRates.development) + " / h"
                       : "—"
                   }
                 />
                 <StatCard
-                  label="Kwota"
+                  label="Stawka · utrzymanie"
+                  value={
+                    summary.hourlyRates.maintenance != null
+                      ? formatPln(summary.hourlyRates.maintenance) + " / h"
+                      : "—"
+                  }
+                />
+                <StatCard
+                  label="Kwota łącznie"
                   value={
                     summary.totalAmount != null
                       ? formatPln(summary.totalAmount)
@@ -877,6 +925,14 @@ export function TimeTrackingApp() {
                           </p>
                         </div>
                         <div>
+                          <p className="text-xs text-muted-foreground mb-0.5">Stawka</p>
+                          <p className="font-semibold tabular-nums">
+                            {block.hourlyRate != null
+                              ? formatPln(block.hourlyRate) + " / h"
+                              : "—"}
+                          </p>
+                        </div>
+                        <div className="col-span-2">
                           <p className="text-xs text-muted-foreground mb-0.5">Kwota</p>
                           <p className="font-semibold tabular-nums">
                             {block.amount != null ? formatPln(block.amount) : "—"}

@@ -9,7 +9,8 @@ import {
 import { eq } from "drizzle-orm";
 
 const patchSchema = z.object({
-  hourlyRate: z.number().min(0).nullable(),
+  hourlyRateDevelopment: z.number().min(0).nullable().optional(),
+  hourlyRateMaintenance: z.number().min(0).nullable().optional(),
 });
 
 export async function PATCH(
@@ -25,16 +26,29 @@ export async function PATCH(
     return badRequest("Invalid input", parsed.error.flatten());
   }
 
+  if (
+    parsed.data.hourlyRateDevelopment === undefined &&
+    parsed.data.hourlyRateMaintenance === undefined
+  ) {
+    return badRequest("Podaj co najmniej jedną stawkę.");
+  }
+
   const [updated] = await db
     .update(projects)
     .set({
-      hourlyRate: parsed.data.hourlyRate,
+      ...(parsed.data.hourlyRateDevelopment !== undefined
+        ? { hourlyRateDevelopment: parsed.data.hourlyRateDevelopment }
+        : {}),
+      ...(parsed.data.hourlyRateMaintenance !== undefined
+        ? { hourlyRateMaintenance: parsed.data.hourlyRateMaintenance }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(projects.id, id))
     .returning({
       id: projects.id,
-      hourlyRate: projects.hourlyRate,
+      hourlyRateDevelopment: projects.hourlyRateDevelopment,
+      hourlyRateMaintenance: projects.hourlyRateMaintenance,
     });
 
   return NextResponse.json({ project: updated });

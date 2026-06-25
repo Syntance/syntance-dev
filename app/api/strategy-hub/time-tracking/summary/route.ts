@@ -9,6 +9,7 @@ import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
 import {
   computeDurationMinutes,
   isWorkType,
+  resolveHourlyRate,
   WORK_TYPES,
   type SummaryResult,
   type WorkType,
@@ -18,10 +19,13 @@ import {
 } from "@/lib/strategy-hub/time-tracking";
 import { and, eq, gte, isNull, lte } from "drizzle-orm";
 
-function emptyWorkTypeMap(): Record<WorkType, { minutes: number; entries: number; rateSum: number; rateMinutes: number }> {
+function emptyWorkTypeMap(): Record<
+  WorkType,
+  { minutes: number; entries: number; amount: number; hasRate: boolean }
+> {
   return {
-    development: { minutes: 0, entries: 0, rateSum: 0, rateMinutes: 0 },
-    maintenance: { minutes: 0, entries: 0, rateSum: 0, rateMinutes: 0 },
+    development: { minutes: 0, entries: 0, amount: 0, hasRate: false },
+    maintenance: { minutes: 0, entries: 0, amount: 0, hasRate: false },
   };
 }
 
@@ -65,18 +69,26 @@ export async function GET(req: NextRequest) {
       endedAt: timeEntries.endedAt,
       durationMinutes: timeEntries.durationMinutes,
       workType: timeEntries.workType,
-      hourlyRate: projects.hourlyRate,
+      hourlyRateDevelopment: projects.hourlyRateDevelopment,
+      hourlyRateMaintenance: projects.hourlyRateMaintenance,
     })
     .from(timeEntries)
     .innerJoin(projects, eq(timeEntries.projectId, projects.id))
     .where(and(...conditions));
 
   let totalMinutes = 0;
+  let totalAmount = 0;
+  let hasAnyAmount = false;
   const byDayMap = new Map<string, { minutes: number; entries: number }>();
   const byMonthMap = new Map<string, { minutes: number; entries: number }>();
   const byWorkTypeMap = emptyWorkTypeMap();
-  let weightedRateSum = 0;
-  let weightedMinutes = 0;
+  const rateWeighted: Record<
+    WorkType,
+    { rateSum: number; rateMinutes: number }
+  > = {
+    development: { rateSum: 0, rateMinutes: 0 },
+    maintenance: { rateSum: 0, rateMinutes: 0 },
+  };
 
   for (const row of rows) {
     const minutes =
@@ -103,38 +115,65 @@ export async function GET(req: NextRequest) {
     const wtBucket = byWorkTypeMap[wt];
     wtBucket.minutes += minutes;
     wtBucket.entries += 1;
-    if (row.hourlyRate != null && minutes > 0) {
-      wtBucket.rateSum += row.hourlyRate * minutes;
-      wtBucket.rateMinutes += minutes;
-    }
 
-    if (row.hourlyRate != null && minutes > 0) {
-      weightedRateSum += row.hourlyRate * minutes;
-      weightedMinutes += minutes;
+    const rate = resolveHourlyRate(wt, {
+      hourlyRateDevelopment: row.hourlyRateDevelopment,
+      hourlyRateMaintenance: row.hourlyRateMaintenance,
+    });
+
+    if (rate != null && minutes > 0) {
+      const entryAmount = (minutes / 60) * rate;
+      wtBucket.amount += entryAmount;
+      wtBucket.hasRate = true;
+      totalAmount += entryAmount;
+      hasAnyAmount = true;
+      rateWeighted[wt].rateSum += rate * minutes;
+      rateWeighted[wt].rateMinutes += minutes;
     }
   }
 
-  const hourlyRate =
-    projectId && rows[0]?.hourlyRate != null
-      ? rows[0].hourlyRate
-      : weightedMinutes > 0
-        ? weightedRateSum / weightedMinutes
-        : null;
+  let hourlyRates: SummaryResult["hourlyRates"];
 
-  const totalAmount =
-    hourlyRate != null ? (totalMinutes / 60) * hourlyRate : null;
+  if (projectId && rows[0]) {
+    hourlyRates = {
+      development: rows[0].hourlyRateDevelopment,
+      maintenance: rows[0].hourlyRateMaintenance,
+    };
+  } else {
+    hourlyRates = {
+      development:
+        rateWeighted.development.rateMinutes > 0
+          ? rateWeighted.development.rateSum /
+            rateWeighted.development.rateMinutes
+          : null,
+      maintenance:
+        rateWeighted.maintenance.rateMinutes > 0
+          ? rateWeighted.maintenance.rateSum /
+            rateWeighted.maintenance.rateMinutes
+          : null,
+    };
+  }
 
   const byWorkType: WorkTypeSummary[] = WORK_TYPES.map((workType) => {
     const bucket = byWorkTypeMap[workType];
     const typeRate =
-      bucket.rateMinutes > 0 ? bucket.rateSum / bucket.rateMinutes : hourlyRate;
-    const amount =
-      typeRate != null ? (bucket.minutes / 60) * typeRate : null;
+      projectId && rows[0]
+        ? resolveHourlyRate(workType, {
+            hourlyRateDevelopment: rows[0].hourlyRateDevelopment,
+            hourlyRateMaintenance: rows[0].hourlyRateMaintenance,
+          })
+        : rateWeighted[workType].rateMinutes > 0
+          ? rateWeighted[workType].rateSum / rateWeighted[workType].rateMinutes
+          : hourlyRates[workType];
+
     return {
       workType,
       minutes: bucket.minutes,
       hours: Math.round((bucket.minutes / 60) * 100) / 100,
-      amount: amount != null ? Math.round(amount * 100) / 100 : null,
+      hourlyRate: typeRate,
+      amount: bucket.hasRate
+        ? Math.round(bucket.amount * 100) / 100
+        : null,
       entryCount: bucket.entries,
     };
   });
@@ -142,8 +181,8 @@ export async function GET(req: NextRequest) {
   const result: SummaryResult = {
     totalMinutes,
     totalHours: Math.round((totalMinutes / 60) * 100) / 100,
-    hourlyRate,
-    totalAmount: totalAmount != null ? Math.round(totalAmount * 100) / 100 : null,
+    hourlyRates,
+    totalAmount: hasAnyAmount ? Math.round(totalAmount * 100) / 100 : null,
     entryCount: rows.length,
     byWorkType,
     byDay: [...byDayMap.entries()]
