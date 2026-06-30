@@ -49,6 +49,8 @@ interface TechItem {
 interface Props {
   projectId: string;
   projectName: string;
+  siteId: string;
+  siteName: string;
   pages: Page[];
   seoKeywords: SeoKeyword[];
   techStack: TechItem[];
@@ -57,16 +59,18 @@ interface Props {
 export function WebsiteDashboard({
   projectId,
   projectName,
+  siteId,
+  siteName,
   pages,
   seoKeywords,
   techStack,
 }: Props) {
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">🌐 Strona</h1>
+        <h1 className="text-xl font-semibold tracking-tight">🌐 Strony WWW</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          {projectName} · {pages.length} podstron · {seoKeywords.length} fraz SEO ·{" "}
+          {projectName} · {siteName} · {pages.length} podstron · {seoKeywords.length} fraz SEO ·{" "}
           {techStack.length} pozycji stacku
         </p>
       </div>
@@ -79,6 +83,7 @@ export function WebsiteDashboard({
         newButtonLabel="Nowa podstrona"
         fields={[
           { name: "projectId", label: "projectId", type: "hidden", defaultValue: projectId },
+          { name: "siteId", label: "siteId", type: "hidden", defaultValue: siteId },
           { name: "name", label: "Nazwa", required: true, placeholder: "np. Home" },
           { name: "urlPath", label: "Ścieżka URL", placeholder: "/" },
           {
@@ -137,6 +142,7 @@ export function WebsiteDashboard({
           await upsertPage({
             ...data,
             projectId: data.projectId as string,
+            siteId: data.siteId as string | undefined,
             name: data.name as string,
             id: data.id as string | undefined,
           });
@@ -152,6 +158,7 @@ export function WebsiteDashboard({
         newButtonLabel="Nowa fraza"
         fields={[
           { name: "projectId", label: "projectId", type: "hidden", defaultValue: projectId },
+          { name: "siteId", label: "siteId", type: "hidden", defaultValue: siteId },
           { name: "phrase", label: "Fraza", required: true, full: true, placeholder: "np. studio webowe wrocław" },
           {
             name: "intent",
@@ -208,6 +215,7 @@ export function WebsiteDashboard({
           await upsertSeoKeyword({
             ...data,
             projectId: data.projectId as string,
+            siteId: data.siteId as string | undefined,
             phrase: data.phrase as string,
             id: data.id as string | undefined,
           });

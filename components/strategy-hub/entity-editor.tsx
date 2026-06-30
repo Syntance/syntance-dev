@@ -28,6 +28,8 @@ export interface FunnelElementData {
   segmentId: string | null;
   channelIds: string[];
   kpiIds: string[];
+  campaignIds: string[];
+  geoAssetIds: string[];
 }
 
 interface FunnelElementEditorProps {
@@ -88,6 +90,8 @@ export function FunnelElementEditor({
     segmentId: lockedSegmentId ?? null,
     channelIds: [],
     kpiIds: [],
+    campaignIds: [],
+    geoAssetIds: [],
     ...initial,
   }));
 
@@ -105,6 +109,8 @@ export function FunnelElementEditor({
       segmentId: lockedSegmentId ?? null,
       channelIds: [],
       kpiIds: [],
+      campaignIds: [],
+      geoAssetIds: [],
       ...initial,
     });
   }, [initial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -294,6 +300,28 @@ export function FunnelElementEditor({
               filterSegmentId={data.segmentId ?? undefined}
               label="KPI powiązane (multi)"
               placeholder="+ Powiąż KPI"
+              className="w-full"
+            />
+
+            <RelationPicker
+              projectId={projectId}
+              entityType="campaign"
+              cardinality="multi"
+              value={data.campaignIds}
+              onChange={(v) => patch("campaignIds", (v as string[]) ?? [])}
+              label="Kampanie — „promowany przez” (multi)"
+              placeholder="+ Powiąż kampanię"
+              className="w-full"
+            />
+
+            <RelationPicker
+              projectId={projectId}
+              entityType="geo"
+              cardinality="multi"
+              value={data.geoAssetIds}
+              onChange={(v) => patch("geoAssetIds", (v as string[]) ?? [])}
+              label="GEO/AEO — „cytowalny w AI przez” (multi)"
+              placeholder="+ Powiąż asset GEO"
               className="w-full"
             />
           </Section>

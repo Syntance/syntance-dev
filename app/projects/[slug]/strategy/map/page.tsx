@@ -18,7 +18,7 @@ interface Props {
   params: Promise<{ slug: string }>;
 }
 
-async function loadMap(slug: string): Promise<StrategyMapData | null> {
+async function loadMap(slug: string): Promise<{ projectId: string; data: StrategyMapData } | null> {
   try {
     const rows = await db
       .select({ id: dbProjects.id })
@@ -35,7 +35,10 @@ async function loadMap(slug: string): Promise<StrategyMapData | null> {
       getProjectVisibility(projectId),
     ]);
 
-    return applyClientVisibility(data, vis.modules);
+    return {
+      projectId,
+      data: applyClientVisibility(data, vis.modules),
+    };
   } catch {
     return null;
   }
@@ -55,8 +58,8 @@ export default async function ClientStrategyMapPage({ params }: Props) {
   }
   if (!project) notFound();
 
-  const data = await loadMap(slug);
-  if (!data) notFound();
+  const loaded = await loadMap(slug);
+  if (!loaded) notFound();
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -71,7 +74,7 @@ export default async function ClientStrategyMapPage({ params }: Props) {
         </p>
       </div>
 
-      <StrategyMap data={data} mode="client" />
+      <StrategyMap projectId={loaded.projectId} data={loaded.data} mode="client" />
     </div>
   );
 }

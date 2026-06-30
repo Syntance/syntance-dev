@@ -9,6 +9,9 @@ import {
   kpis,
   pages,
   userFlows,
+  campaigns,
+  geoAssets,
+  offers,
 } from "@/db/schema";
 import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 
@@ -158,6 +161,48 @@ export async function GET(
         .limit(LIMIT);
       break;
     }
+
+    case "campaign":
+      results = await db
+        .select({ id: campaigns.id, label: campaigns.name, meta: campaigns.stage })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.projectId, projectId),
+            isNull(campaigns.deletedAt),
+            ilike(campaigns.name, like)
+          )
+        )
+        .limit(LIMIT);
+      break;
+
+    case "geo":
+      results = await db
+        .select({ id: geoAssets.id, label: geoAssets.type, meta: geoAssets.status })
+        .from(geoAssets)
+        .where(
+          and(
+            eq(geoAssets.projectId, projectId),
+            isNull(geoAssets.deletedAt),
+            ilike(geoAssets.type, like)
+          )
+        )
+        .limit(LIMIT);
+      break;
+
+    case "offer":
+      results = await db
+        .select({ id: offers.id, label: offers.name, meta: offers.type })
+        .from(offers)
+        .where(
+          and(
+            eq(offers.projectId, projectId),
+            isNull(offers.deletedAt),
+            ilike(offers.name, like)
+          )
+        )
+        .limit(LIMIT);
+      break;
 
     default:
       return badRequest(`Unknown entity type: ${type}`);

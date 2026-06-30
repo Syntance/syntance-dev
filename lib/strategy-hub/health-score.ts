@@ -1,3 +1,4 @@
+import "server-only";
 import { db } from "@/db";
 import {
   businessStrategy,
@@ -13,6 +14,10 @@ import {
   projectMaterials,
 } from "@/db/schema";
 import { eq, isNull, and, count } from "drizzle-orm";
+import { HEALTH_MODULE_KEYS, findModuleRule } from "./rules/defaults";
+import { computeModuleScore, type CriterionContext } from "./rules/evaluate";
+import { resolveRules } from "./rules/resolve";
+import { projectModuleHref } from "./area-routes";
 
 export interface ModuleHealth {
   key: string;
@@ -30,24 +35,41 @@ export interface ProjectHealth {
   modules: ModuleHealth[];
 }
 
-function pct(filled: number, total: number): number {
-  if (total <= 0) return 0;
-  return Math.round((filled / total) * 100);
+function moduleHref(projectId: string, key: (typeof HEALTH_MODULE_KEYS)[number]): string {
+  return projectModuleHref(projectId, key);
 }
 
-function nonEmpty(v: string | null | undefined): boolean {
-  return typeof v === "string" && v.trim().length > 0;
+function buildHint(key: string, ctx: CriterionContext, score: number): string {
+  switch (key) {
+    case "discovery":
+      return `${ctx.qN} pytań · ${ctx.matN} materiałów`;
+    case "brand":
+      return score >= 100 ? "Kompletna" : "Uzupełnij tożsamość";
+    case "business":
+      return score >= 100 ? "Gotowa" : "Uzupełnij sekcje";
+    case "segments":
+      return `${ctx.segN} grup docelowych`;
+    case "funnel":
+      return `${ctx.chN} kanałów`;
+    case "sales":
+      return `${ctx.pitchN} pitchów · ${ctx.scriptN} skryptów`;
+    case "website":
+      return `${ctx.pageN} podstron`;
+    case "kpi":
+      return `${ctx.kpiN} wskaźników`;
+    default:
+      return "";
+  }
 }
 
 /**
  * Liczy „health score" projektu — kompletność danych w każdym module.
- * Każdy moduł ma własną heurystykę (singleton fields vs liczba wierszy),
- * a wynik ogólny to ważona średnia.
+ * Kryteria z silnika reguł (`resolveRules`); domyślnie = dotychczasowy hardcode.
  */
 export async function computeProjectHealth(
   projectId: string
 ): Promise<ProjectHealth> {
-  const base = `/strategy-hub/projects/${projectId}`;
+  const rules = await resolveRules(projectId);
 
   const [
     strategy,
@@ -128,100 +150,42 @@ export async function computeProjectHealth(
       ),
   ]);
 
-  const segN = segCount?.count ?? 0;
-  const chN = chCount?.count ?? 0;
-  const pitchN = pitchCount?.count ?? 0;
-  const scriptN = scriptCount?.count ?? 0;
-  const pageN = pageCount?.count ?? 0;
-  const kpiN = kpiCount?.count ?? 0;
-  const qN = qCount?.count ?? 0;
-  const matN = matCount?.count ?? 0;
+  const ctx: CriterionContext = {
+    segN: segCount?.count ?? 0,
+    chN: chCount?.count ?? 0,
+    pitchN: pitchCount?.count ?? 0,
+    scriptN: scriptCount?.count ?? 0,
+    pageN: pageCount?.count ?? 0,
+    kpiN: kpiCount?.count ?? 0,
+    qN: qCount?.count ?? 0,
+    matN: matCount?.count ?? 0,
+    problemCount: 0,
+    competitorCount: 0,
+    objectionCount: 0,
+    stageCount: 0,
+    elementCount: 0,
+    flowCount: 0,
+    leadMagnetCount: 0,
+    brandIdentity: identity ?? null,
+    brandVisual: visual ?? null,
+    businessStrategy: strategy ?? null,
+  };
 
-  // Discovery — pytania + materiały (cele orientacyjne: 5 pytań, 2 materiały)
-  const discoveryScore = pct(
-    [qN >= 5 ? 1 : qN / 5, matN >= 2 ? 1 : matN / 2].reduce((a, b) => a + b, 0),
-    2
-  );
+  const modules: ModuleHealth[] = HEALTH_MODULE_KEYS.flatMap((key) => {
+    const moduleRule = findModuleRule(rules, key);
+    if (!moduleRule) return [];
 
-  // Marka — kluczowe pola tożsamości + paleta wizualna
-  const brandChecks = [
-    nonEmpty(identity?.missionMd),
-    nonEmpty(identity?.visionMd),
-    nonEmpty(identity?.toneOfVoiceMd ?? null),
-    Boolean(visual),
-  ];
-  const brandScore = pct(brandChecks.filter(Boolean).length, brandChecks.length);
-
-  // Biznes — najważniejsze sekcje markdown
-  const bizChecks = [
-    nonEmpty(strategy?.goalsMd),
-    nonEmpty(strategy?.uvpMd),
-    nonEmpty(strategy?.competitorsMd ?? null),
-    nonEmpty(strategy?.objectionsMd ?? null),
-  ];
-  const bizScore = pct(bizChecks.filter(Boolean).length, bizChecks.length);
-
-  const modules: ModuleHealth[] = [
-    {
-      key: "discovery",
-      label: "Discovery",
-      score: discoveryScore,
-      hint: `${qN} pytań · ${matN} materiałów`,
-      href: `${base}/discovery`,
-    },
-    {
-      key: "brand",
-      label: "Marka",
-      score: brandScore,
-      hint: brandScore >= 100 ? "Kompletna" : "Uzupełnij tożsamość",
-      href: `${base}/brand`,
-    },
-    {
-      key: "business",
-      label: "Strategia biznesowa",
-      score: bizScore,
-      hint: bizScore >= 100 ? "Gotowa" : "Uzupełnij sekcje",
-      href: `${base}/business`,
-    },
-    {
-      key: "segments",
-      label: "Segmenty",
-      score: segN === 0 ? 0 : segN >= 3 ? 100 : pct(segN, 3),
-      hint: `${segN} grup docelowych`,
-      href: `${base}/segments`,
-    },
-    {
-      key: "funnel",
-      label: "Lejek i kanały",
-      score: chN === 0 ? 0 : chN >= 4 ? 100 : pct(chN, 4),
-      hint: `${chN} kanałów`,
-      href: `${base}/funnel`,
-    },
-    {
-      key: "sales",
-      label: "Sprzedaż i copy",
-      score: pct(
-        [pitchN > 0 ? 1 : 0, scriptN > 0 ? 1 : 0].reduce((a, b) => a + b, 0),
-        2
-      ),
-      hint: `${pitchN} pitchów · ${scriptN} skryptów`,
-      href: `${base}/sales`,
-    },
-    {
-      key: "website",
-      label: "Strona",
-      score: pageN === 0 ? 0 : pageN >= 4 ? 100 : pct(pageN, 4),
-      hint: `${pageN} podstron`,
-      href: `${base}/website`,
-    },
-    {
-      key: "kpi",
-      label: "KPI",
-      score: kpiN === 0 ? 0 : kpiN >= 4 ? 100 : pct(kpiN, 4),
-      hint: `${kpiN} wskaźników`,
-      href: `${base}/kpi`,
-    },
-  ];
+    const score = computeModuleScore(moduleRule, ctx);
+    return [
+      {
+        key,
+        label: moduleRule.label,
+        score,
+        hint: buildHint(key, ctx, score),
+        href: moduleHref(projectId, key),
+      },
+    ];
+  });
 
   const overall = Math.round(
     modules.reduce((acc, m) => acc + m.score, 0) / modules.length

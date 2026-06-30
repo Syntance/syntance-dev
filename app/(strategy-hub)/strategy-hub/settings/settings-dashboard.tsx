@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Sun, Moon, Leaf, Monitor, Save, CheckCircle2, Sparkles, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -184,6 +185,24 @@ export function SettingsDashboard() {
             />
           ))}
         </div>
+      </section>
+
+      {/* ── Reguły strategii ── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="size-7 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center">
+            <Sparkles className="size-3.5 text-brand" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Reguły strategii</h2>
+            <p className="text-xs text-muted-foreground">
+              Silnik reguł — moduły, mapa, graf wpływu, alerty
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/strategy-hub/settings/rules">Edytuj reguły (5 zakładek)</Link>
+        </Button>
       </section>
 
       {/* ── Zasady AI ── */}

@@ -41,7 +41,7 @@ export async function upsertSegment(
   } else {
     await db.insert(segments).values(parsed);
   }
-  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/execution/channels`);
 }
 
 export async function deleteSegment(id: string, projectId: string) {
@@ -49,7 +49,7 @@ export async function deleteSegment(id: string, projectId: string) {
     .update(segments)
     .set({ deletedAt: new Date() })
     .where(eq(segments.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
 }
 
 // ─── Purchase stages ─────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ export async function upsertStage(
   } else {
     await db.insert(purchaseStages).values(parsed);
   }
-  revalidatePath(`/strategy-hub/projects/${projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
 }
 
 export async function deleteStage(id: string, projectId: string) {
@@ -83,7 +83,7 @@ export async function deleteStage(id: string, projectId: string) {
     .update(purchaseStages)
     .set({ deletedAt: new Date() })
     .where(eq(purchaseStages.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
 }
 
 // ─── Funnel elements ─────────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ export async function upsertFunnelElement(
   } else {
     await db.insert(funnelElements).values(parsed);
   }
-  revalidatePath(`/strategy-hub/projects/${projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
 }
 
 export async function deleteFunnelElement(id: string, projectId: string) {
@@ -121,7 +121,7 @@ export async function deleteFunnelElement(id: string, projectId: string) {
     .update(funnelElements)
     .set({ deletedAt: new Date() })
     .where(eq(funnelElements.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
 }
 
 // ─── KPIs ────────────────────────────────────────────────────────────────────
@@ -149,12 +149,12 @@ export async function upsertKpi(
   } else {
     await db.insert(kpis).values(insertData);
   }
-  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/execution/channels`);
 }
 
 export async function deleteKpi(id: string, projectId: string) {
   await db.update(kpis).set({ deletedAt: new Date() }).where(eq(kpis.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
 }
 
 // ─── User flows ──────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ export async function upsertUserFlow(
   } else {
     await db.insert(userFlows).values(insertData);
   }
-  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/execution/channels`);
 }
 
 export async function deleteUserFlow(id: string, projectId: string) {
@@ -190,13 +190,14 @@ export async function deleteUserFlow(id: string, projectId: string) {
     .update(userFlows)
     .set({ deletedAt: new Date() })
     .where(eq(userFlows.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/marketing`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
 }
 
 // ─── Pages ───────────────────────────────────────────────────────────────────
 
 const pageSchema = z.object({
   projectId: z.string().uuid(),
+  siteId: z.string().uuid().optional().nullable(),
   name: z.string().min(1),
   urlPath: z.string().optional(),
   type: z.string().optional(),
@@ -211,23 +212,28 @@ export async function upsertPage(
   data: z.infer<typeof pageSchema> & { id?: string }
 ) {
   const parsed = pageSchema.parse(data);
+  const insertData = {
+    ...parsed,
+    siteId: parsed.siteId || null,
+  };
   if (data.id) {
-    await db.update(pages).set(parsed).where(eq(pages.id, data.id));
+    await db.update(pages).set(insertData).where(eq(pages.id, data.id));
   } else {
-    await db.insert(pages).values(parsed);
+    await db.insert(pages).values(insertData);
   }
-  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/website`);
+  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/execution/sites`);
 }
 
 export async function deletePage(id: string, projectId: string) {
   await db.update(pages).set({ deletedAt: new Date() }).where(eq(pages.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/website`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/sites`);
 }
 
 // ─── SEO keywords ────────────────────────────────────────────────────────────
 
 const seoSchema = z.object({
   projectId: z.string().uuid(),
+  siteId: z.string().uuid().optional().nullable(),
   phrase: z.string().min(1),
   intent: z.string().optional(),
   volume: z.coerce.number().int().optional().nullable(),
@@ -241,12 +247,16 @@ export async function upsertSeoKeyword(
   data: z.infer<typeof seoSchema> & { id?: string }
 ) {
   const parsed = seoSchema.parse(data);
+  const insertData = {
+    ...parsed,
+    siteId: parsed.siteId || null,
+  };
   if (data.id) {
-    await db.update(seoKeywords).set(parsed).where(eq(seoKeywords.id, data.id));
+    await db.update(seoKeywords).set(insertData).where(eq(seoKeywords.id, data.id));
   } else {
-    await db.insert(seoKeywords).values(parsed);
+    await db.insert(seoKeywords).values(insertData);
   }
-  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/website`);
+  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/execution/sites`);
 }
 
 export async function deleteSeoKeyword(id: string, projectId: string) {
@@ -254,7 +264,7 @@ export async function deleteSeoKeyword(id: string, projectId: string) {
     .update(seoKeywords)
     .set({ deletedAt: new Date() })
     .where(eq(seoKeywords.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/website`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/sites`);
 }
 
 // ─── Tech stack ──────────────────────────────────────────────────────────────
@@ -279,7 +289,7 @@ export async function upsertTechStack(
   } else {
     await db.insert(techStack).values(parsed);
   }
-  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/website`);
+  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/execution/sites`);
 }
 
 export async function deleteTechStack(id: string, projectId: string) {
@@ -287,7 +297,7 @@ export async function deleteTechStack(id: string, projectId: string) {
     .update(techStack)
     .set({ deletedAt: new Date() })
     .where(eq(techStack.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/website`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/execution/sites`);
 }
 
 // ─── Hosting services ────────────────────────────────────────────────────────
@@ -312,12 +322,12 @@ export async function upsertHosting(
   } else {
     await db.insert(hostingServices).values(parsed);
   }
-  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/admin`);
+  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/project-settings/access`);
 }
 
 export async function deleteHosting(id: string, projectId: string) {
   await db.delete(hostingServices).where(eq(hostingServices.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/admin`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/project-settings/access`);
 }
 
 // ─── Domains ─────────────────────────────────────────────────────────────────
@@ -344,12 +354,12 @@ export async function upsertDomain(
   } else {
     await db.insert(domains).values(insertData);
   }
-  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/admin`);
+  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/project-settings/access`);
 }
 
 export async function deleteDomain(id: string, projectId: string) {
   await db.delete(domains).where(eq(domains.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/admin`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/project-settings/access`);
 }
 
 // ─── Client resources ────────────────────────────────────────────────────────
@@ -372,12 +382,12 @@ export async function upsertResource(
   } else {
     await db.insert(clientResources).values(parsed);
   }
-  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/admin`);
+  revalidatePath(`/strategy-hub/projects/${parsed.projectId}/project-settings/access`);
 }
 
 export async function deleteResource(id: string, projectId: string) {
   await db.delete(clientResources).where(eq(clientResources.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/admin`);
+  revalidatePath(`/strategy-hub/projects/${projectId}/project-settings/access`);
 }
 
 // ─── Suppress unused warnings on imports ─────────────────────────────────────

@@ -65,6 +65,8 @@ interface FunnelElementRow {
   stagePhase: string | null;
   channelIds: string[];
   kpiIds: string[];
+  campaignIds?: string[];
+  geoAssetIds?: string[];
 }
 interface Channel {
   id: string;
@@ -129,7 +131,7 @@ export function MarketingDashboard({
     setEditorOpen(true);
   }
 
-  function openEdit(el: FunnelElementRow) {
+  async function openEdit(el: FunnelElementRow) {
     setEditingElement({
       id: el.id,
       name: el.name,
@@ -143,8 +145,30 @@ export function MarketingDashboard({
       segmentId: el.segmentId,
       channelIds: el.channelIds,
       kpiIds: el.kpiIds,
+      campaignIds: el.campaignIds ?? [],
+      geoAssetIds: el.geoAssetIds ?? [],
     });
     setEditorOpen(true);
+
+    // Hydrate wszystkie relacje (w tym kampanie/GEO) ze świeżego stanu serwera.
+    try {
+      const res = await fetch(
+        `/api/strategy-hub/projects/${projectId}/funnel-elements/${el.id}/relations`
+      );
+      if (res.ok) {
+        const rel = (await res.json()) as {
+          channelIds: string[];
+          kpiIds: string[];
+          campaignIds: string[];
+          geoAssetIds: string[];
+        };
+        setEditingElement((prev) =>
+          prev && prev.id === el.id ? { ...prev, ...rel } : prev
+        );
+      }
+    } catch {
+      // zostają wartości z props
+    }
   }
 
   async function handleSaveFunnelElement(data: FunnelElementData) {
@@ -172,6 +196,8 @@ export function MarketingDashboard({
           body: JSON.stringify({
             channelIds: data.channelIds,
             kpiIds: data.kpiIds,
+            campaignIds: data.campaignIds,
+            geoAssetIds: data.geoAssetIds,
           }),
         }
       );
@@ -187,7 +213,7 @@ export function MarketingDashboard({
 
   return (
     <>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="w-full min-w-0 space-y-6">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
             📊 Strategia marketingowa

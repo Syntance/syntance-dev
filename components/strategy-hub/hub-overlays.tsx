@@ -50,6 +50,8 @@ import {
   useProject,
   useProjectIdFromPath,
 } from "@/components/strategy-hub/project-context";
+import { useHubHotkeys } from "@/components/strategy-hub/use-hotkeys";
+import { CompareView } from "@/components/strategy-hub/compare-view";
 
 const ChatPanel = dynamic(
   () =>
@@ -302,25 +304,29 @@ function AiSidekick({
 }
 
 export function HubOverlays({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const projectIdFromPath = useProjectIdFromPath();
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [sidekickOpen, setSidekickOpen] = React.useState(false);
+  const [compareOpen, setCompareOpen] = React.useState(false);
 
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      const key = e.key.toLowerCase();
-      if (key === "k") {
-        e.preventDefault();
-        setPaletteOpen((v) => !v);
-      } else if (key === "j") {
-        e.preventDefault();
-        setSidekickOpen((v) => !v);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  useHubHotkeys(
+    React.useMemo(
+      () => ({
+        onPalette: () => setPaletteOpen((v) => !v),
+        onSidekick: () => setSidekickOpen((v) => !v),
+        onReview: () => {
+          if (projectIdFromPath) {
+            router.push(
+              `/strategy-hub/projects/${projectIdFromPath}/measurement/review`
+            );
+          }
+        },
+        onCompare: () => setCompareOpen((v) => !v),
+      }),
+      [projectIdFromPath, router]
+    )
+  );
 
   const api = React.useMemo<OverlayApi>(
     () => ({
@@ -339,6 +345,22 @@ export function HubOverlays({ children }: { children: React.ReactNode }) {
         onOpenSidekick={() => setSidekickOpen(true)}
       />
       <AiSidekick open={sidekickOpen} onOpenChange={setSidekickOpen} />
+      <CompareView
+        open={compareOpen}
+        onClose={() => setCompareOpen(false)}
+        leftLabel="Stan bieżący"
+        rightLabel="Wersja referencyjna"
+        left={
+          <p className="text-sm text-muted-foreground">
+            Wybierz encję w module (segment, KPI, decyzja), aby porównać wersje z timeline.
+          </p>
+        }
+        right={
+          <p className="text-sm text-muted-foreground">
+            Druga kolumna — snapshot z changeHistory (przywracanie w VersionTimeline).
+          </p>
+        }
+      />
     </OverlayContext.Provider>
   );
 }

@@ -18,7 +18,7 @@ interface ListViewProps {
 /** Widok 1 — outline drzewa modułów strategicznych ze statusami. */
 export function ListView({ nodes, mode }: ListViewProps) {
   return (
-    <div className="mx-auto max-w-3xl divide-y divide-border rounded-2xl border border-border bg-card">
+    <div className="w-full min-w-0 divide-y divide-border rounded-2xl border border-border bg-card">
       {nodes.map((node) => (
         <NodeRow key={node.key} node={node} mode={mode} />
       ))}

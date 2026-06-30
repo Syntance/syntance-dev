@@ -484,7 +484,7 @@ export function TimeTrackingApp() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <div>
         <p className="text-xs text-muted-foreground mb-1">Custom Apps</p>
         <h1 className="text-2xl font-semibold tracking-tight">Liczenie godzin</h1>

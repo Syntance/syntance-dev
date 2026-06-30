@@ -10,6 +10,7 @@ import {
   jsonb,
   index,
   primaryKey,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -467,6 +468,25 @@ export const kpiSnapshots = pgTable(
   (t) => [index("kpi_snapshots_kpi_idx").on(t.kpiId)]
 );
 
+// ─── Multi-site (Strategy Hub 2.0) ───────────────────────────────────────────
+
+export const sites = pgTable(
+  "sites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    domain: varchar("domain", { length: 255 }),
+    type: varchar("type", { length: 100 }),
+    status: varchar("status", { length: 50 }).default("active"),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("sites_project_idx").on(t.projectId)]
+);
+
 // ─── Strategia strony ────────────────────────────────────────────────────────
 
 export const pages = pgTable(
@@ -476,6 +496,7 @@ export const pages = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
     name: varchar("name", { length: 255 }).notNull(),
     urlPath: varchar("url_path", { length: 255 }),
     type: varchar("type", { length: 100 }),
@@ -498,6 +519,7 @@ export const seoKeywords = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
     phrase: varchar("phrase", { length: 500 }).notNull(),
     intent: varchar("intent", { length: 100 }),
     volume: integer("volume"),
@@ -1065,6 +1087,7 @@ export const navItems = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
     label: varchar("label", { length: 255 }).notNull(),
     url: varchar("url", { length: 500 }),
     pageId: uuid("page_id").references(() => pages.id, { onDelete: "set null" }),
@@ -1101,6 +1124,7 @@ export const siteAudits = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
     type: varchar("type", { length: 50 }),
     date: timestamp("date").defaultNow().notNull(),
     summaryMd: text("summary_md"),
@@ -1241,6 +1265,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   salesPitches: many(salesPitches),
   salesScripts: many(salesScripts),
   leadMagnets: many(leadMagnets),
+  sites: many(sites),
   navItems: many(navItems),
   siteMaintenanceCosts: many(siteMaintenanceCosts),
   siteAudits: many(siteAudits),
@@ -1402,10 +1427,25 @@ export const userFlowPagesRelations = relations(userFlowPages, ({ one }) => ({
   }),
 }));
 
+export const sitesRelations = relations(sites, ({ one, many }) => ({
+  project: one(projects, {
+    fields: [sites.projectId],
+    references: [projects.id],
+  }),
+  pages: many(pages),
+  navItems: many(navItems),
+  seoKeywords: many(seoKeywords),
+  siteAudits: many(siteAudits),
+}));
+
 export const pagesRelations = relations(pages, ({ one, many }) => ({
   project: one(projects, {
     fields: [pages.projectId],
     references: [projects.id],
+  }),
+  site: one(sites, {
+    fields: [pages.siteId],
+    references: [sites.id],
   }),
   sections: many(pageSections),
   userFlows: many(userFlowPages),
@@ -1572,6 +1612,10 @@ export const navItemsRelations = relations(navItems, ({ one }) => ({
     fields: [navItems.projectId],
     references: [projects.id],
   }),
+  site: one(sites, {
+    fields: [navItems.siteId],
+    references: [sites.id],
+  }),
   page: one(pages, {
     fields: [navItems.pageId],
     references: [pages.id],
@@ -1592,6 +1636,10 @@ export const siteAuditsRelations = relations(siteAudits, ({ one, many }) => ({
   project: one(projects, {
     fields: [siteAudits.projectId],
     references: [projects.id],
+  }),
+  site: one(sites, {
+    fields: [siteAudits.siteId],
+    references: [sites.id],
   }),
   findings: many(siteAuditFindings),
 }));
@@ -1642,3 +1690,208 @@ export const timeEntriesRelations = relations(timeEntries, ({ one }) => ({
     references: [projects.id],
   }),
 }));
+
+// ─── Strategy Hub 2.0 — rejestr decyzji ────────────────────────────────────
+
+export const strategicDecisions = pgTable(
+  "strategic_decisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
+    title: varchar("title", { length: 255 }).notNull(),
+    reasonMd: text("reason_md"),
+    evidenceMd: text("evidence_md"),
+    status: varchar("status", { length: 20 }).default("active"),
+    authorType: varchar("author_type", { length: 10 }).default("human"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("strategic_decisions_project_idx").on(t.projectId)]
+);
+
+export const decisionLinks = pgTable(
+  "decision_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    decisionId: uuid("decision_id")
+      .notNull()
+      .references(() => strategicDecisions.id, { onDelete: "cascade" }),
+    entityType: varchar("entity_type", { length: 50 }).notNull(),
+    entityId: uuid("entity_id").notNull(),
+    role: varchar("role", { length: 10 }).notNull(),
+  },
+  (t) => [index("decision_links_decision_idx").on(t.decisionId)]
+);
+
+// ─── Strategy Hub 2.0 — kampanie, GEO, oferty ──────────────────────────────
+
+export const campaigns = pgTable(
+  "campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
+    segmentId: uuid("segment_id").references(() => segments.id, {
+      onDelete: "set null",
+    }),
+    landingPageId: uuid("landing_page_id").references(() => pages.id, {
+      onDelete: "set null",
+    }),
+    name: varchar("name", { length: 255 }).notNull(),
+    goal: text("goal"),
+    stage: varchar("stage", { length: 20 }),
+    channels: jsonb("channels"),
+    budgetPlan: integer("budget_plan"),
+    budgetSpent: integer("budget_spent"),
+    periodStart: timestamp("period_start"),
+    periodEnd: timestamp("period_end"),
+    creatives: jsonb("creatives"),
+    utm: jsonb("utm"),
+    status: varchar("status", { length: 50 }).default("planned"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("campaigns_project_idx").on(t.projectId)]
+);
+
+export const funnelElementCampaigns = pgTable(
+  "funnel_element_campaigns",
+  {
+    funnelElementId: uuid("funnel_element_id")
+      .notNull()
+      .references(() => funnelElements.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.funnelElementId, t.campaignId] }),
+  ]
+);
+
+export const geoAssets = pgTable(
+  "geo_assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id").references(() => sites.id, { onDelete: "set null" }),
+    pageId: uuid("page_id").references(() => pages.id, { onDelete: "set null" }),
+    type: varchar("type", { length: 50 }).notNull(),
+    checklist: jsonb("checklist"),
+    status: varchar("status", { length: 50 }).default("todo"),
+    notesMd: text("notes_md"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("geo_assets_project_idx").on(t.projectId)]
+);
+
+export const geoQueries = pgTable(
+  "geo_queries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    targetPageId: uuid("target_page_id").references(() => pages.id, {
+      onDelete: "set null",
+    }),
+    query: text("query").notNull(),
+    intent: varchar("intent", { length: 100 }),
+    stage: varchar("stage", { length: 20 }),
+    citationStatus: jsonb("citation_status"),
+    status: varchar("status", { length: 50 }).default("monitoring"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("geo_queries_project_idx").on(t.projectId)]
+);
+
+export const funnelElementGeo = pgTable(
+  "funnel_element_geo",
+  {
+    funnelElementId: uuid("funnel_element_id")
+      .notNull()
+      .references(() => funnelElements.id, { onDelete: "cascade" }),
+    geoAssetId: uuid("geo_asset_id")
+      .notNull()
+      .references(() => geoAssets.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.funnelElementId, t.geoAssetId] })]
+);
+
+export const offers = pgTable(
+  "offers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    type: varchar("type", { length: 20 }).default("product"),
+    pricingMd: text("pricing_md"),
+    uvpMd: text("uvp_md"),
+    status: varchar("status", { length: 50 }).default("active"),
+    orderIdx: integer("order_idx").default(0),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("offers_project_idx").on(t.projectId)]
+);
+
+export const offerSegments = pgTable(
+  "offer_segments",
+  {
+    offerId: uuid("offer_id")
+      .notNull()
+      .references(() => offers.id, { onDelete: "cascade" }),
+    segmentId: uuid("segment_id")
+      .notNull()
+      .references(() => segments.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.offerId, t.segmentId] })]
+);
+
+// ─── Strategy Hub 2.0 — komentarze per encja ───────────────────────────────
+
+export const entityComments = pgTable(
+  "entity_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    entityType: varchar("entity_type", { length: 50 }).notNull(),
+    entityId: uuid("entity_id").notNull(),
+    authorType: varchar("author_type", { length: 10 }).default("team"),
+    authorName: varchar("author_name", { length: 255 }),
+    body: text("body").notNull(),
+    mentions: jsonb("mentions"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at"),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("entity_comments_entity_idx").on(t.entityType, t.entityId)]
+);
+
+// ─── Strategy Hub 2.0 — silnik reguł ───────────────────────────────────────
+
+export const strategyRuleSets = pgTable(
+  "strategy_rule_sets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** 'global' = domyślne reguły; w przeciwnym razie nadpisanie per projekt (projectId). */
+    scope: varchar("scope", { length: 64 }).notNull(),
+    config: jsonb("config").notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("strategy_rule_sets_scope_uq").on(t.scope)]
+);

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Sanity Studio build output — wendorowane bundla, nie lintujemy.
+    "dist/**",
   ]),
 ]);
 

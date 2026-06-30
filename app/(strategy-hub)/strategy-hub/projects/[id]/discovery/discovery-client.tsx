@@ -176,7 +176,7 @@ export function DiscoveryClient({ projectId, projectName }: Props) {
   const tab = TABS.find((t) => t.key === active) ?? TABS[0];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <header>
         <p className="text-xs font-medium text-muted-foreground">{projectName}</p>
         <h1 className="text-xl font-semibold tracking-tight">Discovery</h1>

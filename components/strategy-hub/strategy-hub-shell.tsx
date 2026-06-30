@@ -43,16 +43,33 @@ function ProjectMetaLoader({ children }: { children: React.ReactNode }) {
   return <ProjectProvider project={project}>{children}</ProjectProvider>;
 }
 
+function useStrategyHubViewport() {
+  React.useEffect(() => {
+    document.documentElement.classList.add("strategy-hub-viewport");
+    document.body.classList.add("strategy-hub-viewport");
+    return () => {
+      document.documentElement.classList.remove("strategy-hub-viewport");
+      document.body.classList.remove("strategy-hub-viewport");
+    };
+  }, []);
+}
+
 export function StrategyHubShell({ children }: { children: React.ReactNode }) {
+  useStrategyHubViewport();
+
   return (
     <ThemeProvider>
       <ProjectMetaLoader>
         <HubOverlays>
-          <SidebarProvider>
+          <SidebarProvider
+            disableMobile
+            defaultOpen={false}
+            className="fixed inset-0 flex h-svh w-screen overflow-hidden bg-background"
+          >
             <NavSidebar />
-            <div className="flex flex-1 flex-col min-h-screen min-w-0">
+            <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
               <StrategyHubHeader />
-              <main className="flex-1 p-6">{children}</main>
+              <main className="min-h-0 min-w-0 w-full flex-1 overflow-y-auto p-6">{children}</main>
             </div>
           </SidebarProvider>
         </HubOverlays>

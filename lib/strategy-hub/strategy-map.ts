@@ -10,6 +10,10 @@ import {
   funnelElements,
   funnelElementChannels,
   funnelElementKpis,
+  funnelElementCampaigns,
+  funnelElementGeo,
+  campaigns,
+  geoAssets,
   userFlows,
   userFlowPages,
   channels,
@@ -35,11 +39,32 @@ import {
   type InfluenceElement,
   normalizePhase,
   statusFromScore,
+  isStrategyNodeKey,
 } from "./strategy-map-types";
+import { findModuleRule } from "./rules/defaults";
+import { computeModuleScore, type CriterionContext } from "./rules/evaluate";
+import { resolveRules } from "./rules/resolve";
+import { projectModuleHref } from "./area-routes";
+import type { Correlation, RulesConfig } from "./rules/types";
 
-function pct(filled: number, total: number): number {
-  if (total <= 0) return 0;
-  return Math.round((filled / total) * 100);
+function mapNodeScore(rules: RulesConfig, key: string, ctx: CriterionContext): number {
+  const moduleRule = findModuleRule(rules, key);
+  if (!moduleRule) return 0;
+  return computeModuleScore(moduleRule, ctx);
+}
+
+function correlationMeta(
+  correlations: Correlation[],
+  sourceType: string,
+  targetType: string
+): { label: string; strength?: InfluenceLink["strength"] } {
+  const match = correlations.find(
+    (c) => c.sourceType === sourceType && c.targetType === targetType
+  );
+  return {
+    label: match?.label ?? "",
+    strength: match?.defaultStrength,
+  };
 }
 
 function nonEmpty(v: string | null | undefined): boolean {
@@ -61,7 +86,7 @@ function clip(v: string | null | undefined, n = 90): string | null {
 export async function getStrategyMapData(
   projectId: string
 ): Promise<StrategyMapData> {
-  const base = `/strategy-hub/projects/${projectId}`;
+  const rules = await resolveRules(projectId);
   const live = and(eq(segments.projectId, projectId), isNull(segments.deletedAt));
 
   const [
@@ -85,6 +110,10 @@ export async function getStrategyMapData(
     kpiRows,
     elChannelRows,
     elKpiRows,
+    elCampaignRows,
+    elGeoRows,
+    campaignRows,
+    geoAssetRows,
   ] = await Promise.all([
     db
       .select()
@@ -183,71 +212,53 @@ export async function getStrategyMapData(
       .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt))),
     db.select().from(funnelElementChannels),
     db.select().from(funnelElementKpis),
+    db.select().from(funnelElementCampaigns),
+    db.select().from(funnelElementGeo),
+    db
+      .select({ id: campaigns.id, name: campaigns.name })
+      .from(campaigns)
+      .where(
+        and(eq(campaigns.projectId, projectId), isNull(campaigns.deletedAt))
+      ),
+    db
+      .select({ id: geoAssets.id, type: geoAssets.type })
+      .from(geoAssets)
+      .where(
+        and(eq(geoAssets.projectId, projectId), isNull(geoAssets.deletedAt))
+      ),
   ]);
 
   const uvpData = uvpRow[0];
   const copyData = copyRow[0];
-
-  // ── Węzeł 🎯 Fundament ──────────────────────────────────────────────────────
-  const fundamentChecks = [
-    problemRows.length > 0,
-    nonEmpty(uvpData?.coreUvpMd),
-    competitorRows.length > 0,
-    objectionRows.length > 0,
-  ];
-  const fundamentScore = pct(
-    fundamentChecks.filter(Boolean).length,
-    fundamentChecks.length
-  );
-
-  // ── Węzeł 👥 Segmenty ───────────────────────────────────────────────────────
-  const segmentScore =
-    segmentRows.length === 0
-      ? 0
-      : segmentRows.length >= 3
-        ? 100
-        : pct(segmentRows.length, 3);
-
-  // ── Węzeł 📣 Lejek ──────────────────────────────────────────────────────────
-  const lejekChecks = [
-    stageRows.length > 0,
-    elementRows.length > 0,
-    flowRows.length > 0,
-  ];
-  const lejekScore = pct(lejekChecks.filter(Boolean).length, lejekChecks.length);
-
-  // ── Węzeł 📡 Kanały ─────────────────────────────────────────────────────────
-  const kanalyScore =
-    channelRows.length === 0
-      ? 0
-      : channelRows.length >= 4
-        ? 100
-        : pct(channelRows.length, 4);
-
-  // ── Węzeł ✍️ Przekaz ────────────────────────────────────────────────────────
   const hasCopy = nonEmpty(copyData?.principlesMd) || nonEmpty(copyData?.doMd);
-  const przekazChecks = [
-    pitchRows.length > 0,
-    scriptRows.length > 0,
-    leadMagnetRows.length > 0,
-    hasCopy,
-  ];
-  const przekazScore = pct(
-    przekazChecks.filter(Boolean).length,
-    przekazChecks.length
-  );
 
-  // ── Węzeł 🌐 Strona ─────────────────────────────────────────────────────────
-  const stronaScore =
-    pageRows.length === 0
-      ? 0
-      : pageRows.length >= 4
-        ? 100
-        : pct(pageRows.length, 4);
+  const evalCtx: CriterionContext = {
+    segN: segmentRows.length,
+    chN: channelRows.length,
+    pitchN: pitchRows.length,
+    scriptN: scriptRows.length,
+    pageN: pageRows.length,
+    kpiN: kpiRows.length,
+    qN: 0,
+    matN: 0,
+    problemCount: problemRows.length,
+    competitorCount: competitorRows.length,
+    objectionCount: objectionRows.length,
+    stageCount: stageRows.length,
+    elementCount: elementRows.length,
+    flowCount: flowRows.length,
+    leadMagnetCount: leadMagnetRows.length,
+    uvp: uvpData ?? null,
+    copyGuidelines: copyData ?? null,
+  };
 
-  // ── Węzeł 📊 KPI ────────────────────────────────────────────────────────────
-  const kpiScore =
-    kpiRows.length === 0 ? 0 : kpiRows.length >= 4 ? 100 : pct(kpiRows.length, 4);
+  const fundamentScore = mapNodeScore(rules, "fundament", evalCtx);
+  const segmentScore = mapNodeScore(rules, "segmenty", evalCtx);
+  const lejekScore = mapNodeScore(rules, "lejek", evalCtx);
+  const kanalyScore = mapNodeScore(rules, "kanaly", evalCtx);
+  const przekazScore = mapNodeScore(rules, "przekaz", evalCtx);
+  const stronaScore = mapNodeScore(rules, "strona", evalCtx);
+  const kpiScore = mapNodeScore(rules, "kpi", evalCtx);
 
   const toLeaves = <T,>(
     rows: T[],
@@ -275,7 +286,7 @@ export async function getStrategyMapData(
       icon: "🎯",
       status: statusFromScore(fundamentScore),
       score: fundamentScore,
-      href: `${base}/business`,
+      href: projectModuleHref(projectId, "business"),
       subcategories: [
         {
           id: "problemy",
@@ -323,7 +334,7 @@ export async function getStrategyMapData(
       icon: "👥",
       status: statusFromScore(segmentScore),
       score: segmentScore,
-      href: `${base}/segments`,
+      href: projectModuleHref(projectId, "segments"),
       subcategories: segmentRows.map((s) => ({
         id: s.id,
         label: s.name,
@@ -337,7 +348,7 @@ export async function getStrategyMapData(
       icon: "📣",
       status: statusFromScore(lejekScore),
       score: lejekScore,
-      href: `${base}/funnel`,
+      href: projectModuleHref(projectId, "funnel"),
       subcategories: [
         {
           id: "etapy",
@@ -377,7 +388,7 @@ export async function getStrategyMapData(
       icon: "📡",
       status: statusFromScore(kanalyScore),
       score: kanalyScore,
-      href: `${base}/funnel`,
+      href: `/strategy-hub/projects/${projectId}/execution/channels`,
       subcategories: [
         {
           id: "lista-kanalow",
@@ -397,7 +408,7 @@ export async function getStrategyMapData(
       icon: "✍️",
       status: statusFromScore(przekazScore),
       score: przekazScore,
-      href: `${base}/sales`,
+      href: projectModuleHref(projectId, "sales"),
       subcategories: [
         {
           id: "pitche",
@@ -433,7 +444,7 @@ export async function getStrategyMapData(
       icon: "🌐",
       status: statusFromScore(stronaScore),
       score: stronaScore,
-      href: `${base}/website`,
+      href: projectModuleHref(projectId, "website"),
       subcategories: [
         {
           id: "podstrony",
@@ -469,7 +480,7 @@ export async function getStrategyMapData(
       icon: "📊",
       status: statusFromScore(kpiScore),
       score: kpiScore,
-      href: `${base}/kpi`,
+      href: projectModuleHref(projectId, "kpi"),
       subcategories: [
         {
           id: "wskazniki",
@@ -485,44 +496,37 @@ export async function getStrategyMapData(
     },
   ];
 
-  // Krawędzie zależności (spec):
-  // Fundament→Segmenty→Lejek→{Kanały,Przekaz}; Segmenty→Strona; Lejek→Strona;
-  // {Kanały,Strona}→KPI.
-  const edges: StrategyEdge[] = [
-    { from: "fundament", to: "segmenty" },
-    { from: "segmenty", to: "lejek" },
-    { from: "lejek", to: "kanaly" },
-    { from: "lejek", to: "przekaz" },
-    { from: "segmenty", to: "strona" },
-    { from: "lejek", to: "strona" },
-    { from: "kanaly", to: "kpi" },
-    { from: "strona", to: "kpi" },
-  ];
+  const edges: StrategyEdge[] = [];
+  for (const c of rules.connections) {
+    if (isStrategyNodeKey(c.from) && isStrategyNodeKey(c.to)) {
+      edges.push({ from: c.from, to: c.to });
+    }
+  }
 
-  const presentationOrder: StrategyNodeKey[] = [
-    "fundament",
-    "segmenty",
-    "lejek",
-    "kanaly",
-    "przekaz",
-    "strona",
-    "kpi",
-  ];
+  const presentationOrder: StrategyNodeKey[] =
+    rules.presentationOrder.filter(isStrategyNodeKey);
 
-  const influence = buildInfluenceGraph({
-    segmentRows,
-    stageRows,
-    elementRows,
-    flowRows,
-    flowPageRows,
-    channelRows,
-    kpiRows,
-    pageRows,
-    seoRows,
-    objectionRows,
-    elChannelRows,
-    elKpiRows,
-  });
+  const influence = buildInfluenceGraph(
+    {
+      segmentRows,
+      stageRows,
+      elementRows,
+      flowRows,
+      flowPageRows,
+      channelRows,
+      kpiRows,
+      pageRows,
+      seoRows,
+      objectionRows,
+      elChannelRows,
+      elKpiRows,
+      elCampaignRows,
+      elGeoRows,
+      campaignRows,
+      geoAssetRows,
+    },
+    rules.correlations
+  );
 
   return { nodes, edges, presentationOrder, influence };
 }
@@ -611,9 +615,16 @@ interface InfluenceInput {
   }[];
   elChannelRows: { funnelElementId: string; channelId: string }[];
   elKpiRows: { funnelElementId: string; kpiId: string }[];
+  elCampaignRows: { funnelElementId: string; campaignId: string }[];
+  elGeoRows: { funnelElementId: string; geoAssetId: string }[];
+  campaignRows: { id: string; name: string }[];
+  geoAssetRows: { id: string; type: string }[];
 }
 
-function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
+function buildInfluenceGraph(
+  input: InfluenceInput,
+  correlations: Correlation[]
+): InfluenceGraph {
   const {
     segmentRows,
     stageRows,
@@ -627,6 +638,10 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
     objectionRows,
     elChannelRows,
     elKpiRows,
+    elCampaignRows,
+    elGeoRows,
+    campaignRows,
+    geoAssetRows,
   } = input;
 
   const nodes: InfluenceNode[] = [];
@@ -642,6 +657,10 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
   const stageById = new Map(stageRows.map((s) => [s.id, s]));
   const channelById = new Map(channelRows.map((c) => [c.id, c]));
   const kpiById = new Map(kpiRows.map((k) => [k.id, k]));
+  const campaignById = new Map(campaignRows.map((c) => [c.id, c]));
+  const geoById = new Map(
+    geoAssetRows.map((g) => [g.id, { id: g.id, name: g.type }])
+  );
   const pageById = new Map(pageRows.map((p) => [p.id, p]));
   const segmentById = new Map(segmentRows.map((s) => [s.id, s]));
 
@@ -655,6 +674,16 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
   for (const r of elKpiRows) {
     if (!kpiById.has(r.kpiId)) continue;
     (kpisByEl.get(r.funnelElementId) ?? kpisByEl.set(r.funnelElementId, []).get(r.funnelElementId)!).push(r.kpiId);
+  }
+  const campaignsByEl = new Map<string, string[]>();
+  for (const r of elCampaignRows) {
+    if (!campaignById.has(r.campaignId)) continue;
+    (campaignsByEl.get(r.funnelElementId) ?? campaignsByEl.set(r.funnelElementId, []).get(r.funnelElementId)!).push(r.campaignId);
+  }
+  const geoByEl = new Map<string, string[]>();
+  for (const r of elGeoRows) {
+    if (!geoById.has(r.geoAssetId)) continue;
+    (geoByEl.get(r.funnelElementId) ?? geoByEl.set(r.funnelElementId, []).get(r.funnelElementId)!).push(r.geoAssetId);
   }
   // Flowy wchodzące w element (entryElementId) + ich strony
   const pagesByFlow = new Map<string, string[]>();
@@ -673,6 +702,21 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
   }
 
   const elements: InfluenceElement[] = [];
+  const requiredElementTargets = correlations
+    .filter((c) => c.sourceType === "element" && c.required)
+    .map((c) => c.targetType);
+
+  const isElementDisconnected = (elementId: string): boolean => {
+    for (const targetType of requiredElementTargets) {
+      if (targetType === "flow" && !(flowsByEl.get(elementId)?.length)) {
+        return true;
+      }
+      if (targetType === "kpi" && !(kpisByEl.get(elementId)?.length)) {
+        return true;
+      }
+    }
+    return false;
+  };
 
   for (const el of elementRows) {
     const stage = stageById.get(el.stageId);
@@ -687,30 +731,32 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
       segmentId: segId,
       segmentLabel: seg?.name ?? null,
       phase,
-      disconnected:
-        !(flowsByEl.get(el.id)?.length) || !(kpisByEl.get(el.id)?.length),
+      disconnected: isElementDisconnected(el.id),
     });
 
-    // ── PRZYCZYNA ──
+    const stageLink = correlationMeta(correlations, "stage", "element");
     if (stage) {
       addNode({ id: `stage-${stage.id}`, type: "stage", label: stage.name, phase });
       links.push({
         id: `stage-${stage.id}->el-${el.id}`,
         source: `stage-${stage.id}`,
         target: `el-${el.id}`,
-        label: "wywołuje",
-        strength: "strong",
+        label: stageLink.label || "wywołuje",
+        strength: stageLink.strength ?? "strong",
       });
     }
+    const goalLink = correlationMeta(correlations, "goal", "element");
     if (seg) {
       addNode({ id: `goal-${seg.id}`, type: "goal", label: seg.name, phase: null });
       links.push({
         id: `goal-${seg.id}->el-${el.id}`,
         source: `goal-${seg.id}`,
         target: `el-${el.id}`,
-        label: "odpowiada na",
+        label: goalLink.label || "odpowiada na",
+        strength: goalLink.strength,
       });
     }
+    const objectionLink = correlationMeta(correlations, "objection", "element");
     // Obiekcje pasujące do segmentu + fazy
     for (const o of objectionRows) {
       if (segId && o.segmentId && o.segmentId !== segId) continue;
@@ -726,10 +772,18 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
         id: `obj-${o.id}->el-${el.id}`,
         source: `obj-${o.id}`,
         target: `el-${el.id}`,
-        label: "zbija",
-        strength: "weak",
+        label: objectionLink.label || "zbija",
+        strength: objectionLink.strength ?? "weak",
       });
     }
+
+    const channelLink = correlationMeta(correlations, "element", "channel");
+    const campaignLink = correlationMeta(correlations, "element", "campaign");
+    const geoLink = correlationMeta(correlations, "element", "geo");
+    const kpiLink = correlationMeta(correlations, "element", "kpi");
+    const flowLink = correlationMeta(correlations, "element", "flow");
+    const flowPageLink = correlationMeta(correlations, "flow", "page");
+    const pageSeoLink = correlationMeta(correlations, "page", "seo");
 
     // ── SKUTEK ──
     for (const chId of channelsByEl.get(el.id) ?? []) {
@@ -739,7 +793,40 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
         id: `el-${el.id}->ch-${ch.id}`,
         source: `el-${el.id}`,
         target: `ch-${ch.id}`,
-        label: "publikowany w",
+        label: channelLink.label || "publikowany w",
+        strength: channelLink.strength,
+      });
+    }
+    for (const campId of campaignsByEl.get(el.id) ?? []) {
+      const camp = campaignById.get(campId)!;
+      addNode({
+        id: `camp-${camp.id}`,
+        type: "campaign",
+        label: camp.name,
+        phase: null,
+      });
+      links.push({
+        id: `el-${el.id}->camp-${camp.id}`,
+        source: `el-${el.id}`,
+        target: `camp-${camp.id}`,
+        label: campaignLink.label || "promowany przez",
+        strength: campaignLink.strength,
+      });
+    }
+    for (const geoId of geoByEl.get(el.id) ?? []) {
+      const geo = geoById.get(geoId)!;
+      addNode({
+        id: `geo-${geo.id}`,
+        type: "geo",
+        label: geo.name,
+        phase: null,
+      });
+      links.push({
+        id: `el-${el.id}->geo-${geo.id}`,
+        source: `el-${el.id}`,
+        target: `geo-${geo.id}`,
+        label: geoLink.label || "cytowalny w AI przez",
+        strength: geoLink.strength,
       });
     }
     for (const kpiId of kpisByEl.get(el.id) ?? []) {
@@ -749,8 +836,8 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
         id: `el-${el.id}->kpi-${k.id}`,
         source: `el-${el.id}`,
         target: `kpi-${k.id}`,
-        label: "mierzony przez",
-        strength: "strong",
+        label: kpiLink.label || "mierzony przez",
+        strength: kpiLink.strength ?? "strong",
       });
     }
     for (const flow of flowsByEl.get(el.id) ?? []) {
@@ -759,7 +846,8 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
         id: `el-${el.id}->flow-${flow.id}`,
         source: `el-${el.id}`,
         target: `flow-${flow.id}`,
-        label: "realizowany przez",
+        label: flowLink.label || "realizowany przez",
+        strength: flowLink.strength,
       });
       for (const pageId of pagesByFlow.get(flow.id) ?? []) {
         const pg = pageById.get(pageId);
@@ -769,7 +857,8 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
           id: `flow-${flow.id}->page-${pg.id}`,
           source: `flow-${flow.id}`,
           target: `page-${pg.id}`,
-          label: "ląduje na",
+          label: flowPageLink.label || "ląduje na",
+          strength: flowPageLink.strength,
         });
         for (const kw of seoByPage.get(pg.id) ?? []) {
           addNode({ id: `seo-${kw.id}`, type: "seo", label: kw.phrase, phase: null });
@@ -777,8 +866,8 @@ function buildInfluenceGraph(input: InfluenceInput): InfluenceGraph {
             id: `page-${pg.id}->seo-${kw.id}`,
             source: `page-${pg.id}`,
             target: `seo-${kw.id}`,
-            label: "targetuje",
-            strength: "weak",
+            label: pageSeoLink.label || "targetuje",
+            strength: pageSeoLink.strength ?? "weak",
           });
         }
       }

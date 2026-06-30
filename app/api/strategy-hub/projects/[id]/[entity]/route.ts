@@ -4,6 +4,7 @@ import {
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
+import "@/lib/strategy-hub/entities/extended-registry";
 import {
   getListEntity,
   getSingletonEntity,
@@ -17,9 +18,21 @@ export async function GET(
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
   const pathId = new URL(req.url).searchParams.get("pathId") || undefined;
+  const siteId = new URL(req.url).searchParams.get("siteId") || undefined;
+  const entityType = new URL(req.url).searchParams.get("entityType") || undefined;
+  const entityId = new URL(req.url).searchParams.get("entityId") || undefined;
+
+  if (entity === "comments" && entityType && entityId) {
+    const { listEntityComments } = await import(
+      "@/lib/strategy-hub/entities/extended-registry"
+    );
+    return NextResponse.json({
+      items: await listEntityComments(id, entityType, entityId),
+    });
+  }
 
   const list = getListEntity(entity);
-  if (list) return NextResponse.json({ items: await list.list(id, pathId) });
+  if (list) return NextResponse.json({ items: await list.list(id, pathId, siteId) });
 
   const singleton = getSingletonEntity(entity);
   if (singleton)

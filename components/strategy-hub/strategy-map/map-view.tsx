@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { statusEmoji } from "./status-dot";
+import { DecisionOverlay } from "./decision-overlay";
 import type {
   StrategyNode,
   StrategyEdge,
@@ -31,7 +32,17 @@ import type {
   NodeStatus,
 } from "@/lib/strategy-hub/strategy-map-types";
 
-// ── Geometria fixed layout ────────────────────────────────────────────────────
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function entityTypeForSub(nodeKey: StrategyNodeKey, subId: string): string {
+  if (subId === "podstrony") return "page";
+  if (subId === "wskazniki") return "kpi";
+  if (subId === "obiekcje") return "objection";
+  if (subId === "problemy") return "problem";
+  if (nodeKey === "segmenty") return "segment";
+  return "segment";
+}
 const NODE_W = 168;
 const NODE_H = 68;
 const STEP_X = 248;
@@ -39,6 +50,7 @@ const CENTER_Y = 232;
 const MARGIN_X = 48;
 
 interface MapViewProps {
+  projectId: string;
   nodes: StrategyNode[];
   edges: StrategyEdge[];
   order: StrategyNodeKey[];
@@ -57,6 +69,7 @@ interface Positioned {
 }
 
 export function MapView({
+  projectId,
   nodes,
   edges,
   order,
@@ -71,6 +84,11 @@ export function MapView({
   const [openSub, setOpenSub] = useState<{ nodeKey: StrategyNodeKey; subIdx: number } | null>(null);
   const [presenting, setPresenting] = useState(false);
   const [step, setStep] = useState(0);
+  const [decisionLeaf, setDecisionLeaf] = useState<{
+    entityType: string;
+    entityId: string;
+    label: string;
+  } | null>(null);
 
   const ordered = useMemo<Positioned[]>(() => {
     const byKey = new Map(nodes.map((n) => [n.key, n]));
@@ -299,9 +317,27 @@ export function MapView({
                   : cur
               );
             }}
+            onWhy={(item) => {
+              const sub = activeNode.subcategories[openSub!.subIdx];
+              if (!UUID_RE.test(item.id)) return;
+              setDecisionLeaf({
+                entityType: entityTypeForSub(activeNode.key, sub.id),
+                entityId: item.id,
+                label: item.label,
+              });
+            }}
           />
         )}
       </AnimatePresence>
+
+      <DecisionOverlay
+        projectId={projectId}
+        entityType={decisionLeaf?.entityType ?? ""}
+        entityId={decisionLeaf?.entityId ?? ""}
+        entityLabel={decisionLeaf?.label ?? ""}
+        open={decisionLeaf !== null}
+        onClose={() => setDecisionLeaf(null)}
+      />
     </div>
   );
 }
@@ -486,6 +522,7 @@ function L3Card({
   reduce,
   onClose,
   onNav,
+  onWhy,
 }: {
   node: StrategyNode;
   subIdx: number;
@@ -493,6 +530,7 @@ function L3Card({
   reduce: boolean;
   onClose: () => void;
   onNav: (dir: 1 | -1) => void;
+  onWhy?: (item: { id: string; label: string }) => void;
 }) {
   const sub = node.subcategories[subIdx];
   const [showAll, setShowAll] = useState(false);
@@ -542,9 +580,9 @@ function L3Card({
           ) : (
             <ul className="space-y-2.5">
               {preview.map((item) => (
-                <li key={item.id} className="flex items-baseline gap-2 text-sm">
+                <li key={item.id} className="flex items-start gap-2 text-sm">
                   <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand/60" />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <span className="text-foreground/90">{item.label}</span>
                     {item.note && (
                       <span className="block text-xs text-muted-foreground">
@@ -552,6 +590,16 @@ function L3Card({
                       </span>
                     )}
                   </div>
+                  {onWhy && UUID_RE.test(item.id) && (
+                    <button
+                      type="button"
+                      onClick={() => onWhy(item)}
+                      className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium text-brand hover:bg-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label={`Dlaczego tak: ${item.label}`}
+                    >
+                      Dlaczego?
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

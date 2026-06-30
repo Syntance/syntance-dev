@@ -21,6 +21,7 @@ import {
   VisibilityControl,
   type VisibilityStatus,
 } from "@/components/strategy-hub/visibility-control";
+import { EntityMetaPanel } from "@/components/strategy-hub/entity-meta-panel";
 
 interface Props {
   projectId: string;
@@ -204,7 +205,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <header>
         <p className="text-xs font-medium text-muted-foreground">{projectName}</p>
         <h1 className="text-xl font-semibold tracking-tight">Segmenty</h1>
@@ -233,7 +234,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
         />
       </SectionCard>
 
-      <div className="grid gap-5 lg:grid-cols-[260px_1fr]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
         {/* Lista segmentów */}
         <aside className="space-y-2">
           <div className="flex items-center gap-2">
@@ -588,6 +589,12 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
                 dense
               />
             </SectionCard>
+
+            <EntityMetaPanel
+              projectId={projectId}
+              entityType="segment"
+              entityId={selected.id}
+            />
           </div>
         ) : (
           <div className="flex items-center justify-center rounded-xl border border-dashed border-border min-h-[300px]">

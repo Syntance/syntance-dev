@@ -23,7 +23,10 @@ export type EntityType =
   | "channel"
   | "kpi"
   | "page"
-  | "user_flow";
+  | "user_flow"
+  | "campaign"
+  | "geo"
+  | "offer";
 
 export interface RelationOption {
   id: string;

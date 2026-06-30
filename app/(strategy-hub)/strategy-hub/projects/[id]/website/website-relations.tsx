@@ -17,7 +17,10 @@ interface PageRef {
 
 interface Props {
   projectId: string;
+  siteId: string;
   pages: PageRef[];
+  initialTab?: TabKey;
+  visibleTabs?: TabKey[];
 }
 
 type TabKey = "sections" | "nav" | "audits" | "costs";
@@ -129,8 +132,14 @@ function Chips<T extends { id: string }>({
   );
 }
 
-export function WebsiteRelations({ projectId, pages }: Props) {
-  const [tab, setTab] = useState<TabKey>("sections");
+export function WebsiteRelations({
+  projectId,
+  siteId,
+  pages,
+  initialTab = "sections",
+  visibleTabs,
+}: Props) {
+  const [tab, setTab] = useState<TabKey>(initialTab);
   const [selectedPage, setSelectedPage] = useState<string | null>(
     pages[0]?.id ?? null
   );
@@ -140,7 +149,7 @@ export function WebsiteRelations({ projectId, pages }: Props) {
   const loadAudits = useCallback(async () => {
     try {
       const res = await fetch(
-        `/api/strategy-hub/projects/${projectId}/site-audits`,
+        `/api/strategy-hub/projects/${projectId}/site-audits?siteId=${encodeURIComponent(siteId)}`,
         { signal: AbortSignal.timeout(8000) }
       );
       if (!res.ok) return;
@@ -151,14 +160,15 @@ export function WebsiteRelations({ projectId, pages }: Props) {
     } catch {
       /* ignore */
     }
-  }, [projectId]);
+  }, [projectId, siteId]);
 
   useEffect(() => {
     if (tab !== "audits") return;
     const ctrl = new AbortController();
-    fetch(`/api/strategy-hub/projects/${projectId}/site-audits`, {
-      signal: ctrl.signal,
-    })
+    fetch(
+      `/api/strategy-hub/projects/${projectId}/site-audits?siteId=${encodeURIComponent(siteId)}`,
+      { signal: ctrl.signal }
+    )
       .then((r) => (r.ok ? r.json() : { items: [] }))
       .then((json) => {
         const items: AuditRef[] = json.items ?? [];
@@ -167,15 +177,19 @@ export function WebsiteRelations({ projectId, pages }: Props) {
       })
       .catch(() => {});
     return () => ctrl.abort();
-  }, [tab, projectId]);
+  }, [tab, projectId, siteId]);
 
   return (
     <div className="space-y-5">
+      {!(visibleTabs && visibleTabs.length === 1) && (
       <nav
         className="flex flex-wrap gap-1 border-b border-border pb-px"
         aria-label="Sekcje strony"
       >
-        {TABS.map((t) => {
+        {(visibleTabs
+          ? TABS.filter((t) => visibleTabs.includes(t.key))
+          : TABS
+        ).map((t) => {
           const isActive = t.key === tab;
           return (
             <button
@@ -196,6 +210,7 @@ export function WebsiteRelations({ projectId, pages }: Props) {
           );
         })}
       </nav>
+      )}
 
       {tab === "sections" && (
         <SectionCard
@@ -239,6 +254,7 @@ export function WebsiteRelations({ projectId, pages }: Props) {
           <EntityCrud
             projectId={projectId}
             entity="nav-items"
+            siteId={siteId}
             fields={navFields}
             addLabel="Dodaj pozycję"
             emptyHint="Brak pozycji nawigacji."
@@ -255,10 +271,11 @@ export function WebsiteRelations({ projectId, pages }: Props) {
             <EntityCrud
               projectId={projectId}
               entity="site-audits"
+              siteId={siteId}
               fields={auditFields}
               addLabel="Nowy audyt"
               emptyHint="Brak audytów."
-              defaults={{ status: "open" }}
+              defaults={{ status: "open", siteId }}
               onMutate={loadAudits}
             />
           </SectionCard>

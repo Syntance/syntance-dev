@@ -58,6 +58,8 @@ interface EntityCrudProps {
   dense?: boolean;
   /** Wołane po każdej udanej mutacji (add/update/delete). */
   onMutate?: () => void;
+  /** Filtr po stronie WWW (multi-site). */
+  siteId?: string;
 }
 
 const toneClass: Record<BadgeTone, string> = {
@@ -395,6 +397,7 @@ export function EntityCrud({
   basePath,
   dense = false,
   onMutate,
+  siteId: siteIdProp,
 }: EntityCrudProps) {
   const [items, setItems] = useState<EntityRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -404,9 +407,15 @@ export function EntityCrud({
 
   const searchParams = useSearchParams();
   const pathId = searchParams.get("pathId");
+  const siteIdFromUrl = searchParams.get("site");
+  const siteId = siteIdProp ?? siteIdFromUrl ?? undefined;
 
   const base = basePath ?? apiBase(projectId, entity);
-  const baseWithPath = pathId ? `${base}?pathId=${encodeURIComponent(pathId)}` : base;
+  const query = new URLSearchParams();
+  if (pathId) query.set("pathId", pathId);
+  if (siteId) query.set("siteId", siteId);
+  const qs = query.toString();
+  const baseWithPath = qs ? `${base}?${qs}` : base;
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -450,7 +459,12 @@ export function EntityCrud({
         const res = await fetch(base, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...defaults, ...data, ...(pathId ? { pathId } : {}) }),
+          body: JSON.stringify({
+            ...defaults,
+            ...data,
+            ...(pathId ? { pathId } : {}),
+            ...(siteId ? { siteId } : {}),
+          }),
           signal: AbortSignal.timeout(8000),
         });
         if (res.ok) {

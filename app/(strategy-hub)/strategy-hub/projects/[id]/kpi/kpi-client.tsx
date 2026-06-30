@@ -11,6 +11,7 @@ import {
   VisibilityControl,
   type VisibilityStatus,
 } from "@/components/strategy-hub/visibility-control";
+import { EntityMetaPanel } from "@/components/strategy-hub/entity-meta-panel";
 
 interface Snapshot {
   id: string;
@@ -189,6 +190,12 @@ function KpiCard({
           Zapisz
         </Button>
       </div>
+
+      <EntityMetaPanel
+        projectId={projectId}
+        entityType="kpi"
+        entityId={kpi.id}
+      />
     </div>
   );
 }
@@ -339,7 +346,7 @@ export function KpiClient({ projectId, projectName }: Props) {
   );
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium text-muted-foreground">{projectName}</p>

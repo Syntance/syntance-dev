@@ -32,8 +32,6 @@ import {
   Loader2,
   Check,
   ChevronRight,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -362,8 +360,7 @@ export function BusinessStrategyEditor({
   const [pushState, setPushState] = useState<"idle" | "success" | "error">("idle");
   const [pushing, startPush] = useTransition();
 
-  // ── Nav collapse + resize ─────────────────────────────────────────
-  const [navOpen, setNavOpen] = useState(true);
+  // ── Nav resize ───────────────────────────────────────────────────
   const [navWidth, setNavWidth] = useState(NAV_DEFAULT);
   const draggingNav = useRef(false);
   const dragStartX = useRef(0);
@@ -640,23 +637,6 @@ export function BusinessStrategyEditor({
     <div className="-m-6 h-[calc(100vh-3.5rem)] flex flex-col">
       {/* ── Top bar ──────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
-        {/* Nav toggle */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
-          onClick={() => setNavOpen((v) => !v)}
-          aria-label={navOpen ? "Schowaj menu" : "Pokaż menu"}
-          title={navOpen ? "Schowaj menu" : "Pokaż menu"}
-        >
-          {navOpen ? (
-            <PanelLeftClose className="size-4" />
-          ) : (
-            <PanelLeftOpen className="size-4" />
-          )}
-        </Button>
-
         <div className="flex-1 min-w-0">
           <h1 className="text-sm font-semibold tracking-tight leading-tight">
             📄 Strategia biznesowa
@@ -707,79 +687,75 @@ export function BusinessStrategyEditor({
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
         {/* ── Lewy nav ─────────────────────────────────── */}
-        {navOpen && (
-          <>
-            <nav
-              style={{ width: navWidth }}
-              className="shrink-0 border-r border-border flex flex-col py-3 gap-0.5 overflow-y-auto overflow-x-hidden"
-              aria-label="Sekcje strategii"
-            >
-              {SECTIONS.map((section) => {
-                const isActive = activeKey === section.key;
-                const isFilled = sectionIsFilled(section, localStrategy, sectionState);
-                const preview = sectionPreview(section, localStrategy, sectionState);
-                const Icon = section.icon;
+        <nav
+          style={{ width: navWidth }}
+          className="shrink-0 border-r border-border flex flex-col py-3 gap-0.5 overflow-y-auto overflow-x-hidden"
+          aria-label="Sekcje strategii"
+        >
+          {SECTIONS.map((section) => {
+            const isActive = activeKey === section.key;
+            const isFilled = sectionIsFilled(section, localStrategy, sectionState);
+            const preview = sectionPreview(section, localStrategy, sectionState);
+            const Icon = section.icon;
 
-                return (
-                  <button
-                    key={section.key}
-                    type="button"
-                    onClick={() => setActiveKey(section.key)}
-                    aria-current={isActive ? "page" : undefined}
+            return (
+              <button
+                key={section.key}
+                type="button"
+                onClick={() => setActiveKey(section.key)}
+                aria-current={isActive ? "page" : undefined}
+                className={cn(
+                  "relative group flex items-center gap-2.5 px-3 py-2.5 mx-2 rounded-lg text-left transition-colors",
+                  isActive
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                )}
+              >
+                {isActive && (
+                  <span
                     className={cn(
-                      "relative group flex items-center gap-2.5 px-3 py-2.5 mx-2 rounded-lg text-left transition-colors",
-                      isActive
-                        ? "bg-muted text-foreground"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                      "absolute left-0 top-2 bottom-2 w-0.5 rounded-full",
+                      section.activeBar
                     )}
-                  >
-                    {isActive && (
-                      <span
-                        className={cn(
-                          "absolute left-0 top-2 bottom-2 w-0.5 rounded-full",
-                          section.activeBar
-                        )}
-                      />
+                  />
+                )}
+                <div
+                  className={cn(
+                    "size-7 rounded-md border flex items-center justify-center shrink-0",
+                    isActive ? section.iconBg : "bg-muted/30 border-border/50"
+                  )}
+                >
+                  <Icon className={cn("size-3.5", isActive ? section.color : "text-muted-foreground")} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium leading-tight truncate">
+                    {section.label}
+                  </div>
+                </div>
+                <div className="shrink-0 flex items-center gap-0.5">
+                  {isFilled && <span className="text-[10px] text-success font-bold">✓</span>}
+                  <ChevronRight
+                    className={cn(
+                      "size-3 transition-opacity",
+                      isActive ? "opacity-50" : "opacity-0 group-hover:opacity-30"
                     )}
-                    <div
-                      className={cn(
-                        "size-7 rounded-md border flex items-center justify-center shrink-0",
-                        isActive ? section.iconBg : "bg-muted/30 border-border/50"
-                      )}
-                    >
-                      <Icon className={cn("size-3.5", isActive ? section.color : "text-muted-foreground")} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium leading-tight truncate">
-                        {section.label}
-                      </div>
-                    </div>
-                    <div className="shrink-0 flex items-center gap-0.5">
-                      {isFilled && <span className="text-[10px] text-success font-bold">✓</span>}
-                      <ChevronRight
-                        className={cn(
-                          "size-3 transition-opacity",
-                          isActive ? "opacity-50" : "opacity-0 group-hover:opacity-30"
-                        )}
-                      />
-                    </div>
-                  </button>
-                );
-              })}
-            </nav>
+                  />
+                </div>
+              </button>
+            );
+          })}
+        </nav>
 
-            {/* ── Drag handle ──────────────────────────── */}
-            <div
-              onMouseDown={onNavDragStart}
-              className="w-1 shrink-0 relative cursor-col-resize group"
-              role="separator"
-              aria-label="Przeciągnij aby zmienić szerokość menu"
-              title="Przeciągnij aby zmienić szerokość menu"
-            >
-              <div className="absolute inset-y-0 -left-0.5 -right-0.5 group-hover:bg-brand/30 group-active:bg-brand/50 transition-colors" />
-            </div>
-          </>
-        )}
+        {/* ── Drag handle ──────────────────────────── */}
+        <div
+          onMouseDown={onNavDragStart}
+          className="w-1 shrink-0 relative cursor-col-resize group"
+          role="separator"
+          aria-label="Przeciągnij aby zmienić szerokość menu"
+          title="Przeciągnij aby zmienić szerokość menu"
+        >
+          <div className="absolute inset-y-0 -left-0.5 -right-0.5 group-hover:bg-brand/30 group-active:bg-brand/50 transition-colors" />
+        </div>
 
         {/* ── Prawy panel ──────────────────────────────── */}
         <div

@@ -61,7 +61,9 @@ export type InfluenceEntityType =
   | "seo"
   | "page"
   | "channel"
-  | "kpi";
+  | "kpi"
+  | "campaign"
+  | "geo";
 
 export type FunnelPhase = "TOFU" | "MOFU" | "BOFU" | "retention";
 
@@ -123,6 +125,8 @@ export const ENTITY_COLORS: Record<InfluenceEntityType, string> = {
   page: "#475569", // ⚫ podstrona
   channel: "#a16207", // 🟤 kanał
   kpi: "#f472b6", // 📊 KPI (akcent)
+  campaign: "#a78bfa", // 🟪 kampania
+  geo: "#22d3ee", // 🤖 GEO/AEO
 };
 
 export const ENTITY_LABELS: Record<InfluenceEntityType, string> = {
@@ -136,6 +140,8 @@ export const ENTITY_LABELS: Record<InfluenceEntityType, string> = {
   page: "Podstrona",
   channel: "Kanał",
   kpi: "KPI",
+  campaign: "Kampania",
+  geo: "GEO / AEO",
 };
 
 /** Kolory faz lejka (dla trybu „po fazie"). */
@@ -174,4 +180,19 @@ export function statusFromScore(score: number): NodeStatus {
   if (score >= 80) return "ready";
   if (score > 0) return "in_progress";
   return "empty";
+}
+
+const STRATEGY_NODE_KEY_SET = new Set<string>([
+  "fundament",
+  "segmenty",
+  "lejek",
+  "kanaly",
+  "przekaz",
+  "strona",
+  "kpi",
+]);
+
+/** Type guard zawężający dowolny string do klucza węzła mapy makro. */
+export function isStrategyNodeKey(value: string): value is StrategyNodeKey {
+  return STRATEGY_NODE_KEY_SET.has(value);
 }

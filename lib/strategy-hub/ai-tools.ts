@@ -9,6 +9,10 @@ import {
   userFlows,
   pages,
   seoKeywords,
+  strategicDecisions,
+  campaigns,
+  geoAssets,
+  offers,
 } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 import {
@@ -422,6 +426,75 @@ function extractNotionText(blocks: unknown[]): string {
     .join("\n");
 }
 
+// ─── Decisions / campaigns / offers ───────────────────────────────────────────
+
+export const listStrategicDecisionsTool = (projectId: string) =>
+  tool({
+    description: "Lista decyzji strategicznych projektu z uzasadnieniem.",
+    parameters: z.object({}),
+    execute: async () => {
+      const rows = await db
+        .select({
+          id: strategicDecisions.id,
+          title: strategicDecisions.title,
+          status: strategicDecisions.status,
+          reasonMd: strategicDecisions.reasonMd,
+        })
+        .from(strategicDecisions)
+        .where(
+          and(
+            eq(strategicDecisions.projectId, projectId),
+            isNull(strategicDecisions.deletedAt)
+          )
+        );
+      return { decisions: rows };
+    },
+  });
+
+export const listCampaignsTool = (projectId: string) =>
+  tool({
+    description: "Lista kampanii marketingowych projektu.",
+    parameters: z.object({}),
+    execute: async () => {
+      const rows = await db
+        .select({
+          id: campaigns.id,
+          name: campaigns.name,
+          stage: campaigns.stage,
+          status: campaigns.status,
+          goal: campaigns.goal,
+        })
+        .from(campaigns)
+        .where(
+          and(eq(campaigns.projectId, projectId), isNull(campaigns.deletedAt))
+        );
+      return { campaigns: rows };
+    },
+  });
+
+export const listGeoAndOffersTool = (projectId: string) =>
+  tool({
+    description: "Assety GEO/AEO oraz oferty produktowe projektu.",
+    parameters: z.object({}),
+    execute: async () => {
+      const [geo, offerRows] = await Promise.all([
+        db
+          .select({ id: geoAssets.id, type: geoAssets.type, status: geoAssets.status })
+          .from(geoAssets)
+          .where(
+            and(eq(geoAssets.projectId, projectId), isNull(geoAssets.deletedAt))
+          ),
+        db
+          .select({ id: offers.id, name: offers.name, type: offers.type })
+          .from(offers)
+          .where(
+            and(eq(offers.projectId, projectId), isNull(offers.deletedAt))
+          ),
+      ]);
+      return { geoAssets: geo, offers: offerRows };
+    },
+  });
+
 // ─── Tool registry ────────────────────────────────────────────────────────────
 
 export type ChatToolOptions = {
@@ -435,6 +508,9 @@ export function buildChatTools(projectId: string, options: ChatToolOptions): Too
     update_business_strategy: updateBusinessStrategyTool(projectId) as ToolSet[string],
     upsert_segment: upsertSegmentTool(projectId) as ToolSet[string],
     upsert_kpi: upsertKpiTool(projectId) as ToolSet[string],
+    list_decisions: listStrategicDecisionsTool(projectId) as ToolSet[string],
+    list_campaigns: listCampaignsTool(projectId) as ToolSet[string],
+    list_geo_offers: listGeoAndOffersTool(projectId) as ToolSet[string],
   };
 
   if (options.webSearch) {

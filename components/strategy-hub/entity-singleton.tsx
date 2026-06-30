@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Loader2, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -93,7 +94,7 @@ export function SaveIndicator({ status }: { status: SaveStatus }) {
 // ─── Pole markdown / tekst z autosave ────────────────────────────────────────
 
 interface TextFieldProps {
-  label: string;
+  label?: string;
   hint?: string;
   value: unknown;
   /** Wołane przy każdej zmianie — `useSingleton.patch` aktualizuje stan i debounce'uje zapis. */
@@ -102,6 +103,8 @@ interface TextFieldProps {
   url?: boolean;
   placeholder?: string;
   rows?: number;
+  /** Bez obramowania — do użycia wewnątrz `CalloutField`. */
+  bare?: boolean;
 }
 
 export function AutosaveField({
@@ -113,22 +116,31 @@ export function AutosaveField({
   url,
   placeholder,
   rows = 4,
+  bare = false,
 }: TextFieldProps) {
   const str = value == null ? "" : String(value);
+  const bareInputClass =
+    "border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 min-h-0";
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <label className="text-sm font-medium">{label}</label>
-        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
-      </div>
+    <div className={cn(!bare && "space-y-1.5")}>
+      {!bare && (label || hint) && (
+        <div className="flex items-baseline justify-between gap-2">
+          {label ? (
+            <label className="text-sm font-medium">{label}</label>
+          ) : (
+            <span />
+          )}
+          {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+        </div>
+      )}
       {multiline ? (
         <Textarea
           value={str}
           onChange={(e) => onCommit(e.target.value)}
           placeholder={placeholder}
           rows={rows}
-          className="text-sm resize-y"
+          className={cn("text-sm resize-y", bare && bareInputClass)}
         />
       ) : (
         <Input
@@ -136,10 +148,39 @@ export function AutosaveField({
           value={str}
           onChange={(e) => onCommit(e.target.value)}
           placeholder={placeholder}
-          className="h-9 text-sm"
+          className={cn("h-9 text-sm", bare && bareInputClass)}
         />
       )}
     </div>
+  );
+}
+
+// ─── Tytuł nad calloutem (tylko treść w ramce) ───────────────────────────────
+
+export function CalloutField({
+  title,
+  description,
+  status,
+  children,
+}: {
+  title: string;
+  description?: string;
+  status?: SaveStatus;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">{title}</h2>
+          {description ? (
+            <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+          ) : null}
+        </div>
+        {status ? <SaveIndicator status={status} /> : null}
+      </div>
+      <div className="rounded-xl border border-border bg-card/40 p-4">{children}</div>
+    </section>
   );
 }
 

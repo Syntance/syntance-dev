@@ -2,21 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   LayoutGrid,
-  FileText,
-  BarChart3,
-  Globe,
   Settings,
   RefreshCw,
   Sparkles,
-  Server,
-  MessageSquareText,
-  Compass,
   Gem,
   Users,
-  Filter,
   Megaphone,
   Gauge,
   LayoutDashboard,
@@ -24,6 +17,9 @@ import {
   LogOut,
   Clock,
   Puzzle,
+  ChevronRight,
+  SlidersHorizontal,
+  NotebookPen,
 } from "lucide-react";
 import {
   Sidebar,
@@ -33,12 +29,26 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { useProject, useProjectIdFromPath } from "@/components/strategy-hub/project-context";
 import { PathSelector } from "@/components/strategy-hub/path-selector";
+import {
+  type AreaKey,
+  AREA_SEGMENT,
+  AREA_TABS,
+  areaScoreFromModules,
+  areaTabHref,
+  healthDotClass,
+  projectAreaHref,
+} from "@/lib/strategy-hub/area-routes";
+import { cn } from "@/lib/utils";
 
 const navItems = [
   {
@@ -58,11 +68,11 @@ const customAppItems = [
   },
 ];
 
-const viewItems = (projectId: string) => [
+const projectViewItems = (projectId: string) => [
   {
-    label: "Widok główny",
+    label: "Mapa firmy",
     href: `/strategy-hub/projects/${projectId}`,
-    icon: LayoutGrid,
+    icon: MapIcon,
     exact: true,
   },
   {
@@ -70,77 +80,94 @@ const viewItems = (projectId: string) => [
     href: `/strategy-hub/projects/${projectId}/canvas`,
     icon: LayoutDashboard,
   },
-  {
-    label: "Strategy Map",
-    href: `/strategy-hub/projects/${projectId}/strategy-map`,
-    icon: MapIcon,
-  },
 ];
 
-const strategyItems = (projectId: string) => [
-  {
-    label: "Discovery",
-    href: `/strategy-hub/projects/${projectId}/discovery`,
-    icon: Compass,
-  },
-  {
-    label: "Marka",
-    href: `/strategy-hub/projects/${projectId}/brand`,
-    icon: Gem,
-  },
-  {
-    label: "Strategia biznesowa",
-    href: `/strategy-hub/projects/${projectId}/business`,
-    icon: FileText,
-  },
-  {
-    label: "Segmenty",
-    href: `/strategy-hub/projects/${projectId}/segments`,
-    icon: Users,
-  },
-  {
-    label: "Lejek i kanały",
-    href: `/strategy-hub/projects/${projectId}/funnel`,
-    icon: Filter,
-  },
-  {
-    label: "Sprzedaż i copy",
-    href: `/strategy-hub/projects/${projectId}/sales`,
-    icon: Megaphone,
-  },
-  {
-    label: "Strategia marketingowa",
-    href: `/strategy-hub/projects/${projectId}/marketing`,
-    icon: BarChart3,
-  },
-  {
-    label: "Strona",
-    href: `/strategy-hub/projects/${projectId}/website`,
-    icon: Globe,
-  },
-  {
-    label: "KPI",
-    href: `/strategy-hub/projects/${projectId}/kpi`,
-    icon: Gauge,
-  },
-  {
-    label: "Infrastruktura",
-    href: `/strategy-hub/projects/${projectId}/admin`,
-    icon: Server,
-  },
-  {
-    label: "AI Chat",
-    href: `/strategy-hub/projects/${projectId}/chat`,
-    icon: MessageSquareText,
-  },
-];
+const areaItems = (projectId: string) =>
+  [
+    {
+      key: "foundation" as const,
+      label: "Fundament",
+      href: projectAreaHref(projectId, "foundation"),
+      icon: Gem,
+    },
+    {
+      key: "market" as const,
+      label: "Rynek",
+      href: projectAreaHref(projectId, "market"),
+      icon: Users,
+    },
+    {
+      key: "execution" as const,
+      label: "Egzekucja",
+      href: projectAreaHref(projectId, "execution"),
+      icon: Megaphone,
+    },
+    {
+      key: "measurement" as const,
+      label: "Pomiar",
+      href: projectAreaHref(projectId, "measurement"),
+      icon: Gauge,
+    },
+    {
+      key: "info" as const,
+      label: "Informacja i notatki",
+      href: projectAreaHref(projectId, "info"),
+      icon: NotebookPen,
+    },
+    {
+      key: "settings" as const,
+      label: "Ustawienia projektu",
+      href: projectAreaHref(projectId, "settings"),
+      icon: Settings,
+    },
+  ] satisfies {
+    key: AreaKey;
+    label: string;
+    href: string;
+    icon: typeof Gem;
+  }[];
+
+interface HealthModule {
+  key: string;
+  score: number;
+}
 
 export function NavSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const projectFromContext = useProject();
   const projectIdFromPath = useProjectIdFromPath();
+  const projectId = projectFromContext?.id ?? projectIdFromPath;
   const [user, setUser] = useState<{ name: string; email: string; role: string } | null>(null);
+  const [healthModules, setHealthModules] = useState<HealthModule[]>([]);
+  const [expandedAreas, setExpandedAreas] = useState<Set<AreaKey>>(() => {
+    if (!projectId) return new Set();
+    const active = areaItems(projectId).find((item) =>
+      pathname.startsWith(item.href)
+    );
+    return active ? new Set([active.key]) : new Set();
+  });
+
+
+  const toggleAreaExpanded = useCallback((key: AreaKey) => {
+    setExpandedAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!projectId) {
+      setExpandedAreas(new Set());
+      return;
+    }
+    const active = areaItems(projectId).find((item) =>
+      pathname.startsWith(item.href)
+    );
+    setExpandedAreas(active ? new Set([active.key]) : new Set());
+  }, [pathname, projectId]);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -149,21 +176,40 @@ export function NavSidebar() {
       .catch(() => null);
   }, []);
 
+  useEffect(() => {
+    if (!projectId) {
+      setHealthModules([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    fetch(`/api/strategy-hub/projects/${projectId}/health`, {
+      signal: ctrl.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { modules?: HealthModule[] } | null) => {
+        setHealthModules(data?.modules ?? []);
+      })
+      .catch(() => setHealthModules([]));
+    return () => ctrl.abort();
+  }, [projectId]);
+
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
   }
-
-  const projectId = projectFromContext?.id ?? projectIdFromPath;
 
   const isActive = (href: string, exact = false) => {
     if (exact) return pathname === href;
     return pathname.startsWith(href);
   };
 
+  function areaDotScore(areaKey: AreaKey): number {
+    return areaScoreFromModules(areaKey, healthModules);
+  }
+
   return (
     <Sidebar variant="sidebar" collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border px-4 py-3">
+      <SidebarHeader className="box-border flex h-12 shrink-0 flex-row items-center gap-0 border-b border-border px-4 py-0">
         <Link
           href="/strategy-hub"
           className="flex items-center gap-2.5 min-w-0"
@@ -204,10 +250,10 @@ export function NavSidebar() {
             <PathSelector projectId={projectId} />
             <SidebarGroup>
               <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
-                Widoki
+                Projekt
               </SidebarGroupLabel>
               <SidebarMenu>
-                {viewItems(projectId).map((item) => (
+                {projectViewItems(projectId).map((item) => (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       render={<Link href={item.href} />}
@@ -224,21 +270,73 @@ export function NavSidebar() {
 
             <SidebarGroup>
               <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
-                Strategia
+                Obszary
               </SidebarGroupLabel>
               <SidebarMenu>
-                {strategyItems(projectId).map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      render={<Link href={item.href} />}
-                      isActive={isActive(item.href)}
-                      tooltip={item.label}
-                    >
-                      <item.icon className="size-4" />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                {areaItems(projectId).map((item) => {
+                  const score = areaDotScore(item.key);
+                  const segment = AREA_SEGMENT[item.key];
+                  const tabs = AREA_TABS[item.key];
+                  const areaActive = isActive(item.href);
+                  const expanded = expandedAreas.has(item.key);
+                  const firstTabHref = areaTabHref(projectId, segment, tabs[0]?.slug ?? "");
+
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        render={<Link href={firstTabHref} />}
+                        isActive={areaActive}
+                        tooltip={item.label}
+                      >
+                        <item.icon className="size-4" />
+                        <span className="flex-1 truncate">{item.label}</span>
+                        <span
+                          aria-hidden
+                          className={`size-2 shrink-0 rounded-full ${healthDotClass(score)} group-data-[collapsible=icon]:hidden`}
+                        />
+                      </SidebarMenuButton>
+                      <SidebarMenuAction
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-label={
+                          expanded
+                            ? `Zwiń podgałęzie: ${item.label}`
+                            : `Rozwiń podgałęzie: ${item.label}`
+                        }
+                        onClick={() => toggleAreaExpanded(item.key)}
+                        className="group-data-[collapsible=icon]:hidden"
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "size-4 transition-transform duration-200",
+                            expanded && "rotate-90"
+                          )}
+                        />
+                      </SidebarMenuAction>
+                      {expanded ? (
+                        <SidebarMenuSub>
+                          {tabs.map((tab) => {
+                            const tabHref = areaTabHref(projectId, segment, tab.slug);
+                            const tabActive =
+                              pathname === tabHref ||
+                              pathname.startsWith(`${tabHref}/`);
+                            return (
+                              <SidebarMenuSubItem key={tab.slug}>
+                                <SidebarMenuSubButton
+                                  render={<Link href={tabHref} />}
+                                  isActive={tabActive}
+                                  size="sm"
+                                >
+                                  <span>{tab.label}</span>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            );
+                          })}
+                        </SidebarMenuSub>
+                      ) : null}
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroup>
           </>
@@ -292,6 +390,16 @@ export function NavSidebar() {
               >
                 <RefreshCw className="size-4" />
                 <span>Sync z Notion</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                render={<Link href="/strategy-hub/settings/rules" />}
+                isActive={isActive("/strategy-hub/settings/rules")}
+                tooltip="Reguły strategii"
+              >
+                <SlidersHorizontal className="size-4" />
+                <span>Reguły strategii</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>

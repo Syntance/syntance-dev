@@ -23,11 +23,12 @@ const InfluenceView = dynamic(
 type View = "list" | "map" | "influence";
 
 interface StrategyMapProps {
+  projectId: string;
   data: StrategyMapData;
   mode: "editor" | "client";
 }
 
-export function StrategyMap({ data, mode }: StrategyMapProps) {
+export function StrategyMap({ projectId, data, mode }: StrategyMapProps) {
   // Editor startuje na Liście, klient na Mapie (spec).
   const [view, setView] = useState<View>(mode === "client" ? "map" : "list");
   const [presentSignal, setPresentSignal] = useState(0);
@@ -72,6 +73,7 @@ export function StrategyMap({ data, mode }: StrategyMapProps) {
           działał niezależnie od przełączania widoków. */}
       <div className={cn(view === "map" ? "" : "hidden")}>
         <MapView
+          projectId={projectId}
           nodes={data.nodes}
           edges={data.edges}
           order={data.presentationOrder}

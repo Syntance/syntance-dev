@@ -22,6 +22,9 @@ import {
   salesScripts,
   leadMagnets,
   copyGuidelines,
+  sites,
+  pages,
+  seoKeywords,
   navItems,
   siteMaintenanceCosts,
   siteAudits,
@@ -30,6 +33,15 @@ import {
   kpis,
   kpiSnapshots,
 } from "@/db/schema";
+
+/** Buduje warunek filtrowania po siteId (opcjonalny). */
+function siteFilter<T extends { siteId: unknown }>(
+  table: T,
+  siteId: string | null | undefined
+) {
+  if (!siteId) return undefined;
+  return eq(table.siteId as Parameters<typeof eq>[0], siteId);
+}
 
 /** Buduje warunek filtrowania po pathId (lub IS NULL gdy brak). */
 function pathFilter<T extends { pathId: unknown }>(
@@ -66,7 +78,11 @@ export interface ListEntityDef<TCreate = unknown, TPatch = unknown> {
   supportsPath?: boolean;
   createSchema: z.ZodType<TCreate>;
   patchSchema: z.ZodType<TPatch>;
-  list(projectId: string, pathId?: string | null): Promise<Row[]>;
+  list(
+    projectId: string,
+    pathId?: string | null,
+    siteId?: string | null
+  ): Promise<Row[]>;
   create(projectId: string, data: TCreate): Promise<Row>;
   update(projectId: string, itemId: string, data: TPatch): Promise<Row | undefined>;
   softDelete(projectId: string, itemId: string): Promise<boolean>;
@@ -285,8 +301,46 @@ const copyGuidelinesPatch = z.object({
 
 // ─── Strona: schematy ────────────────────────────────────────────────────────
 
+const siteCreate = z.object({
+  name: z.string().min(1).max(255),
+  domain: z.string().max(255).nullable().optional(),
+  type: z.string().max(100).nullable().optional(),
+  status: z.string().max(50).optional(),
+  isPrimary: z.boolean().optional(),
+});
+const sitePatch = siteCreate.partial();
+
+const pageCreate = z.object({
+  name: z.string().min(1).max(255),
+  siteId: z.string().uuid().nullable().optional(),
+  urlPath: z.string().max(255).nullable().optional(),
+  type: z.string().max(100).nullable().optional(),
+  layoutTemplate: z.string().max(100).nullable().optional(),
+  roleInFunnel: md(),
+  cta: z.string().max(255).nullable().optional(),
+  goal: md(),
+  status: z.string().max(50).nullable().optional(),
+  priority: z.number().int().nullable().optional(),
+  priorityTier: z.string().max(20).nullable().optional(),
+});
+const pagePatch = pageCreate.partial();
+
+const seoKeywordCreate = z.object({
+  phrase: z.string().min(1).max(500),
+  siteId: z.string().uuid().nullable().optional(),
+  intent: z.string().max(100).nullable().optional(),
+  volume: z.number().int().nullable().optional(),
+  difficulty: z.number().int().nullable().optional(),
+  priority: z.number().int().nullable().optional(),
+  funnelStage: z.string().max(100).nullable().optional(),
+  targetPageId: z.string().uuid().nullable().optional(),
+  status: z.string().max(50).nullable().optional(),
+});
+const seoKeywordPatch = seoKeywordCreate.partial();
+
 const navItemCreate = z.object({
   label: z.string().min(1).max(255),
+  siteId: z.string().uuid().nullable().optional(),
   url: z.string().max(500).nullable().optional(),
   pageId: z.string().uuid().nullable().optional(),
   position: z.enum(["header", "footer", "sidebar", "mobile"]).nullable().optional(),
@@ -307,6 +361,7 @@ const maintenancePatch = maintenanceCreate.partial();
 
 const auditCreate = z.object({
   type: z.string().max(50).nullable().optional(),
+  siteId: z.string().uuid().nullable().optional(),
   date: z.coerce.date().optional(),
   summaryMd: md(),
   severityHigh: z.number().int().min(0).optional(),
@@ -882,12 +937,16 @@ const listEntities: Record<string, ListEntityDef> = {
     label: "Pozycja nawigacji",
     createSchema: navItemCreate,
     patchSchema: navItemPatch,
-    list: (pid) =>
-      db
+    list: (pid, _pathId, siteId) => {
+      const sf = siteFilter(navItems, siteId);
+      return db
         .select()
         .from(navItems)
-        .where(and(eq(navItems.projectId, pid), isNull(navItems.deletedAt)))
-        .orderBy(asc(navItems.orderIdx), asc(navItems.label)),
+        .where(
+          and(eq(navItems.projectId, pid), isNull(navItems.deletedAt), sf)
+        )
+        .orderBy(asc(navItems.orderIdx), asc(navItems.label));
+    },
     create: (pid, data) =>
       db
         .insert(navItems)
@@ -963,12 +1022,16 @@ const listEntities: Record<string, ListEntityDef> = {
     label: "Audyt",
     createSchema: auditCreate,
     patchSchema: auditPatch,
-    list: (pid) =>
-      db
+    list: (pid, _pathId, siteId) => {
+      const sf = siteFilter(siteAudits, siteId);
+      return db
         .select()
         .from(siteAudits)
-        .where(and(eq(siteAudits.projectId, pid), isNull(siteAudits.deletedAt)))
-        .orderBy(desc(siteAudits.date)),
+        .where(
+          and(eq(siteAudits.projectId, pid), isNull(siteAudits.deletedAt), sf)
+        )
+        .orderBy(desc(siteAudits.date));
+    },
     create: (pid, data) =>
       db
         .insert(siteAudits)
@@ -988,6 +1051,111 @@ const listEntities: Record<string, ListEntityDef> = {
         .set({ deletedAt: new Date() })
         .where(and(eq(siteAudits.id, itemId), eq(siteAudits.projectId, pid)))
         .returning({ id: siteAudits.id })
+        .then((r) => r.length > 0),
+  }),
+
+  sites: listDef({
+    kind: "list",
+    label: "Strona WWW",
+    createSchema: siteCreate,
+    patchSchema: sitePatch,
+    list: (pid) =>
+      db
+        .select()
+        .from(sites)
+        .where(and(eq(sites.projectId, pid), isNull(sites.deletedAt)))
+        .orderBy(desc(sites.isPrimary), asc(sites.name)),
+    create: (pid, data) =>
+      db
+        .insert(sites)
+        .values({ projectId: pid, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(sites)
+        .set(compact(data))
+        .where(and(eq(sites.id, itemId), eq(sites.projectId, pid)))
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(sites)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(sites.id, itemId), eq(sites.projectId, pid)))
+        .returning({ id: sites.id })
+        .then((r) => r.length > 0),
+  }),
+
+  pages: listDef({
+    kind: "list",
+    label: "Podstrona",
+    createSchema: pageCreate,
+    patchSchema: pagePatch,
+    list: (pid, _pathId, siteId) => {
+      const sf = siteFilter(pages, siteId);
+      return db
+        .select()
+        .from(pages)
+        .where(and(eq(pages.projectId, pid), isNull(pages.deletedAt), sf))
+        .orderBy(asc(pages.priority), asc(pages.name));
+    },
+    create: (pid, data) =>
+      db
+        .insert(pages)
+        .values({ projectId: pid, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(pages)
+        .set(compact(data))
+        .where(and(eq(pages.id, itemId), eq(pages.projectId, pid)))
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(pages)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(pages.id, itemId), eq(pages.projectId, pid)))
+        .returning({ id: pages.id })
+        .then((r) => r.length > 0),
+  }),
+
+  "seo-keywords": listDef({
+    kind: "list",
+    label: "Fraza SEO",
+    createSchema: seoKeywordCreate,
+    patchSchema: seoKeywordPatch,
+    list: (pid, _pathId, siteId) => {
+      const sf = siteFilter(seoKeywords, siteId);
+      return db
+        .select()
+        .from(seoKeywords)
+        .where(
+          and(eq(seoKeywords.projectId, pid), isNull(seoKeywords.deletedAt), sf)
+        )
+        .orderBy(asc(seoKeywords.priority), asc(seoKeywords.phrase));
+    },
+    create: (pid, data) =>
+      db
+        .insert(seoKeywords)
+        .values({ projectId: pid, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (pid, itemId, data) =>
+      db
+        .update(seoKeywords)
+        .set(compact(data))
+        .where(and(eq(seoKeywords.id, itemId), eq(seoKeywords.projectId, pid)))
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (pid, itemId) =>
+      db
+        .update(seoKeywords)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(seoKeywords.id, itemId), eq(seoKeywords.projectId, pid)))
+        .returning({ id: seoKeywords.id })
         .then((r) => r.length > 0),
   }),
 

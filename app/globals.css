@@ -247,3 +247,10 @@ input:-webkit-autofill:focus {
     @apply bg-background text-foreground;
   }
 }
+
+html.strategy-hub-viewport,
+html.strategy-hub-viewport body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}

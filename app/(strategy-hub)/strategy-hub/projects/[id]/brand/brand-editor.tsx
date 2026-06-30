@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   useSingleton,
   AutosaveField,
+  CalloutField,
   SectionCard,
 } from "@/components/strategy-hub/entity-singleton";
 import {
@@ -45,7 +46,7 @@ export function BrandEditor({ projectId, projectName }: Props) {
   const visual = useSingleton(projectId, "brand-visual");
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <header>
         <p className="text-xs font-medium text-muted-foreground">{projectName}</p>
         <h1 className="text-xl font-semibold tracking-tight">Marka</h1>
@@ -82,54 +83,66 @@ export function BrandEditor({ projectId, projectName }: Props) {
       </nav>
 
       {tab === "identity" ? (
-        <SectionCard
-          title="Tożsamość marki"
-          description="Fundament strategiczny marki."
-          status={identity.status}
-        >
-          <AutosaveField
-            label="Misja"
-            hint="Po co istniejemy"
-            value={identity.data.missionMd}
-            onCommit={(v) => identity.patch({ missionMd: v })}
-            multiline
-          />
-          <AutosaveField
-            label="Wizja"
-            hint="Dokąd zmierzamy"
-            value={identity.data.visionMd}
-            onCommit={(v) => identity.patch({ visionMd: v })}
-            multiline
-          />
-          <AutosaveField
-            label="Purpose"
-            hint="Wyższy cel"
-            value={identity.data.purposeMd}
-            onCommit={(v) => identity.patch({ purposeMd: v })}
-            multiline
-          />
-          <AutosaveField
-            label="Filary marki"
-            hint="Kluczowe wartości"
-            value={identity.data.brandPillarsMd}
-            onCommit={(v) => identity.patch({ brandPillarsMd: v })}
-            multiline
-          />
-          <AutosaveField
-            label="Tone of voice"
-            hint="Jak mówimy"
-            value={identity.data.toneOfVoiceMd}
-            onCommit={(v) => identity.patch({ toneOfVoiceMd: v })}
-            multiline
-          />
-          <AutosaveField
-            label="Osobowość marki"
-            hint="Archetyp / cechy"
-            value={identity.data.brandPersonalityMd}
-            onCommit={(v) => identity.patch({ brandPersonalityMd: v })}
-            multiline
-          />
-        </SectionCard>
+        <div className="space-y-8">
+          <CalloutField
+            title="Misja"
+            description="Po co istniejemy"
+            status={identity.status}
+          >
+            <AutosaveField
+              bare
+              value={identity.data.missionMd}
+              onCommit={(v) => identity.patch({ missionMd: v })}
+              multiline
+              rows={6}
+            />
+          </CalloutField>
+          <CalloutField title="Wizja" description="Dokąd zmierzamy">
+            <AutosaveField
+              bare
+              value={identity.data.visionMd}
+              onCommit={(v) => identity.patch({ visionMd: v })}
+              multiline
+              rows={6}
+            />
+          </CalloutField>
+          <CalloutField title="Purpose" description="Wyższy cel">
+            <AutosaveField
+              bare
+              value={identity.data.purposeMd}
+              onCommit={(v) => identity.patch({ purposeMd: v })}
+              multiline
+              rows={6}
+            />
+          </CalloutField>
+          <CalloutField title="Filary marki" description="Kluczowe wartości">
+            <AutosaveField
+              bare
+              value={identity.data.brandPillarsMd}
+              onCommit={(v) => identity.patch({ brandPillarsMd: v })}
+              multiline
+              rows={6}
+            />
+          </CalloutField>
+          <CalloutField title="Tone of voice" description="Jak mówimy">
+            <AutosaveField
+              bare
+              value={identity.data.toneOfVoiceMd}
+              onCommit={(v) => identity.patch({ toneOfVoiceMd: v })}
+              multiline
+              rows={8}
+            />
+          </CalloutField>
+          <CalloutField title="Osobowość marki" description="Archetyp / cechy">
+            <AutosaveField
+              bare
+              value={identity.data.brandPersonalityMd}
+              onCommit={(v) => identity.patch({ brandPersonalityMd: v })}
+              multiline
+              rows={6}
+            />
+          </CalloutField>
+        </div>
       ) : (
         <div className="space-y-5">
           <SectionCard

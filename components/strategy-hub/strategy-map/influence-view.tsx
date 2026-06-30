@@ -32,6 +32,8 @@ const COLUMN: Record<InfluenceEntityType, number> = {
   flow: 2,
   channel: 2,
   kpi: 2,
+  campaign: 2,
+  geo: 2,
   page: 3,
   seo: 4,
 };

@@ -5,6 +5,8 @@ import {
   funnelElements,
   funnelElementChannels,
   funnelElementKpis,
+  funnelElementCampaigns,
+  funnelElementGeo,
   purchaseStages,
   segments,
 } from "@/db/schema";
@@ -14,6 +16,8 @@ import { z } from "zod";
 const schema = z.object({
   channelIds: z.array(z.string().uuid()).optional(),
   kpiIds: z.array(z.string().uuid()).optional(),
+  campaignIds: z.array(z.string().uuid()).optional(),
+  geoAssetIds: z.array(z.string().uuid()).optional(),
 });
 
 // GET current relations for an element
@@ -25,7 +29,7 @@ export async function GET(
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
 
-  const [channelRows, kpiRows] = await Promise.all([
+  const [channelRows, kpiRows, campaignRows, geoRows] = await Promise.all([
     db
       .select({ channelId: funnelElementChannels.channelId })
       .from(funnelElementChannels)
@@ -34,11 +38,21 @@ export async function GET(
       .select({ kpiId: funnelElementKpis.kpiId })
       .from(funnelElementKpis)
       .where(eq(funnelElementKpis.funnelElementId, elementId)),
+    db
+      .select({ campaignId: funnelElementCampaigns.campaignId })
+      .from(funnelElementCampaigns)
+      .where(eq(funnelElementCampaigns.funnelElementId, elementId)),
+    db
+      .select({ geoAssetId: funnelElementGeo.geoAssetId })
+      .from(funnelElementGeo)
+      .where(eq(funnelElementGeo.funnelElementId, elementId)),
   ]);
 
   return NextResponse.json({
     channelIds: channelRows.map((r) => r.channelId),
     kpiIds: kpiRows.map((r) => r.kpiId),
+    campaignIds: campaignRows.map((r) => r.campaignId),
+    geoAssetIds: geoRows.map((r) => r.geoAssetId),
   });
 }
 
@@ -75,7 +89,7 @@ export async function PUT(
     return NextResponse.json({ error: "Element not found" }, { status: 404 });
   }
 
-  const { channelIds, kpiIds } = parsed.data;
+  const { channelIds, kpiIds, campaignIds, geoAssetIds } = parsed.data;
 
   await db.transaction(async (tx) => {
     if (channelIds !== undefined) {
@@ -96,6 +110,34 @@ export async function PUT(
       if (kpiIds.length > 0) {
         await tx.insert(funnelElementKpis).values(
           kpiIds.map((kpiId) => ({ funnelElementId: elementId, kpiId }))
+        );
+      }
+    }
+
+    if (campaignIds !== undefined) {
+      await tx
+        .delete(funnelElementCampaigns)
+        .where(eq(funnelElementCampaigns.funnelElementId, elementId));
+      if (campaignIds.length > 0) {
+        await tx.insert(funnelElementCampaigns).values(
+          campaignIds.map((campaignId) => ({
+            funnelElementId: elementId,
+            campaignId,
+          }))
+        );
+      }
+    }
+
+    if (geoAssetIds !== undefined) {
+      await tx
+        .delete(funnelElementGeo)
+        .where(eq(funnelElementGeo.funnelElementId, elementId));
+      if (geoAssetIds.length > 0) {
+        await tx.insert(funnelElementGeo).values(
+          geoAssetIds.map((geoAssetId) => ({
+            funnelElementId: elementId,
+            geoAssetId,
+          }))
         );
       }
     }
