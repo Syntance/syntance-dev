@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   requireProjectAccess,
+  requireProjectReadAccess,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
@@ -11,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string; segmentId: string; child: string }> }
 ) {
   const { id, segmentId, child } = await params;
-  const auth = await requireProjectAccess(id);
+  const auth = await requireProjectReadAccess(id);
   if (!auth.ok) return auth.response;
 
   const entity = getSegmentChild(child);

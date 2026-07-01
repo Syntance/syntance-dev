@@ -88,7 +88,14 @@ function statusDot(status: string | null): string {
   );
 }
 
-export function FunnelBoard({ projectId }: { projectId: string }) {
+export function FunnelBoard({
+  projectId,
+  mode = "editor",
+}: {
+  projectId: string;
+  mode?: "editor" | "client";
+}) {
+  const isEditor = mode === "editor";
   const [data, setData] = useState<BoardData | null>(null);
   const [segmentId, setSegmentId] = useState<string>("");
   const [visiblePhases, setVisiblePhases] = useState<Set<Phase>>(
@@ -114,7 +121,7 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
   }, [refresh]);
 
   const buildGraph = useCallback(
-    (d: BoardData, segId: string, phases: Set<Phase>) => {
+    (d: BoardData, segId: string, phases: Set<Phase>, editable: boolean) => {
       const nextNodes: Node[] = [];
       const nextEdges: Edge[] = [];
 
@@ -165,6 +172,7 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
             position: { x: COL_X(colIdx), y: ROW_START_Y + rowIdx * ROW_HEIGHT },
             data: { label: el.name },
             type: "default",
+            draggable: editable,
             style: {
               background: "var(--card)",
               border: "1px solid var(--border)",
@@ -222,10 +230,10 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (!data || !segmentId) return;
-    const g = buildGraph(data, segmentId, visiblePhases);
+    const g = buildGraph(data, segmentId, visiblePhases, isEditor);
     setNodes(g.nodes);
     setEdges(g.edges);
-  }, [data, segmentId, visiblePhases, buildGraph, setNodes, setEdges]);
+  }, [data, segmentId, visiblePhases, buildGraph, setNodes, setEdges, isEditor]);
 
   const elementIds = useMemo(
     () => new Set((data?.elements ?? []).filter((e) => e.segmentId === segmentId).map((e) => e.id)),
@@ -234,7 +242,7 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
 
   const onNodeDragStop: OnNodeDrag = useCallback(
     async (_evt, node) => {
-      if (!data || !elementIds.has(node.id)) return;
+      if (!isEditor || !data || !elementIds.has(node.id)) return;
       const el = data.elements.find((e) => e.id === node.id);
       if (!el) return;
       const currentStage = data.stages.find((s) => s.id === el.stageId);
@@ -242,7 +250,7 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
 
       if (!targetPhase || targetPhase === currentStage?.phase) {
         // Powrót do siatki (brak realnej zmiany kolumny) — pełny rebuild z aktualnych danych.
-        const g = buildGraph(data, segmentId, visiblePhases);
+        const g = buildGraph(data, segmentId, visiblePhases, isEditor);
         setNodes(g.nodes);
         return;
       }
@@ -254,7 +262,7 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
         setWarning(
           `Brak etapu „${PHASES.find((p) => p.key === targetPhase)?.label}" dla tego segmentu — utwórz go najpierw w zakładce Lejek.`
         );
-        const g = buildGraph(data, segmentId, visiblePhases);
+        const g = buildGraph(data, segmentId, visiblePhases, isEditor);
         setNodes(g.nodes);
         return;
       }
@@ -275,12 +283,12 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
       });
       await refresh();
     },
-    [data, elementIds, segmentId, visiblePhases, buildGraph, setNodes, projectId, refresh]
+    [data, elementIds, segmentId, visiblePhases, buildGraph, setNodes, projectId, refresh, isEditor]
   );
 
   const onConnect = useCallback(
     async (conn: Connection) => {
-      if (!conn.source || !conn.target) return;
+      if (!isEditor || !conn.source || !conn.target) return;
       const isElementToChannel = elementIds.has(conn.source) && conn.target.startsWith("ch-");
       if (!isElementToChannel) return;
       setEdges((eds) => addEdge({ ...conn, markerEnd: { type: MarkerType.ArrowClosed } }, eds));
@@ -307,17 +315,18 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
         await refresh();
       }
     },
-    [elementIds, projectId, data, setEdges, refresh]
+    [elementIds, projectId, data, setEdges, refresh, isEditor]
   );
 
   const autoLayout = useCallback(() => {
     if (!data || !segmentId) return;
     layoutSeq.current += 1;
-    const g = buildGraph(data, segmentId, visiblePhases);
+    const g = buildGraph(data, segmentId, visiblePhases, isEditor);
     setNodes(g.nodes);
-  }, [data, segmentId, visiblePhases, buildGraph, setNodes]);
+  }, [data, segmentId, visiblePhases, buildGraph, setNodes, isEditor]);
 
   useEffect(() => {
+    if (!isEditor) return;
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l") {
         e.preventDefault();
@@ -326,7 +335,7 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [autoLayout]);
+  }, [autoLayout, isEditor]);
 
   const togglePhase = (p: Phase) => {
     setVisiblePhases((prev) => {
@@ -382,15 +391,17 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
               {p.key}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={autoLayout}
-            className="ml-1 flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
-            title="Auto-layout (⌘L)"
-          >
-            <LayoutGrid className="size-3" />
-            ⌘L
-          </button>
+          {isEditor && (
+            <button
+              type="button"
+              onClick={autoLayout}
+              className="ml-1 flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
+              title="Auto-layout (⌘L)"
+            >
+              <LayoutGrid className="size-3" />
+              ⌘L
+            </button>
+          )}
         </div>
       </div>
 
@@ -405,13 +416,14 @@ export function FunnelBoard({ projectId }: { projectId: string }) {
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeDragStop={onNodeDragStop}
-          onConnect={onConnect}
+          onNodesChange={isEditor ? onNodesChange : undefined}
+          onEdgesChange={isEditor ? onEdgesChange : undefined}
+          onNodeDragStop={isEditor ? onNodeDragStop : undefined}
+          onConnect={isEditor ? onConnect : undefined}
           fitView
           proOptions={{ hideAttribution: true }}
-          nodesConnectable
+          nodesConnectable={isEditor}
+          nodesDraggable={isEditor}
         >
           <Background color="var(--border)" gap={20} />
           <Controls showInteractive={false} />

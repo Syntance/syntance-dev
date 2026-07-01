@@ -105,6 +105,7 @@ interface TextFieldProps {
   rows?: number;
   /** Bez obramowania — do użycia wewnątrz `CalloutField`. */
   bare?: boolean;
+  readOnly?: boolean;
 }
 
 export function AutosaveField({
@@ -117,10 +118,24 @@ export function AutosaveField({
   placeholder,
   rows = 4,
   bare = false,
+  readOnly = false,
 }: TextFieldProps) {
   const str = value == null ? "" : String(value);
   const bareInputClass =
     "border-0 bg-transparent shadow-none focus-visible:ring-0 px-0 min-h-0";
+
+  if (readOnly) {
+    return (
+      <div className={cn(!bare && "space-y-1.5")}>
+        {label && (
+          <label className="text-sm font-medium text-muted-foreground">{label}</label>
+        )}
+        <p className="text-sm text-foreground/90 whitespace-pre-wrap">
+          {str || "—"}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className={cn(!bare && "space-y-1.5")}>

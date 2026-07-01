@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireProjectAccess } from "@/lib/strategy-hub/api-helpers";
+import { requireProjectAccess, requireProjectReadAccess } from "@/lib/strategy-hub/api-helpers";
 import { db } from "@/db";
 import { channels } from "@/db/schema";
 import { eq, and, isNull, or } from "drizzle-orm";
@@ -20,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
-  const auth = await requireProjectAccess(projectId);
+  const auth = await requireProjectReadAccess(projectId);
   if (!auth.ok) return auth.response;
   const pathId = new URL(req.url).searchParams.get("pathId");
 
@@ -33,7 +33,7 @@ export async function GET(
     .from(channels)
     .where(and(eq(channels.projectId, projectId), isNull(channels.deletedAt), pathFilter));
 
-  return NextResponse.json({ channels: rows });
+  return NextResponse.json({ items: rows, channels: rows });
 }
 
 export async function POST(

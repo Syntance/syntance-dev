@@ -74,6 +74,17 @@ export function recordStatus(
   return vis.records[entityType]?.[recordId] ?? "visible";
 }
 
+/** Filtruje rekordy ukryte przed klientem portalu (GET dual-auth). */
+export function filterRecordsForClient<T extends { id: string }>(
+  items: T[],
+  vis: ProjectVisibility,
+  entityType: string
+): T[] {
+  return items.filter(
+    (item) => recordStatus(vis, entityType, item.id) !== "hidden"
+  );
+}
+
 interface SetVisibilityInput {
   projectId: string;
   scope: VisibilityScope;

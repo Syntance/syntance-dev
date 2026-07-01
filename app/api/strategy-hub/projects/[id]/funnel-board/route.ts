@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireProjectAccess } from "@/lib/strategy-hub/api-helpers";
+import { requireProjectAccess, requireProjectReadAccess } from "@/lib/strategy-hub/api-helpers";
 import { db } from "@/db";
 import {
   segments,
@@ -20,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
-  const auth = await requireProjectAccess(projectId);
+  const auth = await requireProjectReadAccess(projectId);
   if (!auth.ok) return auth.response;
 
   const segmentRows = await db

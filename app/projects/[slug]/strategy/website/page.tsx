@@ -9,13 +9,14 @@ import {
   techStack,
 } from "@/db/schema";
 import { eq, isNull, and, asc } from "drizzle-orm";
-import { Globe, FileBox, Search, Layers, ExternalLink, Hammer } from "lucide-react";
+import { Globe, Search, Layers, ExternalLink, Hammer } from "lucide-react";
 import { trackVisit } from "@/lib/strategy-hub/tracking";
 import {
   getProjectVisibility,
   moduleStatus,
   type VisibilityStatus,
 } from "@/lib/strategy-hub/visibility";
+import { WebsiteClientView } from "./website-client-view";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -81,7 +82,7 @@ export default async function ClientWebsitePage({ params }: Props) {
       data.techList.length > 0);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8">
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Globe className="size-5 text-brand" />
@@ -110,38 +111,15 @@ export default async function ClientWebsitePage({ params }: Props) {
       ) : (
         <>
           {data!.pageList.length > 0 && (
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <FileBox className="size-4 text-muted-foreground" />
-                <h2 className="font-medium text-sm">
-                  Podstrony ({data!.pageList.length})
-                </h2>
-              </div>
-              <div className="rounded-xl border border-border bg-card divide-y divide-border overflow-hidden">
-                {data!.pageList.map((p) => (
-                  <div key={p.id} className="flex items-center gap-3 px-5 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{p.name}</span>
-                        {p.urlPath && (
-                          <code className="text-[10px] text-muted-foreground font-mono">
-                            {p.urlPath}
-                          </code>
-                        )}
-                      </div>
-                      {p.cta && (
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          CTA: {p.cta}
-                        </div>
-                      )}
-                    </div>
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-                      {p.status ?? "draft"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <WebsiteClientView
+              projectId={data!.projectId}
+              pages={data!.pageList.map((p) => ({
+                id: p.id,
+                name: p.name,
+                urlPath: p.urlPath,
+                status: p.status,
+              }))}
+            />
           )}
 
           {data!.seoList.length > 0 && (

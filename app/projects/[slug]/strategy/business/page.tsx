@@ -2,12 +2,16 @@ import { redirect, notFound } from "next/navigation";
 import { getClientSession } from "@/lib/auth";
 import { getProjectBySlugForUser } from "@/lib/client-portal/queries";
 import { db } from "@/db";
-import { projects as dbProjects, businessStrategy } from "@/db/schema";
+import { projects as dbProjects, businessStrategy, brandPositioning } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
-import { FileText, Target, Sparkles, Users, MessageSquare, Hammer } from "lucide-react";
+import { FileText, Target, Sparkles, Users, MessageSquare, Hammer, Crosshair } from "lucide-react";
 import { trackVisit } from "@/lib/strategy-hub/tracking";
 import { StrategyItemCallout } from "@/components/strategy-hub/strategy-item-callout";
 import { parseStrategyListItems } from "@/lib/strategy-hub/business-strategy-lists";
+import {
+  PositioningMini,
+  parsePositioningCompetitors,
+} from "@/components/strategy-hub/positioning-mini";
 import {
   getProjectVisibility,
   moduleStatus,
@@ -19,10 +23,12 @@ interface Props {
 }
 
 type StrategyRow = typeof businessStrategy.$inferSelect;
+type PositioningRow = typeof brandPositioning.$inferSelect;
 
 async function getStrategy(slug: string): Promise<{
   moduleVis: VisibilityStatus;
   strategy: StrategyRow | null;
+  positioning: PositioningRow | null;
 }> {
   try {
     const rows = await db
@@ -31,16 +37,21 @@ async function getStrategy(slug: string): Promise<{
       .where(and(eq(dbProjects.slug, slug), isNull(dbProjects.deletedAt)))
       .limit(1);
 
-    if (!rows[0]) return { moduleVis: "visible", strategy: null };
+    if (!rows[0]) return { moduleVis: "visible", strategy: null, positioning: null };
 
     const projectId = rows[0].id;
     trackVisit(projectId, "business");
 
-    const [stratRows, vis] = await Promise.all([
+    const [stratRows, positioningRows, vis] = await Promise.all([
       db
         .select()
         .from(businessStrategy)
         .where(eq(businessStrategy.projectId, projectId))
+        .limit(1),
+      db
+        .select()
+        .from(brandPositioning)
+        .where(eq(brandPositioning.projectId, projectId))
         .limit(1),
       getProjectVisibility(projectId),
     ]);
@@ -48,9 +59,10 @@ async function getStrategy(slug: string): Promise<{
     return {
       moduleVis: moduleStatus(vis, "business"),
       strategy: stratRows[0] ?? null,
+      positioning: positioningRows[0] ?? null,
     };
   } catch {
-    return { moduleVis: "visible", strategy: null };
+    return { moduleVis: "visible", strategy: null, positioning: null };
   }
 }
 
@@ -93,8 +105,15 @@ export default async function ClientBusinessStrategyPage({ params }: Props) {
 
   if (!project) notFound();
 
-  const { moduleVis, strategy } = await getStrategy(slug);
+  const { moduleVis, strategy, positioning } = await getStrategy(slug);
   if (moduleVis === "hidden") notFound();
+
+  const competitors = parsePositioningCompetitors(positioning?.competitorsOnQuadrant);
+  const hasPositioning =
+    positioning !== null &&
+    (positioning.ourX !== null ||
+      positioning.statementMd?.trim() ||
+      competitors.length > 0);
 
   const hasContent = strategy && SECTIONS.some((s) => {
     const content = strategy[s.key];
@@ -125,7 +144,7 @@ export default async function ClientBusinessStrategyPage({ params }: Props) {
             Pracujemy nad nią — wróć wkrótce.
           </p>
         </div>
-      ) : !hasContent ? (
+      ) : !hasContent && !hasPositioning ? (
         <div className="rounded-xl border border-dashed border-border bg-card/40 py-16 text-center">
           <FileText className="mx-auto size-10 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground">
@@ -137,6 +156,24 @@ export default async function ClientBusinessStrategyPage({ params }: Props) {
         </div>
       ) : (
         <div className="space-y-4">
+          {hasPositioning && positioning && (
+            <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <Crosshair className="size-4 text-brand" />
+                <h2 className="font-medium text-sm">Pozycjonowanie marki</h2>
+              </div>
+              <PositioningMini
+                variant="full"
+                ourX={positioning.ourX}
+                ourY={positioning.ourY}
+                ourLabel={positioning.ourLabel}
+                axisXLabel={positioning.axisXLabel}
+                axisYLabel={positioning.axisYLabel}
+                competitors={competitors}
+                statementMd={positioning.statementMd}
+              />
+            </div>
+          )}
           {SECTIONS.map((section) => {
             const content = strategy?.[section.key];
             const listItems = section.list

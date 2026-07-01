@@ -60,6 +60,8 @@ interface EntityCrudProps {
   onMutate?: () => void;
   /** Filtr po stronie WWW (multi-site). */
   siteId?: string;
+  /** Tylko odczyt — bez dodawania, edycji i usuwania. */
+  readOnly?: boolean;
 }
 
 const toneClass: Record<BadgeTone, string> = {
@@ -254,6 +256,7 @@ function RecordCard({
   projectId,
   entityType,
   visStatus,
+  readOnly = false,
 }: {
   record: EntityRecord;
   fields: FieldDef[];
@@ -262,6 +265,7 @@ function RecordCard({
   projectId: string;
   entityType: string;
   visStatus: VisibilityStatus;
+  readOnly?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -274,7 +278,7 @@ function RecordCard({
     (f) => !f.primary && !f.badge && record[f.key]
   );
 
-  if (editing) {
+  if (editing && !readOnly) {
     return (
       <li className="list-none">
         <RecordForm
@@ -355,31 +359,33 @@ function RecordCard({
             );
           })}
         </div>
-        <div className="flex flex-col items-center gap-0.5 shrink-0">
-          <VisibilityControl
-            projectId={projectId}
-            scope="record"
-            entityType={entityType}
-            entityId={record.id}
-            initialStatus={visStatus}
-          />
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            aria-label="Edytuj"
-            className="size-6 flex items-center justify-center rounded text-transparent group-hover:text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <Pencil className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={onRemove}
-            aria-label="Usuń"
-            className="size-6 flex items-center justify-center rounded text-transparent group-hover:text-muted-foreground hover:text-destructive transition-colors"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex flex-col items-center gap-0.5 shrink-0">
+            <VisibilityControl
+              projectId={projectId}
+              scope="record"
+              entityType={entityType}
+              entityId={record.id}
+              initialStatus={visStatus}
+            />
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              aria-label="Edytuj"
+              className="size-6 flex items-center justify-center rounded text-transparent group-hover:text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              aria-label="Usuń"
+              className="size-6 flex items-center justify-center rounded text-transparent group-hover:text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </li>
   );
@@ -398,6 +404,7 @@ export function EntityCrud({
   dense = false,
   onMutate,
   siteId: siteIdProp,
+  readOnly = false,
 }: EntityCrudProps) {
   const [items, setItems] = useState<EntityRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -517,7 +524,7 @@ export function EntityCrud({
             ? "Ładowanie…"
             : `${items.length} ${items.length === 1 ? "element" : "elementów"}`}
         </span>
-        {!adding && (
+        {!adding && !readOnly && (
           <Button
             size="sm"
             variant="outline"
@@ -530,7 +537,7 @@ export function EntityCrud({
         )}
       </div>
 
-      {adding && (
+      {adding && !readOnly && (
         <RecordForm
           fields={fields}
           initial={{ ...defaults }}
@@ -559,6 +566,7 @@ export function EntityCrud({
               projectId={projectId}
               entityType={entity}
               visStatus={visMap[item.id] ?? "visible"}
+              readOnly={readOnly}
             />
           ))}
         </ul>

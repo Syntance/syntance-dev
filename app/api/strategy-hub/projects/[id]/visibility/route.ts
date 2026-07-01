@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import { requireProjectAccess, requireProjectReadAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 import {
   getProjectVisibility,
   setVisibility,
@@ -18,7 +18,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const auth = await requireProjectAccess(id);
+  const auth = await requireProjectReadAccess(id);
   if (!auth.ok) return auth.response;
   return NextResponse.json(await getProjectVisibility(id));
 }

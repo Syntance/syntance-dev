@@ -32,6 +32,7 @@ import {
 interface Props {
   projectId: string;
   projectName: string;
+  mode?: "editor" | "client";
 }
 
 type Segment = { id: string; [k: string]: unknown };
@@ -86,7 +87,8 @@ const riskFields: FieldDef[] = [
   },
 ];
 
-export function SegmentsEditor({ projectId, projectName }: Props) {
+export function SegmentsEditor({ projectId, projectName, mode = "editor" }: Props) {
+  const isEditor = mode === "editor";
   const base = `/api/strategy-hub/projects/${projectId}/segments`;
   const [segments, setSegments] = useState<Segment[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -236,7 +238,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
         </p>
       </header>
 
-      {/* Kryteria segmentacji */}
+      {isEditor && (
       <SectionCard
         title="Kryteria segmentacji"
         description="Wymiary, według których dzielimy rynek."
@@ -254,6 +256,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
           emptyHint="Brak zdefiniowanych kryteriów."
         />
       </SectionCard>
+      )}
 
       {/* Priorytetyzacja segmentów — macierz scoringu ważonego */}
       {segments.length > 1 && (
@@ -313,6 +316,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
                 </tbody>
               </table>
             </div>
+            {isEditor && (
             <Button
               type="button"
               size="sm"
@@ -322,6 +326,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
             >
               Zastosuj ranking jako priorytet
             </Button>
+            )}
           </div>
         </SectionCard>
       )}
@@ -329,6 +334,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
       <div className="grid gap-5 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
         {/* Lista segmentów */}
         <aside className="space-y-2">
+          {isEditor && (
           <div className="flex items-center gap-2">
             <Input
               value={draftName}
@@ -350,6 +356,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
               <Plus className="size-4" />
             </Button>
           </div>
+          )}
 
           {!loaded ? (
             <div className="flex items-center gap-2 px-2 py-4 text-sm text-muted-foreground">
@@ -418,7 +425,8 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
         {selected ? (
           <div className="space-y-5 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <SaveIndicator status={status} />
+              {isEditor && <SaveIndicator status={status} />}
+              {isEditor && (
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
@@ -454,103 +462,122 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
                   Usuń segment
                 </Button>
               </div>
+              )}
             </div>
 
             <SectionCard title="Podstawowe">
               <div className="grid gap-4 sm:grid-cols-2">
                 <AutosaveField
+                  readOnly={!isEditor}
                   label="Nazwa"
                   value={selected.name}
                   onCommit={(v) => patchSegment(selected.id, { name: v })}
                 />
                 <AutosaveField
+                  readOnly={!isEditor}
                   label="Persona"
                   value={selected.personaName}
                   onCommit={(v) => patchSegment(selected.id, { personaName: v })}
                 />
                 <AutosaveField
+                  readOnly={!isEditor}
                   label="Kod"
                   value={selected.code}
                   onCommit={(v) => patchSegment(selected.id, { code: v })}
                 />
                 <AutosaveField
+                  readOnly={!isEditor}
                   label="Ikona (emoji)"
                   value={selected.icon}
                   onCommit={(v) => patchSegment(selected.id, { icon: v })}
                 />
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Status</label>
-                  <select
-                    value={String(selected.status ?? "active")}
-                    onChange={(e) =>
-                      patchSegment(selected.id, { status: e.target.value })
-                    }
-                    className="h-9 w-full rounded-md border border-border bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                  >
-                    <option value="active">Aktywny</option>
-                    <option value="paused">Wstrzymany</option>
-                    <option value="archived">Archiwum</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Priorytet</label>
-                  <Input
-                    type="number"
-                    value={selected.priority == null ? "" : String(selected.priority)}
-                    onChange={(e) =>
-                      patchSegment(selected.id, {
-                        priority:
-                          e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                    className="h-9 text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Udział w przych. (%)</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={
-                      selected.revenueSharePct == null
-                        ? ""
-                        : String(selected.revenueSharePct)
-                    }
-                    onChange={(e) =>
-                      patchSegment(selected.id, {
-                        revenueSharePct:
-                          e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                    className="h-9 text-sm"
-                  />
-                </div>
+                {isEditor ? (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Status</label>
+                      <select
+                        value={String(selected.status ?? "active")}
+                        onChange={(e) =>
+                          patchSegment(selected.id, { status: e.target.value })
+                        }
+                        className="h-9 w-full rounded-md border border-border bg-transparent px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      >
+                        <option value="active">Aktywny</option>
+                        <option value="paused">Wstrzymany</option>
+                        <option value="archived">Archiwum</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Priorytet</label>
+                      <Input
+                        type="number"
+                        value={selected.priority == null ? "" : String(selected.priority)}
+                        onChange={(e) =>
+                          patchSegment(selected.id, {
+                            priority:
+                              e.target.value === "" ? null : Number(e.target.value),
+                          })
+                        }
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Udział w przych. (%)</label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={
+                          selected.revenueSharePct == null
+                            ? ""
+                            : String(selected.revenueSharePct)
+                        }
+                        onChange={(e) =>
+                          patchSegment(selected.id, {
+                            revenueSharePct:
+                              e.target.value === "" ? null : Number(e.target.value),
+                          })
+                        }
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="sm:col-span-3 grid gap-3 sm:grid-cols-3 text-sm">
+                    <p><span className="text-muted-foreground">Status: </span>{String(selected.status ?? "active")}</p>
+                    <p><span className="text-muted-foreground">Priorytet: </span>{selected.priority == null ? "—" : String(selected.priority)}</p>
+                    <p><span className="text-muted-foreground">Udział w przych.: </span>{selected.revenueSharePct != null ? `${selected.revenueSharePct}%` : "—"}</p>
+                  </div>
+                )}
               </div>
             </SectionCard>
 
             <SectionCard title="Profil">
               <AutosaveField
+                  readOnly={!isEditor}
                 label="Demografia"
                 value={selected.demographicsMd}
                 onCommit={(v) => patchSegment(selected.id, { demographicsMd: v })}
                 multiline
               />
               <AutosaveField
+                  readOnly={!isEditor}
                 label="JTBD (Jobs To Be Done)"
                 value={selected.jtbdMd}
                 onCommit={(v) => patchSegment(selected.id, { jtbdMd: v })}
                 multiline
               />
               <AutosaveField
+                  readOnly={!isEditor}
                 label="Problem"
                 value={selected.problemMd}
                 onCommit={(v) => patchSegment(selected.id, { problemMd: v })}
                 multiline
               />
               <AutosaveField
+                  readOnly={!isEditor}
                 label="UVP dla segmentu"
                 value={selected.uvpForSegmentMd}
                 onCommit={(v) =>
@@ -562,6 +589,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
 
             <SectionCard title="Psychologia zakupu">
               <AutosaveField
+                  readOnly={!isEditor}
                 label="Drivery emocjonalne"
                 value={selected.emotionalDriversMd}
                 onCommit={(v) =>
@@ -570,18 +598,21 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
                 multiline
               />
               <AutosaveField
+                  readOnly={!isEditor}
                 label="Triggery"
                 value={selected.triggersMd}
                 onCommit={(v) => patchSegment(selected.id, { triggersMd: v })}
                 multiline
               />
               <AutosaveField
+                  readOnly={!isEditor}
                 label="Blokery"
                 value={selected.blockersMd}
                 onCommit={(v) => patchSegment(selected.id, { blockersMd: v })}
                 multiline
               />
               <AutosaveField
+                  readOnly={!isEditor}
                 label="Mentalność"
                 value={selected.mentalityMd}
                 onCommit={(v) => patchSegment(selected.id, { mentalityMd: v })}
@@ -591,6 +622,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
 
             <SectionCard title="Budżet i rynek">
               <AutosaveField
+                  readOnly={!isEditor}
                 label="Budżet"
                 value={selected.budgetMd}
                 onCommit={(v) => patchSegment(selected.id, { budgetMd: v })}
@@ -607,6 +639,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
                 />
               </div>
               <AutosaveField
+                  readOnly={!isEditor}
                 label="Wielkość rynku"
                 value={selected.marketSizeMd}
                 onCommit={(v) => patchSegment(selected.id, { marketSizeMd: v })}
@@ -691,6 +724,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
                 addLabel="Dodaj etap"
                 emptyHint="Brak etapów ścieżki."
                 dense
+                readOnly={!isEditor}
               />
             </SectionCard>
 
@@ -703,6 +737,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
                 addLabel="Dodaj quick win"
                 emptyHint="Brak quick winów."
                 dense
+                readOnly={!isEditor}
               />
             </SectionCard>
 
@@ -715,6 +750,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
                 addLabel="Dodaj ryzyko"
                 emptyHint="Brak zidentyfikowanych ryzyk."
                 dense
+                readOnly={!isEditor}
               />
             </SectionCard>
 
@@ -722,6 +758,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
               projectId={projectId}
               entityType="segment"
               entityId={selected.id}
+              readOnly={!isEditor}
             />
           </div>
         ) : (

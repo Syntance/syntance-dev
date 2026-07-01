@@ -43,6 +43,7 @@ interface Props {
   projectId: string;
   pageId: string;
   pageLabel: string;
+  mode?: "editor" | "client";
 }
 
 /**
@@ -52,7 +53,13 @@ interface Props {
  * jeden blok), z realnym copy i przyciskiem CTA. „Wyślij do dev" tworzy zadanie
  * projektowe (`project_tasks`) powiązane z sekcją.
  */
-export function PageSectionEditor({ projectId, pageId, pageLabel }: Props) {
+export function PageSectionEditor({
+  projectId,
+  pageId,
+  pageLabel,
+  mode = "editor",
+}: Props) {
+  const isEditor = mode === "editor";
   const base = `/api/strategy-hub/projects/${projectId}/pages/${pageId}/sections`;
   const undoRedo = useUndoRedo();
   const [sections, setSections] = React.useState<PageSection[]>([]);
@@ -240,8 +247,8 @@ export function PageSectionEditor({ projectId, pageId, pageLabel }: Props) {
           size="sm"
           variant="outline"
           onClick={() => void addSection()}
-          disabled={creating}
-          className="h-8 w-full gap-1.5 text-xs"
+          disabled={creating || !isEditor}
+          className={cn("h-8 w-full gap-1.5 text-xs", !isEditor && "hidden")}
         >
           {creating ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
           Dodaj sekcję
@@ -257,52 +264,71 @@ export function PageSectionEditor({ projectId, pageId, pageLabel }: Props) {
           {/* Formularz */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <Input
-                value={selected.name}
-                onChange={(e) => saveField(selected.id, "name", e.target.value)}
-                className="h-8 flex-1 text-sm font-semibold"
-              />
-              <div className="flex shrink-0 items-center gap-0.5">
-                <IconBtn icon={ArrowUp} onClick={() => move(selected.id, -1)} label="Wyżej" />
-                <IconBtn icon={ArrowDown} onClick={() => move(selected.id, 1)} label="Niżej" />
-                <IconBtn icon={Trash2} danger onClick={() => void removeSection(selected.id)} label="Usuń" />
-              </div>
+              {isEditor ? (
+                <Input
+                  value={selected.name}
+                  onChange={(e) => saveField(selected.id, "name", e.target.value)}
+                  className="h-8 flex-1 text-sm font-semibold"
+                />
+              ) : (
+                <h3 className="text-sm font-semibold flex-1">{selected.name}</h3>
+              )}
+              {isEditor && (
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <IconBtn icon={ArrowUp} onClick={() => move(selected.id, -1)} label="Wyżej" />
+                  <IconBtn icon={ArrowDown} onClick={() => move(selected.id, 1)} label="Niżej" />
+                  <IconBtn icon={Trash2} danger onClick={() => void removeSection(selected.id)} label="Usuń" />
+                </div>
+              )}
             </div>
 
-            <Field label="Cel sekcji" value={selected.purposeMd} rows={2}
-              onChange={(v) => saveField(selected.id, "purposeMd", v)} />
-            <Field label="Copy" value={selected.copyMd} rows={4}
-              onChange={(v) => saveField(selected.id, "copyMd", v)} />
-            <Field
-              label="Struktura / schema (1 blok = 1 linia)"
-              value={selected.schemaMd}
-              rows={4}
-              onChange={(v) => saveField(selected.id, "schemaMd", v)}
-              placeholder={"np.\nNagłówek + subheadline\n3 karty korzyści\nCTA button"}
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">CTA — tekst</label>
-                <Input
-                  value={selected.ctaText ?? ""}
-                  onChange={(e) => saveField(selected.id, "ctaText", e.target.value)}
-                  placeholder="np. Zamów teraz"
-                  className="h-8 text-sm"
+            {isEditor ? (
+              <>
+                <Field label="Cel sekcji" value={selected.purposeMd} rows={2}
+                  onChange={(v) => saveField(selected.id, "purposeMd", v)} />
+                <Field label="Copy" value={selected.copyMd} rows={4}
+                  onChange={(v) => saveField(selected.id, "copyMd", v)} />
+                <Field
+                  label="Struktura / schema (1 blok = 1 linia)"
+                  value={selected.schemaMd}
+                  rows={4}
+                  onChange={(v) => saveField(selected.id, "schemaMd", v)}
+                  placeholder={"np.\nNagłówek + subheadline\n3 karty korzyści\nCTA button"}
                 />
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">CTA — tekst</label>
+                    <Input
+                      value={selected.ctaText ?? ""}
+                      onChange={(e) => saveField(selected.id, "ctaText", e.target.value)}
+                      placeholder="np. Zamów teraz"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">CTA — URL</label>
+                    <Input
+                      value={selected.ctaUrl ?? ""}
+                      onChange={(e) => saveField(selected.id, "ctaUrl", e.target.value)}
+                      placeholder="/koszyk"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <Field label="Notatki designu" value={selected.designNotesMd} rows={2}
+                  onChange={(v) => saveField(selected.id, "designNotesMd", v)} />
+              </>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <ReadOnlyBlock label="Cel sekcji" value={selected.purposeMd} />
+                <ReadOnlyBlock label="Copy" value={selected.copyMd} />
+                <ReadOnlyBlock label="Struktura" value={selected.schemaMd} />
+                <ReadOnlyBlock label="CTA" value={selected.ctaText ? `${selected.ctaText} → ${selected.ctaUrl ?? ""}` : null} />
+                <ReadOnlyBlock label="Notatki designu" value={selected.designNotesMd} />
               </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-medium text-muted-foreground">CTA — URL</label>
-                <Input
-                  value={selected.ctaUrl ?? ""}
-                  onChange={(e) => saveField(selected.id, "ctaUrl", e.target.value)}
-                  placeholder="/koszyk"
-                  className="h-8 text-sm"
-                />
-              </div>
-            </div>
-            <Field label="Notatki designu" value={selected.designNotesMd} rows={2}
-              onChange={(v) => saveField(selected.id, "designNotesMd", v)} />
+            )}
 
+            {isEditor && (
             <div className="border-t border-border pt-3">
               {sentDev.has(selected.id) ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success">
@@ -325,6 +351,7 @@ export function PageSectionEditor({ projectId, pageId, pageLabel }: Props) {
                 </Button>
               )}
             </div>
+            )}
           </div>
 
           {/* Live preview */}
@@ -366,6 +393,16 @@ export function PageSectionEditor({ projectId, pageId, pageLabel }: Props) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function ReadOnlyBlock({ label, value }: { label: string; value: string | null }) {
+  if (!value?.trim()) return null;
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      <p className="text-sm text-foreground/90 whitespace-pre-wrap">{value}</p>
     </div>
   );
 }

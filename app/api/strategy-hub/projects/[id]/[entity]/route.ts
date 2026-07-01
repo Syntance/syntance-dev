@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   requireProjectAccess,
+  requireProjectReadAccess,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
@@ -9,13 +10,23 @@ import {
   getListEntity,
   getSingletonEntity,
 } from "@/lib/strategy-hub/entities/registry";
+import {
+  filterRecordsForClient,
+  getProjectVisibility,
+} from "@/lib/strategy-hub/visibility";
+
+const CLIENT_FILTER_ENTITIES: Record<string, string> = {
+  segments: "segments",
+  channels: "channels",
+  "channel-activity-plan": "channel_activity_plan",
+};
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; entity: string }> }
 ) {
   const { id, entity } = await params;
-  const auth = await requireProjectAccess(id);
+  const auth = await requireProjectReadAccess(id);
   if (!auth.ok) return auth.response;
   const pathId = new URL(req.url).searchParams.get("pathId") || undefined;
   const siteId = new URL(req.url).searchParams.get("siteId") || undefined;
@@ -32,7 +43,21 @@ export async function GET(
   }
 
   const list = getListEntity(entity);
-  if (list) return NextResponse.json({ items: await list.list(id, pathId, siteId) });
+  if (list) {
+    let items = await list.list(id, pathId, siteId);
+    if (auth.role === "client") {
+      const vis = await getProjectVisibility(id);
+      const entityType = CLIENT_FILTER_ENTITIES[entity];
+      if (entityType) {
+        items = filterRecordsForClient(
+          items as Array<{ id: string }>,
+          vis,
+          entityType
+        );
+      }
+    }
+    return NextResponse.json({ items });
+  }
 
   const singleton = getSingletonEntity(entity);
   if (singleton)

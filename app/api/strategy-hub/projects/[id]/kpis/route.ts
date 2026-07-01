@@ -1,23 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   requireProjectAccess,
+  requireProjectReadAccess,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
 import { getListEntity } from "@/lib/strategy-hub/entities/registry";
+import {
+  filterRecordsForClient,
+  getProjectVisibility,
+} from "@/lib/strategy-hub/visibility";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const auth = await requireProjectAccess(id);
+  const auth = await requireProjectReadAccess(id);
   if (!auth.ok) return auth.response;
   const pathId = new URL(req.url).searchParams.get("pathId") || undefined;
 
   const entity = getListEntity("kpis");
   if (!entity) return notFound("Entity");
-  return NextResponse.json({ items: await entity.list(id, pathId) });
+  let items = await entity.list(id, pathId);
+  if (auth.role === "client") {
+    const vis = await getProjectVisibility(id);
+    items = filterRecordsForClient(
+      items as Array<{ id: string }>,
+      vis,
+      "kpis"
+    );
+  }
+  return NextResponse.json({ items });
 }
 
 export async function POST(

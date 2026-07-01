@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2, TrendingUp, Loader2, Check } from "lucide-react";
+import { Plus, Trash2, TrendingUp, Loader2, Check, Hammer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,7 @@ interface Kpi {
 interface Props {
   projectId: string;
   projectName: string;
+  mode?: "editor" | "client";
 }
 
 function parseNum(v: string | null | undefined): number | null {
@@ -48,6 +49,7 @@ function KpiCard({
   onDelete,
   projectId,
   visStatus,
+  mode,
 }: {
   kpi: Kpi;
   onActualCommit: (value: string) => void;
@@ -55,6 +57,7 @@ function KpiCard({
   onDelete: () => void;
   projectId: string;
   visStatus: VisibilityStatus;
+  mode: "editor" | "client";
 }) {
   const [actual, setActual] = useState(kpi.actual ?? "");
   const [measure, setMeasure] = useState("");
@@ -87,6 +90,8 @@ function KpiCard({
     setSaving(false);
   };
 
+  const wip = mode === "client" && visStatus === "in_progress";
+
   return (
     <div className="group rounded-xl border border-border bg-card/50 p-4 space-y-3 hover:border-border transition-colors">
       <div className="flex items-start justify-between gap-2">
@@ -102,108 +107,130 @@ function KpiCard({
           )}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
-          <VisibilityControl
-            projectId={projectId}
-            scope="record"
-            entityType="kpis"
-            entityId={kpi.id}
-            initialStatus={visStatus}
-          />
-          <button
-            type="button"
-            onClick={onDelete}
-            aria-label="Usuń KPI"
-            className="size-6 flex items-center justify-center rounded text-transparent group-hover:text-muted-foreground hover:text-destructive transition-colors"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        </div>
-      </div>
-
-      <div className="flex items-end justify-between gap-3">
-        <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Aktualnie
-          </label>
-          <div className="flex items-baseline gap-1">
-            <Input
-              value={actual}
-              onChange={(e) => setActual(e.target.value)}
-              onBlur={commitActual}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-              }}
-              className="h-8 w-20 text-base font-semibold tabular-nums px-2"
-              aria-label={`Aktualna wartość ${kpi.name}`}
-            />
-            {kpi.unit && (
-              <span className="text-xs text-muted-foreground">{kpi.unit}</span>
-            )}
-          </div>
-          {kpi.target && (
-            <p className="text-[11px] text-muted-foreground">
-              Cel: {kpi.target}
-              {kpi.unit ? ` ${kpi.unit}` : ""}
-            </p>
+          {wip && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+              <Hammer className="size-3" /> w budowie
+            </span>
+          )}
+          {mode === "editor" && (
+            <>
+              <VisibilityControl
+                projectId={projectId}
+                scope="record"
+                entityType="kpis"
+                entityId={kpi.id}
+                initialStatus={visStatus}
+              />
+              <button
+                type="button"
+                onClick={onDelete}
+                aria-label="Usuń KPI"
+                className="size-6 flex items-center justify-center rounded text-transparent group-hover:text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </>
           )}
         </div>
-        <Sparkline values={series} className="shrink-0" />
       </div>
 
-      {progress != null && (
-        <div className="space-y-1">
-          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className={cn(
-                "h-full rounded-full transition-[width] duration-500",
-                progress < 0.8 ? "bg-destructive" : "bg-success"
+      {!wip && (
+        <>
+          <div className="flex items-end justify-between gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Aktualnie
+              </label>
+              <div className="flex items-baseline gap-1">
+                {mode === "editor" ? (
+                  <Input
+                    value={actual}
+                    onChange={(e) => setActual(e.target.value)}
+                    onBlur={commitActual}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    className="h-8 w-20 text-base font-semibold tabular-nums px-2"
+                    aria-label={`Aktualna wartość ${kpi.name}`}
+                  />
+                ) : (
+                  <span className="text-xl font-semibold tabular-nums">
+                    {kpi.actual ?? "—"}
+                  </span>
+                )}
+                {kpi.unit && (
+                  <span className="text-xs text-muted-foreground">{kpi.unit}</span>
+                )}
+              </div>
+              {kpi.target && (
+                <p className="text-[11px] text-muted-foreground">
+                  Cel: {kpi.target}
+                  {kpi.unit ? ` ${kpi.unit}` : ""}
+                </p>
               )}
-              style={{ width: `${(progress * 100).toFixed(0)}%` }}
-            />
+            </div>
+            <Sparkline values={series} className="shrink-0" />
           </div>
-          <p
-            className={cn(
-              "text-[10px] text-right tabular-nums",
-              progress < 0.8 ? "text-destructive font-medium" : "text-muted-foreground"
-            )}
-          >
-            {(progress * 100).toFixed(0)}% celu
-            {progress < 0.8 ? " · poniżej 80%" : ""}
-          </p>
-        </div>
-      )}
 
-      <div className="flex items-center gap-1.5 pt-1 border-t border-border/50">
-        <Input
-          value={measure}
-          onChange={(e) => setMeasure(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void addMeasure();
-          }}
-          placeholder="Nowy pomiar…"
-          className="h-7 text-xs px-2"
-          aria-label="Nowy pomiar"
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => void addMeasure()}
-          disabled={!measure.trim() || saving}
-          className="h-7 text-xs gap-1 shrink-0"
-        >
-          {saving ? (
-            <Loader2 className="size-3 animate-spin" />
-          ) : (
-            <TrendingUp className="size-3" />
+          {progress != null && (
+            <div className="space-y-1">
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-[width] duration-500",
+                    progress < 0.8 ? "bg-destructive" : "bg-success"
+                  )}
+                  style={{ width: `${(progress * 100).toFixed(0)}%` }}
+                />
+              </div>
+              <p
+                className={cn(
+                  "text-[10px] text-right tabular-nums",
+                  progress < 0.8 ? "text-destructive font-medium" : "text-muted-foreground"
+                )}
+              >
+                {(progress * 100).toFixed(0)}% celu
+                {progress < 0.8 ? " · poniżej 80%" : ""}
+              </p>
+            </div>
           )}
-          Zapisz
-        </Button>
-      </div>
+
+          {mode === "editor" && (
+            <div className="flex items-center gap-1.5 pt-1 border-t border-border/50">
+              <Input
+                value={measure}
+                onChange={(e) => setMeasure(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void addMeasure();
+                }}
+                placeholder="Nowy pomiar…"
+                className="h-7 text-xs px-2"
+                aria-label="Nowy pomiar"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void addMeasure()}
+                disabled={!measure.trim() || saving}
+                className="h-7 text-xs gap-1 shrink-0"
+              >
+                {saving ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <TrendingUp className="size-3" />
+                )}
+                Zapisz
+              </Button>
+            </div>
+          )}
+        </>
+      )}
 
       <EntityMetaPanel
         projectId={projectId}
         entityType="kpi"
         entityId={kpi.id}
+        readOnly={mode === "client"}
       />
     </div>
   );
@@ -211,7 +238,7 @@ function KpiCard({
 
 // ─── Główny dashboard ─────────────────────────────────────────────────────────
 
-export function KpiClient({ projectId, projectName }: Props) {
+export function KpiClient({ projectId, projectName, mode = "editor" }: Props) {
   const base = `/api/strategy-hub/projects/${projectId}/kpis`;
   const [kpis, setKpis] = useState<Kpi[]>([]);
   const [loading, setLoading] = useState(true);
@@ -364,7 +391,7 @@ export function KpiClient({ projectId, projectName }: Props) {
             Cele liczbowe z trendem pomiarów i postępem względem targetu.
           </p>
         </div>
-        {!adding && (
+        {!adding && mode === "editor" && (
           <Button
             size="sm"
             variant="outline"
@@ -377,7 +404,7 @@ export function KpiClient({ projectId, projectName }: Props) {
         )}
       </header>
 
-      {adding && (
+      {adding && mode === "editor" && (
         <div className="rounded-xl border border-border bg-card/60 p-4 space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
@@ -461,7 +488,9 @@ export function KpiClient({ projectId, projectName }: Props) {
         </p>
       ) : kpis.length === 0 && !adding ? (
         <p className="text-sm text-muted-foreground py-8 text-center">
-          Brak KPI — dodaj pierwszy cel liczbowy.
+          {mode === "client"
+            ? "KPI są jeszcze opracowywane."
+            : "Brak KPI — dodaj pierwszy cel liczbowy."}
         </p>
       ) : (
         <div className="space-y-6">
@@ -477,6 +506,7 @@ export function KpiClient({ projectId, projectName }: Props) {
                     <KpiCard
                       key={kpi.id}
                       kpi={kpi}
+                      mode={mode}
                       onActualCommit={(v) => patchKpi(kpi.id, { actual: v })}
                       onAddMeasurement={(v) => addMeasurement(kpi.id, v)}
                       onDelete={() => removeKpi(kpi.id)}

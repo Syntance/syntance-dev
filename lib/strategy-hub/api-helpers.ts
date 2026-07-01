@@ -1,5 +1,9 @@
 import "server-only";
 import { NextResponse } from "next/server";
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "@/db";
+import { projectClients, projects } from "@/db/schema";
+import { getClientSession } from "@/lib/auth";
 import { getStrategyHubAccess, assertProjectAccess } from "@/lib/strategy-hub/context";
 
 /**
@@ -35,6 +39,55 @@ export async function requireProjectAccess(projectId: string) {
   }
   const { ok: _ok, ...rest } = check;
   return { ok: true as const, ...rest };
+}
+
+export type ProjectReadRole = "editor" | "client";
+
+/**
+ * Odczyt projektu: admin Strategy Hub albo klient portalu z dostępem przez project_clients.
+ * Używaj wyłącznie w handlerach GET — mutacje zostają na requireProjectAccess.
+ */
+export async function requireProjectReadAccess(projectId: string) {
+  const adminCheck = await assertProjectAccess(projectId);
+  if (adminCheck.ok) {
+    const { ok: _ok, ...rest } = adminCheck;
+    return { ok: true as const, role: "editor" as const, ...rest };
+  }
+
+  const session = await getClientSession();
+  if (!session) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+
+  const [row] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .innerJoin(projectClients, eq(projectClients.projectId, projects.id))
+    .where(
+      and(
+        eq(projects.id, projectId),
+        eq(projectClients.email, session.email),
+        isNull(projects.deletedAt)
+      )
+    )
+    .limit(1);
+
+  if (!row) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "Project not found" }, { status: 404 }),
+    };
+  }
+
+  return {
+    ok: true as const,
+    role: "client" as const,
+    session,
+    projectId,
+  };
 }
 
 /**
