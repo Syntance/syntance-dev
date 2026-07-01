@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useProject, useProjectIdFromPath } from "@/components/strategy-hub/project-context";
 import { PathSelector } from "@/components/strategy-hub/path-selector";
+import { useProjectLiveUpdates } from "@/lib/strategy-hub/use-live-updates";
 import {
   type AreaKey,
   AREA_SEGMENT,
@@ -176,22 +177,32 @@ export function NavSidebar() {
       .catch(() => null);
   }, []);
 
+  const fetchHealth = useCallback((signal?: AbortSignal) => {
+    if (!projectId) {
+      setHealthModules([]);
+      return;
+    }
+    fetch(`/api/strategy-hub/projects/${projectId}/health`, { signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { modules?: HealthModule[] } | null) => {
+        setHealthModules(data?.modules ?? []);
+      })
+      .catch(() => setHealthModules([]));
+  }, [projectId]);
+
   useEffect(() => {
     if (!projectId) {
       setHealthModules([]);
       return;
     }
     const ctrl = new AbortController();
-    fetch(`/api/strategy-hub/projects/${projectId}/health`, {
-      signal: ctrl.signal,
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { modules?: HealthModule[] } | null) => {
-        setHealthModules(data?.modules ?? []);
-      })
-      .catch(() => setHealthModules([]));
+    fetchHealth(ctrl.signal);
     return () => ctrl.abort();
-  }, [projectId]);
+  }, [projectId, fetchHealth]);
+
+  // Realtime (<5s, spec): zmiana w projekcie (dowolne źródło — Hub/Notion/MCP)
+  // odświeża health-score kropek bez czekania na kolejne wejście użytkownika.
+  useProjectLiveUpdates(projectId, useCallback(() => fetchHealth(), [fetchHealth]));
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });

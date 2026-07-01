@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback } from "react";
+import { useClientPortalLiveUpdates } from "@/lib/strategy-hub/use-live-updates";
 import {
   LayoutDashboard,
   Monitor,
@@ -127,8 +129,13 @@ export function ClientNav({
   inProgressModules = [],
 }: ClientNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const hidden = new Set(hiddenModules);
   const inProgress = new Set(inProgressModules);
+
+  // Realtime (<5s, spec): zmiana strategii w Hubie odświeża server-rendered
+  // dane bieżącej strony dashboardu klienta bez ręcznego przeładowania.
+  useClientPortalLiveUpdates(slug, useCallback(() => router.refresh(), [router]));
 
   const isActive = (href: string, exact = false) => {
     if (exact) return pathname === href;

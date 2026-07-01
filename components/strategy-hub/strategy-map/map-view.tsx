@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AnimatePresence,
   motion,
@@ -20,6 +21,8 @@ import {
   ArrowUpRight,
   Network,
   Lock,
+  Plus,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { statusEmoji } from "./status-dot";
@@ -79,6 +82,7 @@ export function MapView({
   onOpenInfluence,
 }: MapViewProps) {
   const reduce = useReducedMotion();
+  const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expandedKey, setExpandedKey] = useState<StrategyNodeKey | null>(null);
   const [openSub, setOpenSub] = useState<{ nodeKey: StrategyNodeKey; subIdx: number } | null>(null);
@@ -308,6 +312,8 @@ export function MapView({
             subIdx={openSub!.subIdx}
             mode={mode}
             reduce={!!reduce}
+            projectId={projectId}
+            onCreated={() => router.refresh()}
             onClose={() => setOpenSub(null)}
             onNav={(dir) => {
               const len = activeNode.subcategories.length;
@@ -513,6 +519,111 @@ function Chip({
   );
 }
 
+// ── Szybkie tworzenie encji na mapie (map-first, bez opuszczania mapy) ───────
+// Zamknięty, jawny zestaw po `sub.id` (NIE przez `entityTypeForSub`, która ma
+// szeroki fallback na "segment" — użycie jej tutaj pokazywałoby błędny
+// formularz w nieopisanych podkategoriach, np. tworzyłoby segment zamiast
+// konkurenta w „Konkurencja"). Tylko podkategorie z prostym create-endpointem
+// o jednym wymaganym polu tekstowym; pozostałe świadomie bez „+" — edycja
+// wieloliniowa zostaje na docelowej stronie modułu.
+const QUICK_CREATE: Record<
+  string,
+  { path: string; field: string; placeholder: string }
+> = {
+  obiekcje: { path: "objections", field: "objectionMd", placeholder: "Nowa obiekcja klienta…" },
+  problemy: { path: "problems", field: "problemMd", placeholder: "Jaki problem rozwiązujemy…" },
+  podstrony: { path: "pages", field: "name", placeholder: "Nazwa nowej podstrony…" },
+  wskazniki: { path: "kpis", field: "name", placeholder: "Nazwa nowego KPI…" },
+  "lista-kanalow": { path: "channels", field: "name", placeholder: "Nazwa nowego kanału…" },
+};
+
+function QuickCreateRow({
+  projectId,
+  subId,
+  onCreated,
+}: {
+  projectId: string;
+  subId: string;
+  onCreated: () => void;
+}) {
+  const config = QUICK_CREATE[subId];
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!config) return null;
+
+  async function submit() {
+    if (!value.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/strategy-hub/projects/${projectId}/${config.path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [config.field]: value.trim() }),
+      });
+      if (!res.ok) {
+        setError("Nie udało się zapisać.");
+        return;
+      }
+      setValue("");
+      setOpen(false);
+      onCreated();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-brand/50 hover:text-brand"
+      >
+        <Plus className="size-3.5" /> Dodaj
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-1.5 rounded-lg border border-border bg-muted/30 p-2">
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void submit();
+          if (e.key === "Escape") setOpen(false);
+        }}
+        placeholder={config.placeholder}
+        className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={saving || !value.trim()}
+          className="inline-flex items-center gap-1 rounded-md bg-brand/10 px-2 py-1 text-xs font-medium text-brand hover:bg-brand/20 disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
+          Zapisz
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          Anuluj
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Karta L3 ────────────────────────────────────────────────────────────────
 
 function L3Card({
@@ -520,6 +631,8 @@ function L3Card({
   subIdx,
   mode,
   reduce,
+  projectId,
+  onCreated,
   onClose,
   onNav,
   onWhy,
@@ -528,6 +641,8 @@ function L3Card({
   subIdx: number;
   mode: "editor" | "client";
   reduce: boolean;
+  projectId: string;
+  onCreated: () => void;
   onClose: () => void;
   onNav: (dir: 1 | -1) => void;
   onWhy?: (item: { id: string; label: string }) => void;
@@ -577,7 +692,8 @@ function L3Card({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {sub.items.length === 0 ? (
             <p className="text-sm text-muted-foreground">Brak danych w tej sekcji.</p>
-          ) : (
+          ) : null}
+          {sub.items.length > 0 && (
             <ul className="space-y-2.5">
               {preview.map((item) => (
                 <li key={item.id} className="flex items-start gap-2 text-sm">
@@ -612,6 +728,9 @@ function L3Card({
             >
               {showAll ? "Zwiń" : `Rozwiń pełną treść (+${sub.items.length - 5})`}
             </button>
+          )}
+          {mode === "editor" && (
+            <QuickCreateRow projectId={projectId} subId={sub.id} onCreated={onCreated} />
           )}
         </div>
 

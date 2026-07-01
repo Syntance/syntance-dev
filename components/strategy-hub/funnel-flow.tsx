@@ -21,6 +21,8 @@ export interface ActivityRow {
   stage?: string | null;
   weeklyCount?: number | null;
   monthlyBudget?: number | null;
+  cadence?: string | null;
+  whatToPublishMd?: string | null;
 }
 export interface ChannelRow {
   id: string;
