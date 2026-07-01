@@ -6,6 +6,7 @@ import {
 } from "@/lib/strategy-hub/api-helpers";
 import { getListEntity } from "@/lib/strategy-hub/entities/registry";
 import { trackChange, entityTypeFor } from "@/lib/strategy-hub/track-change";
+import { applyReviewPropagation, clearReviewFlag } from "@/lib/strategy-hub/rules/apply-review";
 
 export async function PATCH(
   req: NextRequest,
@@ -31,6 +32,11 @@ export async function PATCH(
     entityId: itemId,
     patch: parsed.data as Record<string, unknown>,
   });
+
+  // Propagacja „do przeglądu" (spec): encja właśnie zapisana = przejrzana;
+  // downstream moduły, które ją czytają w „Wejściach", dostają review_flag.
+  await clearReviewFlag(entity, itemId);
+  await applyReviewPropagation(id, entity);
 
   return NextResponse.json({ item });
 }

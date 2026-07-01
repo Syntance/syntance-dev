@@ -9,6 +9,7 @@ import {
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
 import { trackChange } from "@/lib/strategy-hub/track-change";
+import { applyReviewPropagation, clearReviewFlag } from "@/lib/strategy-hub/rules/apply-review";
 
 const STAGES = ["TOFU", "MOFU", "BOFU", "retention"] as const;
 const STATUSES = ["active", "resolved", "needs_proof"] as const;
@@ -54,6 +55,9 @@ export async function PATCH(
     entityId: itemId,
     patch: data,
   });
+
+  await clearReviewFlag("objections", itemId);
+  await applyReviewPropagation(id, "objections");
 
   return NextResponse.json({ item: updated[0] });
 }

@@ -37,7 +37,12 @@ export type EntityType =
   | "campaign"
   | "geo"
   | "offer"
-  | "analytics_event";
+  | "analytics_event"
+  | "objection"
+  | "pitch"
+  | "lead_magnet"
+  | "seo_keyword"
+  | "page_section";
 
 export interface RelationOption {
   id: string;
@@ -57,6 +62,8 @@ interface RelationPickerProps {
   filterSegmentId?: string;
   filterStageId?: string;
   filterPhase?: string;
+  /** Filtr po podstronie — używany przez `entityType="page_section"` (sekcje należą do jednej strony). */
+  filterPageId?: string;
   placeholder?: string;
   required?: boolean;
   allowCreate?: boolean;
@@ -100,6 +107,7 @@ export function RelationPicker({
   filterSegmentId,
   filterStageId,
   filterPhase,
+  filterPageId,
   placeholder,
   required,
   allowCreate = false,
@@ -140,6 +148,7 @@ export function RelationPicker({
         if (filterSegmentId) params.set("segmentId", filterSegmentId);
         if (filterStageId) params.set("stageId", filterStageId);
         if (filterPhase) params.set("phase", filterPhase);
+        if (filterPageId) params.set("pageId", filterPageId);
         const res = await fetch(
           `/api/strategy-hub/projects/${projectId}/entities?${params}`
         );
@@ -156,7 +165,7 @@ export function RelationPicker({
         setLoading(false);
       }
     },
-    [projectId, entityType, filterSegmentId, filterStageId, filterPhase]
+    [projectId, entityType, filterSegmentId, filterStageId, filterPhase, filterPageId]
   );
 
   React.useEffect(() => {

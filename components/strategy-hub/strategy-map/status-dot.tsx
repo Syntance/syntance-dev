@@ -8,11 +8,15 @@ interface StatusDotProps {
 }
 
 /**
- * Kropka statusu węzła. W trybie client „empty" prezentuje się jak „in_progress"
- * — klient nigdy nie widzi czerwonych braków (spec: tylko ✅/🟡, czysto).
+ * Kropka statusu węzła. W trybie client „empty"/„review" prezentują się jak
+ * „in_progress" — klient nigdy nie widzi czerwonych braków ani pulsowania
+ * „do przeglądu" (spec: tylko ✅/🟡, czysto).
  */
 export function StatusDot({ status, mode, className }: StatusDotProps) {
-  const effective = mode === "client" && status === "empty" ? "in_progress" : status;
+  const effective =
+    mode === "client" && (status === "empty" || status === "review")
+      ? "in_progress"
+      : status;
   return (
     <span
       className={cn(
@@ -20,16 +24,21 @@ export function StatusDot({ status, mode, className }: StatusDotProps) {
         effective === "ready" && "bg-success",
         effective === "in_progress" && "bg-amber-400",
         effective === "empty" && "bg-red-400",
+        effective === "review" && "bg-amber-400 animate-pulse",
         className
       )}
       aria-hidden
+      title={effective === "review" ? "Do przeglądu — zmienił się upstream" : undefined}
     />
   );
 }
 
 export function statusEmoji(status: NodeStatus, mode: "editor" | "client"): string {
-  const effective = mode === "client" && status === "empty" ? "in_progress" : status;
+  const effective =
+    mode === "client" && (status === "empty" || status === "review")
+      ? "in_progress"
+      : status;
   if (effective === "ready") return "✅";
-  if (effective === "in_progress") return "🟡";
+  if (effective === "in_progress" || effective === "review") return "🟡";
   return "🔴";
 }

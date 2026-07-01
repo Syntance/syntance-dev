@@ -3,7 +3,11 @@
  * Nie importuje DB — bezpieczne do użycia po stronie klienta.
  */
 
-export type NodeStatus = "ready" | "in_progress" | "empty";
+/**
+ * `review` — moduł był ✅, ale wymagany upstream zmienił się po tym fakcie
+ * (propagacja „do przeglądu" ze spec). Renderowany jako pulsujący 🟡, tylko editor.
+ */
+export type NodeStatus = "ready" | "in_progress" | "empty" | "review";
 
 /** Klucze 7 węzłów strategicznych na mapie makro. */
 export type StrategyNodeKey =

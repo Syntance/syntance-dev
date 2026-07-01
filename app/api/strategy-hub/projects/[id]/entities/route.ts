@@ -12,6 +12,11 @@ import {
   campaigns,
   geoAssets,
   offers,
+  objections,
+  salesPitches,
+  leadMagnets,
+  seoKeywords,
+  pageSections,
 } from "@/db/schema";
 import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
 import { EVENT_REGISTRY, EVENT_CATEGORY_LABELS } from "@/packages/analytics-events/src";
@@ -44,6 +49,7 @@ export async function GET(
   const segmentId = searchParams.get("segmentId") ?? undefined;
   const stageId = searchParams.get("stageId") ?? undefined;
   const phase = searchParams.get("phase") ?? undefined;
+  const pageId = searchParams.get("pageId") ?? undefined;
   const like = q ? `%${q}%` : "%";
 
   let results: Result[] = [];
@@ -223,6 +229,81 @@ export async function GET(
         )
         .limit(LIMIT);
       break;
+
+    case "objection": {
+      const filters: SQL[] = [
+        eq(objections.projectId, projectId),
+        isNull(objections.deletedAt),
+        ilike(objections.objectionMd, like),
+      ];
+      if (segmentId) filters.push(eq(objections.segmentId, segmentId));
+      results = await db
+        .select({ id: objections.id, label: objections.objectionMd, meta: objections.stage })
+        .from(objections)
+        .where(and(...filters))
+        .limit(LIMIT);
+      break;
+    }
+
+    case "pitch": {
+      const filters: SQL[] = [
+        eq(salesPitches.projectId, projectId),
+        isNull(salesPitches.deletedAt),
+        ilike(salesPitches.title, like),
+      ];
+      if (segmentId) filters.push(eq(salesPitches.segmentId, segmentId));
+      results = await db
+        .select({ id: salesPitches.id, label: salesPitches.title, meta: salesPitches.context })
+        .from(salesPitches)
+        .where(and(...filters))
+        .limit(LIMIT);
+      break;
+    }
+
+    case "lead_magnet": {
+      const filters: SQL[] = [
+        eq(leadMagnets.projectId, projectId),
+        isNull(leadMagnets.deletedAt),
+        ilike(leadMagnets.name, like),
+      ];
+      if (segmentId) filters.push(eq(leadMagnets.segmentId, segmentId));
+      results = await db
+        .select({ id: leadMagnets.id, label: leadMagnets.name, meta: leadMagnets.format })
+        .from(leadMagnets)
+        .where(and(...filters))
+        .limit(LIMIT);
+      break;
+    }
+
+    case "seo_keyword":
+      results = await db
+        .select({ id: seoKeywords.id, label: seoKeywords.phrase, meta: seoKeywords.intent })
+        .from(seoKeywords)
+        .where(
+          and(
+            eq(seoKeywords.projectId, projectId),
+            isNull(seoKeywords.deletedAt),
+            ilike(seoKeywords.phrase, like)
+          )
+        )
+        .limit(LIMIT);
+      break;
+
+    case "page_section": {
+      if (!pageId) return badRequest("page_section requires pageId");
+      results = await db
+        .select({ id: pageSections.id, label: pageSections.name, meta: pageSections.ctaText })
+        .from(pageSections)
+        .where(
+          and(
+            eq(pageSections.pageId, pageId),
+            isNull(pageSections.deletedAt),
+            ilike(pageSections.name, like)
+          )
+        )
+        .limit(LIMIT);
+      break;
+    }
 
     default:
       return badRequest(`Unknown entity type: ${type}`);

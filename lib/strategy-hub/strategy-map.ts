@@ -38,6 +38,7 @@ import {
   type StrategyNode,
   type StrategyEdge,
   type StrategyNodeKey,
+  type NodeStatus,
   type MapLeaf,
   type InfluenceGraph,
   type InfluenceNode,
@@ -57,6 +58,18 @@ function mapNodeScore(rules: RulesConfig, key: string, ctx: CriterionContext): n
   const moduleRule = findModuleRule(rules, key);
   if (!moduleRule) return 0;
   return computeModuleScore(moduleRule, ctx);
+}
+
+/**
+ * Propagacja „do przeglądu": moduł ✅ z co najmniej jedną flagowaną encją
+ * (upstream zmienił się po tym, jak moduł osiągnął gotowość) → status `review`.
+ */
+function withReview(
+  status: NodeStatus,
+  rows: { reviewFlag?: boolean | null }[]
+): NodeStatus {
+  if (status === "ready" && rows.some((r) => r.reviewFlag)) return "review";
+  return status;
 }
 
 function correlationMeta(
@@ -188,6 +201,7 @@ export async function getStrategyMapData(
         segmentId: funnelElements.segmentId,
         format: funnelElements.format,
         cta: funnelElements.cta,
+        reviewFlag: funnelElements.reviewFlag,
       })
       .from(funnelElements)
       .innerJoin(purchaseStages, eq(funnelElements.stageId, purchaseStages.id))
@@ -359,7 +373,7 @@ export async function getStrategyMapData(
       key: "fundament",
       label: "Fundament",
       icon: "🎯",
-      status: statusFromScore(fundamentScore),
+      status: withReview(statusFromScore(fundamentScore), objectionRows),
       score: fundamentScore,
       href: projectModuleHref(projectId, "business"),
       subcategories: [
@@ -407,7 +421,7 @@ export async function getStrategyMapData(
       key: "segmenty",
       label: "Segmenty",
       icon: "👥",
-      status: statusFromScore(segmentScore),
+      status: withReview(statusFromScore(segmentScore), segmentRows),
       score: segmentScore,
       href: projectModuleHref(projectId, "segments"),
       subcategories: segmentRows.map((s) => ({
@@ -421,7 +435,7 @@ export async function getStrategyMapData(
       key: "lejek",
       label: "Lejek",
       icon: "📣",
-      status: statusFromScore(lejekScore),
+      status: withReview(statusFromScore(lejekScore), elementRows),
       score: lejekScore,
       href: projectModuleHref(projectId, "funnel"),
       subcategories: [
@@ -517,7 +531,7 @@ export async function getStrategyMapData(
       key: "strona",
       label: "Strona",
       icon: "🌐",
-      status: statusFromScore(stronaScore),
+      status: withReview(statusFromScore(stronaScore), pageRows),
       score: stronaScore,
       href: projectModuleHref(projectId, "website"),
       subcategories: [
@@ -553,7 +567,7 @@ export async function getStrategyMapData(
       key: "kpi",
       label: "KPI",
       icon: "📊",
-      status: statusFromScore(kpiScore),
+      status: withReview(statusFromScore(kpiScore), kpiRows),
       score: kpiScore,
       href: projectModuleHref(projectId, "kpi"),
       subcategories: [

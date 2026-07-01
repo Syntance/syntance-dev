@@ -1,0 +1,33 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Next.js (Webpack)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "Next.js (Turbo)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:turbo"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "Prisma Studio",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "db:studio"],
+      "port": 5555,
+      "autoPort": true
+    },
+    {
+      "name": "Drizzle Studio",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "drizzle:studio"],
+      "port": 5555,
+      "autoPort": true
+    }
+  ]
+}

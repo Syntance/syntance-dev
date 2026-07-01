@@ -16,6 +16,8 @@ import {
   Map as MapIcon,
   Milestone,
   Megaphone,
+  Palette,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +48,12 @@ const navItems = (slug: string) => [
     href: `/projects/${slug}/links`,
     icon: Link2,
     label: "Linki i zasoby",
+  },
+  {
+    href: `/projects/${slug}/strategy/brand`,
+    icon: Palette,
+    label: "Marka",
+    moduleKey: "brand",
   },
   {
     href: `/projects/${slug}/strategy/business`,
@@ -92,6 +100,12 @@ const navItems = (slug: string) => [
     icon: Globe,
     label: "Strona",
     moduleKey: "website",
+  },
+  {
+    href: `/projects/${slug}/strategy/audit`,
+    icon: ShieldCheck,
+    label: "Audyt strony",
+    moduleKey: "audit",
   },
   {
     href: `/projects/${slug}/reports`,

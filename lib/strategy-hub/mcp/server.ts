@@ -27,6 +27,15 @@ import { acceptProposal, rejectProposal } from "@/lib/strategy-hub/agent/accept-
 import { computeProjectHealth } from "@/lib/strategy-hub/health-score";
 import { getProjectAlerts } from "@/lib/strategy-hub/alerts";
 import {
+  suggestSegmentsContext,
+  suggestFunnelContext,
+  suggestChannelPlanContext,
+  suggestObjectionsContext,
+  analyzeStrategyContext,
+  compareCompetitorsContext,
+  generatePageSpecContext,
+} from "@/lib/strategy-hub/ai-tools";
+import {
   getListEntity,
   getSingletonEntity,
   getSegmentChild,
@@ -1016,6 +1025,101 @@ export function createStrategyHubMcpServer() {
     async ({ projectId }) => safeRun(() => getProjectAlerts(projectId))
   );
 
+  // ── 7 narzędzi AI-workflow ze spec (Strategia — sekcja "AI Sidekick") ───────
+  // Każde zbiera kontekst (read-only) i zwraca `instruction` — samą propozycję
+  // generuje wywołujący model (Notion AI). Współdzielone z chat Sidekicku
+  // przez `lib/strategy-hub/ai-tools.ts` (*Context funkcje) — jedno źródło logiki.
+
+  server.registerTool(
+    "hub_suggest_segments",
+    {
+      description:
+        "Z opisu biznesu (branża, cele, UVP, konkurencja) → kontekst do propozycji 1–3 nowych segmentów z personą, JTBD i priorytetem.",
+      inputSchema: z.object({ projectId: z.string().uuid() }),
+    },
+    async ({ projectId }) => safeRun(() => suggestSegmentsContext(projectId))
+  );
+
+  server.registerTool(
+    "hub_suggest_funnel",
+    {
+      description:
+        "Z segmentu → kontekst do propozycji etapów zakupu i elementów lejka per faza (TOFU/MOFU/BOFU/retencja).",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        segmentId: z.string().uuid().optional(),
+      }),
+    },
+    async ({ projectId, segmentId }) =>
+      safeRun(() => suggestFunnelContext(projectId, segmentId))
+  );
+
+  server.registerTool(
+    "hub_suggest_channel_plan",
+    {
+      description:
+        "Z segmentu i budżetu → kontekst do propozycji matrycy kanał × segment × etap (co publikować, cadence, budżet).",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        segmentId: z.string().uuid().optional(),
+        monthlyBudget: z.number().int().optional(),
+      }),
+    },
+    async ({ projectId, segmentId, monthlyBudget }) =>
+      safeRun(() => suggestChannelPlanContext(projectId, segmentId, monthlyBudget))
+  );
+
+  server.registerTool(
+    "hub_suggest_objections",
+    {
+      description:
+        "Z segmentu → kontekst do propozycji obiekcji z odpowiedzią i dowodem, bez powtarzania istniejących.",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        segmentId: z.string().uuid().optional(),
+      }),
+    },
+    async ({ projectId, segmentId }) =>
+      safeRun(() => suggestObjectionsContext(projectId, segmentId))
+  );
+
+  server.registerTool(
+    "hub_analyze_strategy",
+    {
+      description:
+        "Analiza spójności całej strategii — zbiera przekrój danych ze wszystkich modułów, wykrywa luki (segmenty bez lejka, KPI bez wartości).",
+      inputSchema: z.object({ projectId: z.string().uuid() }),
+    },
+    async ({ projectId }) => safeRun(() => analyzeStrategyContext(projectId))
+  );
+
+  server.registerTool(
+    "hub_compare_competitors",
+    {
+      description:
+        "Porównanie naszej marki z konkurencją na osiach pozycjonowania (quadrant) + mocne/słabe strony.",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        competitorId: z.string().uuid().optional(),
+      }),
+    },
+    async ({ projectId, competitorId }) =>
+      safeRun(() => compareCompetitorsContext(projectId, competitorId))
+  );
+
+  server.registerTool(
+    "hub_generate_page_spec",
+    {
+      description:
+        "Z roli podstrony w lejku, UVP i obiekcji → kontekst do propozycji sekcji podstrony z copy (Hero/dowód/FAQ/CTA).",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        pageId: z.string().uuid(),
+      }),
+    },
+    async ({ projectId, pageId }) => safeRun(() => generatePageSpecContext(projectId, pageId))
+  );
+
   return server;
 }
 
@@ -1057,4 +1161,11 @@ export const MCP_TOOL_NAMES = [
   "reject_ai_proposal",
   "get_project_health",
   "get_project_alerts",
+  "hub_suggest_segments",
+  "hub_suggest_funnel",
+  "hub_suggest_channel_plan",
+  "hub_suggest_objections",
+  "hub_analyze_strategy",
+  "hub_compare_competitors",
+  "hub_generate_page_spec",
 ] as const;

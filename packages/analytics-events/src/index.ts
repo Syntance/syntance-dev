@@ -13,6 +13,9 @@ export type AnalyticsEventCategory =
   | "conversion"
   | "retention";
 
+/** Faza lejka (TOFU/MOFU/BOFU/retencja) — zgodnie z `purchaseStages.phase`. */
+export type AnalyticsEventPhase = "TOFU" | "MOFU" | "BOFU" | "retention";
+
 export interface AnalyticsEventDef {
   /** Stabilny klucz zdarzenia — zapisywany w `kpis.event_key` i `funnel_element_events.event_key`. */
   key: string;
@@ -21,6 +24,8 @@ export interface AnalyticsEventDef {
   category: AnalyticsEventCategory;
   /** Czy zdarzenie liczy się jako konwersja (wpływa na reguły mierzalności CTA/KPI). */
   isConversion: boolean;
+  /** Typowa faza lejka tego zdarzenia — źródło sugestii „event wg fazy" dla elementów lejka. */
+  phase: AnalyticsEventPhase;
 }
 
 /**
@@ -34,6 +39,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Załadowanie dowolnej podstrony.",
     category: "page_view",
     isConversion: false,
+    phase: "TOFU",
   },
   {
     key: "landing_view",
@@ -41,6 +47,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Wejście na dedykowaną stronę lądowania (kampania/kanał).",
     category: "page_view",
     isConversion: false,
+    phase: "TOFU",
   },
   {
     key: "scroll_75",
@@ -48,6 +55,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Użytkownik przewinął ≥75% treści strony.",
     category: "engagement",
     isConversion: false,
+    phase: "TOFU",
   },
   {
     key: "video_play",
@@ -55,6 +63,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Start odtwarzania materiału wideo.",
     category: "engagement",
     isConversion: false,
+    phase: "TOFU",
   },
   {
     key: "video_complete",
@@ -62,6 +71,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Obejrzenie wideo do końca (≥90%).",
     category: "engagement",
     isConversion: false,
+    phase: "MOFU",
   },
   {
     key: "cta_click",
@@ -69,6 +79,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Kliknięcie głównego przycisku wezwania do działania.",
     category: "engagement",
     isConversion: false,
+    phase: "MOFU",
   },
   {
     key: "phone_click",
@@ -76,6 +87,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Kliknięcie linku `tel:`.",
     category: "lead",
     isConversion: true,
+    phase: "BOFU",
   },
   {
     key: "email_click",
@@ -83,6 +95,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Kliknięcie linku `mailto:`.",
     category: "lead",
     isConversion: true,
+    phase: "BOFU",
   },
   {
     key: "chat_started",
@@ -90,6 +103,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Otwarcie/rozpoczęcie konwersacji na czacie (widget/WhatsApp).",
     category: "lead",
     isConversion: true,
+    phase: "BOFU",
   },
   {
     key: "lead_form_submit",
@@ -97,6 +111,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Wypełnienie i wysłanie formularza kontaktowego/zapytania.",
     category: "lead",
     isConversion: true,
+    phase: "BOFU",
   },
   {
     key: "newsletter_signup",
@@ -104,6 +119,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Potwierdzony zapis na listę mailingową.",
     category: "lead",
     isConversion: true,
+    phase: "MOFU",
   },
   {
     key: "demo_request",
@@ -111,6 +127,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Wysłanie prośby o demo/prezentację produktu.",
     category: "lead",
     isConversion: true,
+    phase: "BOFU",
   },
   {
     key: "download_asset",
@@ -118,6 +135,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Pobranie lead magnetu (e-book, cennik, case study).",
     category: "lead",
     isConversion: true,
+    phase: "MOFU",
   },
   {
     key: "add_to_cart",
@@ -125,6 +143,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Dodanie produktu/usługi do koszyka.",
     category: "conversion",
     isConversion: false,
+    phase: "BOFU",
   },
   {
     key: "checkout_start",
@@ -132,6 +151,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Wejście w proces zakupowy (pierwszy krok).",
     category: "conversion",
     isConversion: false,
+    phase: "BOFU",
   },
   {
     key: "purchase",
@@ -139,6 +159,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Sfinalizowana transakcja lub podpisana umowa.",
     category: "conversion",
     isConversion: true,
+    phase: "BOFU",
   },
   {
     key: "booking_confirmed",
@@ -146,6 +167,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Potwierdzona rezerwacja terminu/usługi (dla modeli usługowych).",
     category: "conversion",
     isConversion: true,
+    phase: "BOFU",
   },
   {
     key: "return_visit",
@@ -153,6 +175,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Kolejna wizyta tego samego użytkownika po konwersji.",
     category: "retention",
     isConversion: false,
+    phase: "retention",
   },
   {
     key: "referral_share",
@@ -160,6 +183,7 @@ export const EVENT_REGISTRY: AnalyticsEventDef[] = [
     description: "Użytkownik poleca produkt dalej (referral, share).",
     category: "retention",
     isConversion: true,
+    phase: "retention",
   },
 ];
 
@@ -174,6 +198,11 @@ export function isConversionEvent(key: string | null | undefined): boolean {
 
 export function eventsByCategory(category: AnalyticsEventCategory): AnalyticsEventDef[] {
   return EVENT_REGISTRY.filter((e) => e.category === category);
+}
+
+/** Zdarzenia typowe dla danej fazy lejka — źródło sugestii AI „event wg fazy". */
+export function eventsByPhase(phase: AnalyticsEventPhase): AnalyticsEventDef[] {
+  return EVENT_REGISTRY.filter((e) => e.phase === phase);
 }
 
 export const EVENT_CATEGORY_LABELS: Record<AnalyticsEventCategory, string> = {

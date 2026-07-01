@@ -7,15 +7,17 @@ import { z } from "zod";
 import { buildStrategyReport } from "@/lib/strategy-hub/export/build-report";
 import { reportToMarkdown } from "@/lib/strategy-hub/export/to-markdown";
 import { reportToDocx } from "@/lib/strategy-hub/export/to-docx";
+import { reportToPdf } from "@/lib/strategy-hub/export/to-pdf";
 
 const bodySchema = z.object({
-  type: z.enum(["json", "md", "docx", "png_map", "svg_graph"]),
+  type: z.enum(["json", "md", "docx", "pdf_full", "png_map", "svg_graph"]),
 });
 
 const MIME: Record<string, string> = {
   json: "application/json",
   md: "text/markdown",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pdf_full: "application/pdf",
   png_map: "image/png",
   svg_graph: "image/svg+xml",
 };
@@ -78,6 +80,9 @@ export async function POST(
     } else if (type === "md") {
       bytes = reportToMarkdown(report);
       filename = `strategia-${slug(report.projectName)}.md`;
+    } else if (type === "pdf_full") {
+      bytes = await reportToPdf(report);
+      filename = `strategia-${slug(report.projectName)}.pdf`;
     } else {
       bytes = await reportToDocx(report);
       filename = `strategia-${slug(report.projectName)}.docx`;

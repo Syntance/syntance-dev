@@ -160,7 +160,7 @@ function CommandPalette({
     router.push(href);
   };
 
-  const quickExport = async (type: "docx" | "md") => {
+  const quickExport = async (type: "docx" | "md" | "pdf_full") => {
     if (!projectId) return;
     onOpenChange(false);
     try {
@@ -240,6 +240,13 @@ function CommandPalette({
                   >
                     <Network />
                     <span>Graf relacji projektu</span>
+                  </CommandItem>
+                  <CommandItem
+                    value="eksportuj strategie pdf"
+                    onSelect={() => void quickExport("pdf_full")}
+                  >
+                    <FileType />
+                    <span>Eksportuj strategię jako PDF</span>
                   </CommandItem>
                   <CommandItem
                     value="eksportuj strategie docx word"
