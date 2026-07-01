@@ -14,6 +14,8 @@ import {
   Users,
   Gauge,
   Map as MapIcon,
+  Milestone,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -60,10 +62,22 @@ const navItems = (slug: string) => [
     moduleKey: "segments",
   },
   {
+    href: `/projects/${slug}/strategy/funnel`,
+    icon: Milestone,
+    label: "Lejek sprzedażowy",
+    moduleKey: "funnel",
+  },
+  {
     href: `/projects/${slug}/strategy/marketing`,
     icon: BarChart3,
     label: "Strategia marketingowa",
     badge: "Nowe",
+    moduleKey: "marketing",
+  },
+  {
+    href: `/projects/${slug}/strategy/campaigns`,
+    icon: Megaphone,
+    label: "Kampanie",
     moduleKey: "marketing",
   },
   {
@@ -83,7 +97,6 @@ const navItems = (slug: string) => [
     href: `/projects/${slug}/reports`,
     icon: TrendingUp,
     label: "Raporty",
-    soon: true,
   },
 ];
 
@@ -120,14 +133,12 @@ export function ClientNav({
         return (
           <Link
             key={item.href}
-            href={item.soon ? "#" : item.href}
-            aria-disabled={item.soon}
+            href={item.href}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all",
               isActive(item.href, item.exact)
                 ? "bg-brand/15 text-brand font-medium"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              item.soon && "opacity-50 cursor-default pointer-events-none"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             <item.icon className="size-4 shrink-0" />
@@ -142,11 +153,6 @@ export function ClientNav({
                   {item.badge}
                 </span>
               )
-            )}
-            {item.soon && (
-              <span className="ml-auto text-[9px] text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded-full">
-                wkrótce
-              </span>
             )}
           </Link>
         );

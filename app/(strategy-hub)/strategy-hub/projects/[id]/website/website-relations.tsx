@@ -8,6 +8,7 @@ import {
   EntityCrud,
   type FieldDef,
 } from "@/components/strategy-hub/entity-crud";
+import { PageSectionEditor } from "@/components/strategy-hub/page-section-editor";
 
 interface PageRef {
   id: string;
@@ -42,17 +43,6 @@ const SEVERITY_OPTIONS: FieldDef["options"] = [
   { value: "low", label: "Niska", tone: "neutral" },
   { value: "medium", label: "Średnia", tone: "warning" },
   { value: "high", label: "Wysoka", tone: "danger" },
-];
-
-const sectionFields: FieldDef[] = [
-  { key: "name", label: "Nazwa sekcji", type: "text", primary: true },
-  { key: "purposeMd", label: "Cel sekcji", type: "textarea" },
-  { key: "copyMd", label: "Copy", type: "textarea" },
-  { key: "schemaMd", label: "Struktura / schema", type: "textarea" },
-  { key: "ctaText", label: "CTA", type: "text" },
-  { key: "ctaUrl", label: "CTA URL", type: "url" },
-  { key: "designNotesMd", label: "Notatki designu", type: "textarea" },
-  { key: "orderIdx", label: "Kolejność", type: "number" },
 ];
 
 const navFields: FieldDef[] = [
@@ -230,15 +220,11 @@ export function WebsiteRelations({
                 renderLabel={(p) => p.name}
               />
               {selectedPage && (
-                <EntityCrud
+                <PageSectionEditor
                   key={selectedPage}
                   projectId={projectId}
-                  entity="sections"
-                  basePath={`/api/strategy-hub/projects/${projectId}/pages/${selectedPage}/sections`}
-                  fields={sectionFields}
-                  addLabel="Dodaj sekcję"
-                  emptyHint="Brak sekcji na tej stronie."
-                  dense
+                  pageId={selectedPage}
+                  pageLabel={pages.find((p) => p.id === selectedPage)?.name ?? ""}
                 />
               )}
             </div>

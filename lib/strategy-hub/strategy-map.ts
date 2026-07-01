@@ -25,8 +25,14 @@ import {
   navItems,
   seoKeywords,
   kpis,
+  marketSegmentationCriteria,
+  buyerJourneyStages,
+  pageSections,
+  offers,
+  funnelElementEvents,
 } from "@/db/schema";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, or, type SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   type StrategyMapData,
   type StrategyNode,
@@ -84,10 +90,24 @@ function clip(v: string | null | undefined, n = 90): string | null {
  * kanoniczną kolejność prezentacji oraz graf wpływu warstwy lejka.
  */
 export async function getStrategyMapData(
-  projectId: string
+  projectId: string,
+  pathId?: string | null
 ): Promise<StrategyMapData> {
   const rules = await resolveRules(projectId);
-  const live = and(eq(segments.projectId, projectId), isNull(segments.deletedAt));
+
+  /**
+   * Zakres ścieżki strategii: gdy `pathId` ustawione, pokazujemy encje
+   * przypisane do tej ścieżki ORAZ ogólne (pathId IS NULL — wspólne dla
+   * wszystkich ścieżek). Bez `pathId` — wszystko.
+   */
+  const pathScope = (col: AnyPgColumn): SQL | undefined =>
+    pathId ? or(isNull(col), eq(col, pathId)) : undefined;
+
+  const live = and(
+    eq(segments.projectId, projectId),
+    isNull(segments.deletedAt),
+    pathScope(segments.pathId)
+  );
 
   const [
     problemRows,
@@ -112,8 +132,13 @@ export async function getStrategyMapData(
     elKpiRows,
     elCampaignRows,
     elGeoRows,
+    elEventRows,
     campaignRows,
     geoAssetRows,
+    marketCriteriaRow,
+    buyerJourneyRows,
+    pageSectionRows,
+    offerRows,
   ] = await Promise.all([
     db
       .select()
@@ -130,7 +155,11 @@ export async function getStrategyMapData(
       .select()
       .from(competitors)
       .where(
-        and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))
+        and(
+          eq(competitors.projectId, projectId),
+          isNull(competitors.deletedAt),
+          pathScope(competitors.pathId)
+        )
       ),
     db
       .select()
@@ -158,6 +187,7 @@ export async function getStrategyMapData(
         stageId: funnelElements.stageId,
         segmentId: funnelElements.segmentId,
         format: funnelElements.format,
+        cta: funnelElements.cta,
       })
       .from(funnelElements)
       .innerJoin(purchaseStages, eq(funnelElements.stageId, purchaseStages.id))
@@ -214,11 +244,16 @@ export async function getStrategyMapData(
     db.select().from(funnelElementKpis),
     db.select().from(funnelElementCampaigns),
     db.select().from(funnelElementGeo),
+    db.select().from(funnelElementEvents),
     db
       .select({ id: campaigns.id, name: campaigns.name })
       .from(campaigns)
       .where(
-        and(eq(campaigns.projectId, projectId), isNull(campaigns.deletedAt))
+        and(
+          eq(campaigns.projectId, projectId),
+          isNull(campaigns.deletedAt),
+          pathScope(campaigns.pathId)
+        )
       ),
     db
       .select({ id: geoAssets.id, type: geoAssets.type })
@@ -226,6 +261,25 @@ export async function getStrategyMapData(
       .where(
         and(eq(geoAssets.projectId, projectId), isNull(geoAssets.deletedAt))
       ),
+    db
+      .select()
+      .from(marketSegmentationCriteria)
+      .where(eq(marketSegmentationCriteria.projectId, projectId))
+      .limit(1),
+    db
+      .select({ id: buyerJourneyStages.id })
+      .from(buyerJourneyStages)
+      .innerJoin(segments, eq(buyerJourneyStages.segmentId, segments.id))
+      .where(and(eq(segments.projectId, projectId), isNull(buyerJourneyStages.deletedAt))),
+    db
+      .select({ id: pageSections.id })
+      .from(pageSections)
+      .innerJoin(pages, eq(pageSections.pageId, pages.id))
+      .where(and(eq(pages.projectId, projectId), isNull(pageSections.deletedAt))),
+    db
+      .select({ id: offers.id })
+      .from(offers)
+      .where(and(eq(offers.projectId, projectId), isNull(offers.deletedAt))),
   ]);
 
   const uvpData = uvpRow[0];
@@ -250,6 +304,27 @@ export async function getStrategyMapData(
     leadMagnetCount: leadMagnetRows.length,
     uvp: uvpData ?? null,
     copyGuidelines: copyData ?? null,
+    buyerJourneyStageCount: buyerJourneyRows.length,
+    pageSectionCount: pageSectionRows.length,
+    seoKeywordCount: seoRows.length,
+    geoAssetCount: geoAssetRows.length,
+    offerCount: offerRows.length,
+    campaignCount: campaignRows.length,
+    marketCriteriaFilled: Array.isArray(marketCriteriaRow[0]?.dimensions)
+      ? (marketCriteriaRow[0]!.dimensions as unknown[]).length > 0
+      : false,
+    kpiMeasurableRatio:
+      kpiRows.length > 0
+        ? kpiRows.filter((k) => !!k.eventKey).length / kpiRows.length
+        : 0,
+    ctaMeasurableRatio: (() => {
+      const withCta = elementRows.filter((e) => nonEmpty(e.cta));
+      if (withCta.length === 0) return 0;
+      const conversionIds = new Set(
+        elEventRows.filter((e) => e.isConversion).map((e) => e.funnelElementId)
+      );
+      return withCta.filter((e) => conversionIds.has(e.id)).length / withCta.length;
+    })(),
   };
 
   const fundamentScore = mapNodeScore(rules, "fundament", evalCtx);

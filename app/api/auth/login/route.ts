@@ -1,46 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { signToken, verifyPassword, hashPassword } from "@/lib/auth";
-import { getClientByEmail, getProjectsForUser } from "@/sanity/queries";
+import { db } from "@/db";
+import { adminUsers, clientUsers } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { signToken, verifyPassword } from "@/lib/auth";
+import { getProjectsForUser } from "@/lib/client-portal/queries";
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  maxAge: 60 * 60 * 24 * 7,
+  path: "/",
+};
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-
-  if (body.type === "admin") {
-    const { email, password } = body;
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: "Email i hasło są wymagane" },
-        { status: 400 }
-      );
-    }
-
-    const admin = await prisma.adminUser.findUnique({ where: { email } });
-    if (!admin || !(await verifyPassword(password, admin.passwordHash))) {
-      return NextResponse.json(
-        { error: "Nieprawidłowe dane logowania" },
-        { status: 401 }
-      );
-    }
-
-    const token = signToken({
-      adminId: admin.id,
-      email: admin.email,
-      type: "admin",
-    });
-
-    const response = NextResponse.json({ success: true });
-    response.cookies.set("session", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
-    return response;
-  }
-
   const { email, password } = body;
+
   if (!email || !password) {
     return NextResponse.json(
       { error: "Email i hasło są wymagane" },
@@ -48,97 +24,70 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const sanityClient = await getClientByEmail(email);
-  if (!sanityClient) {
-    // Sprawdź czy to konto admina
-    const admin = await prisma.adminUser.findUnique({ where: { email } });
-    if (admin && (await verifyPassword(password, admin.passwordHash))) {
-      const token = signToken({ adminId: admin.id, email: admin.email, type: "admin" });
-      const response = NextResponse.json({ success: true, isAdmin: true });
-      response.cookies.set("session", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7,
-        path: "/",
-      });
-      return response;
-    }
+  const [admin] = await db
+    .select()
+    .from(adminUsers)
+    .where(eq(adminUsers.email, email))
+    .limit(1);
+
+  if (admin && (await verifyPassword(password, admin.passwordHash))) {
+    const token = signToken({
+      adminId: admin.id,
+      email: admin.email,
+      type: "admin",
+    });
+    const response = NextResponse.json({
+      success: true,
+      isAdmin: body.type !== "admin" ? true : undefined,
+    });
+    response.cookies.set("session", token, COOKIE_OPTIONS);
+    return response;
+  }
+
+  if (body.type === "admin") {
+    return NextResponse.json(
+      { error: "Nieprawidłowe dane logowania" },
+      { status: 401 }
+    );
+  }
+
+  const [localClient] = await db
+    .select()
+    .from(clientUsers)
+    .where(eq(clientUsers.email, email))
+    .limit(1);
+
+  if (!localClient) {
     return NextResponse.json(
       { error: "Nie znaleziono konta z tym adresem email" },
       { status: 401 }
     );
   }
 
-  const { projects } = await getProjectsForUser(email);
-  if (projects.length === 0 && !sanityClient.isAdmin) {
+  if (!localClient.passwordHash) {
     return NextResponse.json(
-      { error: "Brak przypisanych projektów do tego konta" },
+      {
+        error:
+          "Konto nie ma jeszcze ustawionego hasła. Użyj opcji 'Ustaw hasło'.",
+        code: "NO_PASSWORD",
+      },
       { status: 401 }
     );
   }
 
-  let localClient = await prisma.clientUser.findUnique({ where: { email } });
-
-  if (!localClient || !localClient.passwordHash) {
-    const sanityPassword = sanityClient.password;
-
-    if (sanityPassword && password === sanityPassword) {
-      const passwordHash = await hashPassword(password);
-
-      if (localClient) {
-        localClient = await prisma.clientUser.update({
-          where: { email },
-          data: {
-            passwordHash,
-            name: sanityClient.name || localClient.name,
-          },
-        });
-      } else {
-        localClient = await prisma.clientUser.create({
-          data: {
-            email,
-            name: sanityClient.name,
-            passwordHash,
-          },
-        });
-      }
-    } else if (sanityPassword) {
-      return NextResponse.json(
-        { error: "Nieprawidłowe hasło" },
-        { status: 401 }
-      );
-    } else {
-      return NextResponse.json(
-        {
-          error:
-            "Konto nie ma ustawionego hasła. Użyj opcji 'Ustaw hasło' lub poproś admina o ustawienie hasła w Sanity.",
-          code: "NO_PASSWORD",
-        },
-        { status: 401 }
-      );
-    }
-  } else {
-    const localPasswordOk = await verifyPassword(
-      password,
-      localClient.passwordHash
+  if (!(await verifyPassword(password, localClient.passwordHash))) {
+    return NextResponse.json(
+      { error: "Nieprawidłowe hasło" },
+      { status: 401 }
     );
+  }
 
-    if (!localPasswordOk) {
-      const sanityPassword = sanityClient.password;
-
-      if (sanityPassword && password === sanityPassword) {
-        localClient = await prisma.clientUser.update({
-          where: { email },
-          data: { passwordHash: await hashPassword(password) },
-        });
-      } else {
-        return NextResponse.json(
-          { error: "Nieprawidłowe hasło" },
-          { status: 401 }
-        );
-      }
-    }
+  const { projects: accessible } = await getProjectsForUser(email);
+  if (accessible.length === 0) {
+    return NextResponse.json(
+      { error: "Brak przypisanych projektów do tego konta" },
+      { status: 401 }
+    );
   }
 
   const token = signToken({
@@ -149,15 +98,9 @@ export async function POST(req: NextRequest) {
 
   const response = NextResponse.json({
     success: true,
-    slug: projects[0]?.slug || null,
-    isAdmin: sanityClient.isAdmin === true,
+    slug: accessible[0]?.slug ?? null,
+    isAdmin: false,
   });
-  response.cookies.set("session", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/",
-  });
+  response.cookies.set("session", token, COOKIE_OPTIONS);
   return response;
 }

@@ -16,6 +16,18 @@ export interface CriterionContext {
   elementCount: number;
   flowCount: number;
   leadMagnetCount: number;
+  /** Faza 1 (M1) — dopełnienie macierzy 13 locków ze spec Notion. */
+  buyerJourneyStageCount?: number;
+  pageSectionCount?: number;
+  seoKeywordCount?: number;
+  geoAssetCount?: number;
+  offerCount?: number;
+  campaignCount?: number;
+  marketCriteriaFilled?: boolean;
+  /** Faza 11 (M3) — reguła mierzalności: udział KPI z ustawionym `event_key` (0–1). */
+  kpiMeasurableRatio?: number;
+  /** Faza 11 (M3) — udział elementów lejka z CTA, powiązanych z eventem konwersji (0–1). */
+  ctaMeasurableRatio?: number;
   brandIdentity?: {
     missionMd?: string | null;
     visionMd?: string | null;
@@ -62,6 +74,12 @@ function entityCount(entity: string | undefined, ctx: CriterionContext): number 
     funnelElements: ctx.elementCount,
     userFlows: ctx.flowCount,
     leadMagnets: ctx.leadMagnetCount,
+    buyerJourneyStages: ctx.buyerJourneyStageCount ?? 0,
+    pageSections: ctx.pageSectionCount ?? 0,
+    seoKeywords: ctx.seoKeywordCount ?? 0,
+    geoAssets: ctx.geoAssetCount ?? 0,
+    offers: ctx.offerCount ?? 0,
+    campaigns: ctx.campaignCount ?? 0,
   };
   return counts[entity] ?? 0;
 }
@@ -135,6 +153,15 @@ export function evaluateCriterion(
           nonEmpty(ctx.copyGuidelines?.principlesMd) ||
           nonEmpty(ctx.copyGuidelines?.doMd);
         return hasCopy ? 100 : 0;
+      }
+      if (criterion.id === "kryteria_dimensions") {
+        return ctx.marketCriteriaFilled ? 100 : 0;
+      }
+      if (criterion.id === "kpi_measurable") {
+        return Math.round((ctx.kpiMeasurableRatio ?? 0) * 100);
+      }
+      if (criterion.id === "lejek_cta_measurable") {
+        return Math.round((ctx.ctaMeasurableRatio ?? 0) * 100);
       }
       return 0;
     }

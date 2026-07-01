@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/strategy-hub/digest",
+      "schedule": "0 8 * * 1"
+    },
+    {
+      "path": "/api/strategy-hub/notion/cron",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}

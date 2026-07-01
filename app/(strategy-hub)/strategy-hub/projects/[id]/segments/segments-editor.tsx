@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { Plus, Trash2, Users, Loader2, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Users, Loader2, ChevronRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useHubOverlays } from "@/components/strategy-hub/hub-overlays";
 import {
   AutosaveField,
   SectionCard,
@@ -17,11 +18,16 @@ import {
   type JsonColumn,
 } from "@/components/strategy-hub/json-list-editor";
 import { EntityCrud, type FieldDef } from "@/components/strategy-hub/entity-crud";
+import { SegmentB2bPricing } from "@/components/strategy-hub/segment-b2b-pricing";
 import {
   VisibilityControl,
   type VisibilityStatus,
 } from "@/components/strategy-hub/visibility-control";
 import { EntityMetaPanel } from "@/components/strategy-hub/entity-meta-panel";
+import {
+  resolveCriteria,
+  weightedScore,
+} from "@/lib/strategy-hub/segment-scoring";
 
 interface Props {
   projectId: string;
@@ -89,6 +95,7 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
   const [draftName, setDraftName] = useState("");
   const [pending, startTransition] = useTransition();
   const [visMap, setVisMap] = useState<Record<string, VisibilityStatus>>({});
+  const { openSidekick } = useHubOverlays();
 
   const market = useSingleton(projectId, "market-segmentation");
 
@@ -197,11 +204,25 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
 
   const selected = segments.find((s) => s.id === selectedId) ?? null;
   const scoring = (selected?.scoring as Record<string, unknown>) ?? {};
+  const criteria = resolveCriteria(market.data.scoringCriteria);
 
   const setScore = (key: string, value: string) => {
     if (!selected) return;
     const next = { ...scoring, [key]: value === "" ? null : Number(value) };
     patchSegment(selected.id, { scoring: next });
+  };
+
+  const ranked = [...segments]
+    .map((s) => ({
+      seg: s,
+      score: weightedScore(s.scoring as Record<string, unknown> | null, criteria),
+    }))
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+
+  const applyPriorityFromRanking = () => {
+    ranked.forEach(({ seg }, idx) => {
+      if (seg.priority !== idx + 1) patchSegment(seg.id, { priority: idx + 1 });
+    });
   };
 
   return (
@@ -233,6 +254,77 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
           emptyHint="Brak zdefiniowanych kryteriów."
         />
       </SectionCard>
+
+      {/* Priorytetyzacja segmentów — macierz scoringu ważonego */}
+      {segments.length > 1 && (
+        <SectionCard
+          title="Priorytetyzacja segmentów"
+          description="Ranking wg wyniku ważonego (kryteria + wagi z zakładki Kryteria segmentacji)."
+        >
+          <div className="space-y-2">
+            <div className="overflow-x-auto">
+              <table className="w-full border-separate border-spacing-y-1 text-sm">
+                <thead>
+                  <tr className="text-xs text-muted-foreground">
+                    <th className="text-left font-medium p-1.5">#</th>
+                    <th className="text-left font-medium p-1.5">Segment</th>
+                    <th className="text-left font-medium p-1.5">Wynik ważony</th>
+                    <th className="text-left font-medium p-1.5">Priorytet obecny</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranked.map(({ seg, score }, idx) => (
+                    <tr
+                      key={seg.id}
+                      className="cursor-pointer rounded-lg hover:bg-muted/40"
+                      onClick={() => setSelectedId(seg.id)}
+                    >
+                      <td className="p-1.5 font-medium text-muted-foreground">{idx + 1}</td>
+                      <td className="p-1.5">
+                        {String(seg.icon ?? "👥")} {String(seg.name)}
+                      </td>
+                      <td className="p-1.5">
+                        {score == null ? (
+                          <span className="text-xs text-muted-foreground">brak ocen</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full",
+                                  score >= 70
+                                    ? "bg-success"
+                                    : score >= 40
+                                    ? "bg-amber-400"
+                                    : "bg-destructive"
+                                )}
+                                style={{ width: `${score}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-medium tabular-nums">{score}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-1.5 text-xs text-muted-foreground">
+                        {seg.priority == null ? "—" : String(seg.priority)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={applyPriorityFromRanking}
+              className="h-8 text-xs"
+            >
+              Zastosuj ranking jako priorytet
+            </Button>
+          </div>
+        </SectionCard>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
         {/* Lista segmentów */}
@@ -328,6 +420,19 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
             <div className="flex items-center justify-between gap-2">
               <SaveIndicator status={status} />
               <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    openSidekick(
+                      `Zaproponuj kompletny lejek (etapy zakupu TOFU/MOFU/BOFU/retencja + elementy lejka z formatem i CTA) dla segmentu „${selected.name}". Uwzględnij JTBD, problem i UVP tego segmentu jeśli są opisane.`
+                    )
+                  }
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  <Sparkles className="size-3.5" />
+                  Generuj lejek
+                </Button>
                 <VisibilityControl
                   projectId={projectId}
                   scope="record"
@@ -492,15 +597,15 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
                 multiline
                 rows={3}
               />
-              <AutosaveField
-                label="Pricing dla segmentu"
-                value={selected.segmentPricingMd}
-                onCommit={(v) =>
-                  patchSegment(selected.id, { segmentPricingMd: v })
-                }
-                multiline
-                rows={3}
-              />
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Cennik B2B</label>
+                <SegmentB2bPricing
+                  value={(selected.segmentPricingMd as string | null) ?? null}
+                  onCommit={(v) =>
+                    patchSegment(selected.id, { segmentPricingMd: v })
+                  }
+                />
+              </div>
               <AutosaveField
                 label="Wielkość rynku"
                 value={selected.marketSizeMd}
@@ -529,26 +634,49 @@ export function SegmentsEditor({ projectId, projectName }: Props) {
               </div>
             </SectionCard>
 
-            <SectionCard title="Scoring">
+            <SectionCard
+              title="Scoring"
+              description="Ocena 1–5 na kryteriach z zakładki Kryteria segmentacji. Waga decyduje o wpływie na wynik ważony."
+            >
               <div className="grid gap-4 sm:grid-cols-3">
-                {[
-                  { key: "fit", label: "Dopasowanie" },
-                  { key: "value", label: "Wartość" },
-                  { key: "effort", label: "Wysiłek" },
-                ].map((f) => (
-                  <div key={f.key} className="space-y-1.5">
-                    <label className="text-sm font-medium">{f.label}</label>
+                {criteria.map((c) => (
+                  <div key={c.key} className="space-y-1.5">
+                    <label className="text-sm font-medium">
+                      {c.label}
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        (waga {c.weight})
+                      </span>
+                    </label>
                     <Input
                       type="number"
-                      value={
-                        scoring[f.key] == null ? "" : String(scoring[f.key])
-                      }
-                      onChange={(e) => setScore(f.key, e.target.value)}
+                      min={1}
+                      max={5}
+                      value={scoring[c.key] == null ? "" : String(scoring[c.key])}
+                      onChange={(e) => setScore(c.key, e.target.value)}
                       className="h-9 text-sm"
                     />
                   </div>
                 ))}
               </div>
+              {(() => {
+                const total = weightedScore(scoring, criteria);
+                return total != null ? (
+                  <p className="text-sm font-medium">
+                    Wynik ważony:{" "}
+                    <span
+                      className={cn(
+                        total >= 70
+                          ? "text-success"
+                          : total >= 40
+                          ? "text-amber-500"
+                          : "text-destructive"
+                      )}
+                    >
+                      {total}/100
+                    </span>
+                  </p>
+                ) : null;
+              })()}
             </SectionCard>
 
             <SectionCard

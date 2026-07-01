@@ -4,6 +4,7 @@ import { Search, Sparkles } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useProject } from "@/components/strategy-hub/project-context";
 import { useHubOverlays } from "@/components/strategy-hub/hub-overlays";
+import { AlertsBell } from "@/components/strategy-hub/alerts-bell";
 
 export function StrategyHubHeader() {
   const project = useProject();
@@ -38,10 +39,11 @@ export function StrategyHubHeader() {
             ⌘K
           </kbd>
         </button>
+        {project && <AlertsBell projectId={project.id} />}
         {project && (
           <button
             type="button"
-            onClick={openSidekick}
+            onClick={() => openSidekick()}
             aria-label="Otwórz AI Sidekick (Cmd+J)"
             className="flex items-center gap-1.5 h-7 rounded-md border border-brand/30 bg-brand/10 px-2 text-xs text-brand hover:bg-brand/20 transition-colors"
           >

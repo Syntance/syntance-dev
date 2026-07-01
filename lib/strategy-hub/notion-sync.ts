@@ -8,6 +8,8 @@ import {
   brandPositioning,
   competitors,
   objections,
+  segments,
+  kpis,
   notionMappings,
   notionSyncLog,
   projects,
@@ -260,6 +262,60 @@ function competitorsToMarkdown(
 }
 
 /**
+ * Buduje markdown sekcji "Segmenty" z listy segments (kluczowe pola karty klienta).
+ */
+function segmentsToMarkdown(
+  rows: {
+    name: string;
+    personaName: string | null;
+    priority: number | null;
+    revenueSharePct: number | null;
+    jtbdMd: string | null;
+    problemMd: string | null;
+  }[]
+): string {
+  if (rows.length === 0) return "—";
+  return rows
+    .map((s) => {
+      const lines: string[] = [];
+      const persona = s.personaName ? ` — _${s.personaName}_` : "";
+      const share =
+        s.revenueSharePct != null ? ` (${s.revenueSharePct}% przychodu)` : "";
+      lines.push(`### ${s.name}${persona}${share}`);
+      if (s.jtbdMd?.trim()) lines.push(`**JTBD:** ${s.jtbdMd.trim()}`);
+      if (s.problemMd?.trim()) lines.push(`**Problem:** ${s.problemMd.trim()}`);
+      return lines.join("\n\n");
+    })
+    .join("\n\n---\n\n");
+}
+
+/**
+ * Buduje markdown sekcji "KPI" z listy kpis.
+ */
+function kpisToMarkdown(
+  rows: {
+    name: string;
+    target: string | null;
+    actual: string | null;
+    unit: string | null;
+    category: string | null;
+  }[]
+): string {
+  if (rows.length === 0) return "—";
+  return rows
+    .map((k) => {
+      const unit = k.unit ? ` ${k.unit}` : "";
+      const category = k.category ? `_[${k.category}]_ ` : "";
+      const progress =
+        k.target != null
+          ? `${k.actual ?? "?"}${unit} / ${k.target}${unit}`
+          : (k.actual ?? "?") + unit;
+      return `- ${category}**${k.name}:** ${progress}`;
+    })
+    .join("\n");
+}
+
+/**
  * Push strategii biznesowej projektu do strony Notion.
  * Strona musi istnieć (Notion API integracji nie da prosto utworzyć nowej strony bez parenta).
  * Zapisuje projektowy `notion_page_url` lub korzysta z `projects.notionPageUrl`.
@@ -284,45 +340,62 @@ export async function pushBusinessStrategyToNotion(projectId: string) {
       throw new Error("Brak notion_page_url dla projektu");
     }
 
-    const [problemRows, uvpRows, positioningRows, competitorRows, objectionRows] =
-      await Promise.all([
-        db
-          .select()
-          .from(businessProblems)
-          .where(
-            and(
-              eq(businessProblems.projectId, projectId),
-              isNull(businessProblems.deletedAt)
-            )
+    const [
+      problemRows,
+      uvpRows,
+      positioningRows,
+      competitorRows,
+      objectionRows,
+      segmentRows,
+      kpiRows,
+    ] = await Promise.all([
+      db
+        .select()
+        .from(businessProblems)
+        .where(
+          and(
+            eq(businessProblems.projectId, projectId),
+            isNull(businessProblems.deletedAt)
           )
-          .orderBy(asc(businessProblems.orderIdx)),
-        db.select().from(uvp).where(eq(uvp.projectId, projectId)).limit(1),
-        db
-          .select()
-          .from(brandPositioning)
-          .where(eq(brandPositioning.projectId, projectId))
-          .limit(1),
-        db
-          .select()
-          .from(competitors)
-          .where(
-            and(
-              eq(competitors.projectId, projectId),
-              isNull(competitors.deletedAt)
-            )
+        )
+        .orderBy(asc(businessProblems.orderIdx)),
+      db.select().from(uvp).where(eq(uvp.projectId, projectId)).limit(1),
+      db
+        .select()
+        .from(brandPositioning)
+        .where(eq(brandPositioning.projectId, projectId))
+        .limit(1),
+      db
+        .select()
+        .from(competitors)
+        .where(
+          and(
+            eq(competitors.projectId, projectId),
+            isNull(competitors.deletedAt)
           )
-          .orderBy(asc(competitors.createdAt)),
-        db
-          .select()
-          .from(objections)
-          .where(
-            and(
-              eq(objections.projectId, projectId),
-              isNull(objections.deletedAt)
-            )
+        )
+        .orderBy(asc(competitors.createdAt)),
+      db
+        .select()
+        .from(objections)
+        .where(
+          and(
+            eq(objections.projectId, projectId),
+            isNull(objections.deletedAt)
           )
-          .orderBy(asc(objections.orderIdx)),
-      ]);
+        )
+        .orderBy(asc(objections.orderIdx)),
+      db
+        .select()
+        .from(segments)
+        .where(and(eq(segments.projectId, projectId), isNull(segments.deletedAt)))
+        .orderBy(asc(segments.orderIdx)),
+      db
+        .select()
+        .from(kpis)
+        .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt)))
+        .orderBy(asc(kpis.category), asc(kpis.name)),
+    ]);
 
     const pageId = extractPageId(project.notionPageUrl);
     if (!pageId) throw new Error("Nie udało się sparsować Notion page id");
@@ -339,6 +412,8 @@ export async function pushBusinessStrategyToNotion(projectId: string) {
       },
       { title: "🥊 Konkurencja", md: competitorsToMarkdown(competitorRows) },
       { title: "💬 Obiekcje klientów", md: objectionsToMarkdown(objectionRows) },
+      { title: "👥 Segmenty", md: segmentsToMarkdown(segmentRows) },
+      { title: "📊 KPI", md: kpisToMarkdown(kpiRows) },
     ];
 
     let allBlocks: NotionBlock[] = [];
@@ -433,6 +508,9 @@ function extractPageId(url: string): string | null {
  */
 export async function pullFromNotion(notionPageId: string) {
   const start = Date.now();
+  // Poza try/catch, żeby log błędu (poniżej) mógł wskazać projekt nawet
+  // gdy wyjątek wystąpi już po jego rozwiązaniu.
+  let resolvedProjectId: string | null = null;
   try {
     const mapping = await db
       .select()
@@ -454,6 +532,7 @@ export async function pullFromNotion(notionPageId: string) {
       if (!proj) throw new Error("Nie znaleziono projektu dla strony Notion");
       projectId = proj.id;
     }
+    resolvedProjectId = projectId;
 
     // ── Anti-loop #1: echo własnego pushu ──────────────────────────────────
     // Notion odpala content_updated tuż po naszym pushu — jeśli mieścimy się
@@ -497,6 +576,7 @@ export async function pullFromNotion(notionPageId: string) {
         sections.uvp ?? "",
         sections.competitors ?? "",
         sections.objections ?? "",
+        sections.positioning ?? "",
       ].join("\n\n")
     );
     if (mappingRow?.lastPushHash && mappingRow.lastPushHash === incomingHash) {
@@ -530,6 +610,18 @@ export async function pullFromNotion(notionPageId: string) {
         },
       });
 
+    // Pozycjonowanie ma dedykowaną encję singleton (brand_positioning) —
+    // zapisujemy treść z Notion do `statementMd`, nie tracimy jej jak dotąd.
+    if (sections.positioning?.trim()) {
+      await db
+        .insert(brandPositioning)
+        .values({ projectId, statementMd: sections.positioning })
+        .onConflictDoUpdate({
+          target: brandPositioning.projectId,
+          set: { statementMd: sections.positioning, updatedAt: new Date() },
+        });
+    }
+
     // Zapisujemy hash i kierunek pulla — kolejny webhook z tą samą treścią
     // zostanie pominięty (anti-loop #2). Nie nadpisujemy lastPushedAt.
     if (mappingRow) {
@@ -555,6 +647,9 @@ export async function pullFromNotion(notionPageId: string) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown";
     await db.insert(notionSyncLog).values({
+      projectId: resolvedProjectId,
+      entityType: "business_strategy",
+      entityId: resolvedProjectId,
       direction: "pull",
       status: "error",
       error: message,
@@ -578,12 +673,14 @@ function blocksToSections(blocks: NotionBlock[]): {
   uvp?: string;
   competitors?: string;
   objections?: string;
+  positioning?: string;
 } {
   const sections: Record<string, string[]> = {
     goals: [],
     uvp: [],
     competitors: [],
     objections: [],
+    positioning: [],
   };
 
   const HEADERS: Record<string, keyof typeof sections> = {
@@ -592,6 +689,7 @@ function blocksToSections(blocks: NotionBlock[]): {
     "konkurencja": "competitors",
     "obiekcje klientów": "objections",
     "obiekcje klientow": "objections",
+    "pozycjonowanie": "positioning",
   };
 
   let current: keyof typeof sections | null = null;
@@ -632,5 +730,6 @@ function blocksToSections(blocks: NotionBlock[]): {
     uvp: sections.uvp.join("\n\n") || undefined,
     competitors: sections.competitors.join("\n\n") || undefined,
     objections: sections.objections.join("\n\n") || undefined,
+    positioning: sections.positioning.join("\n\n") || undefined,
   };
 }

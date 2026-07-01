@@ -1,0 +1,42 @@
+---
+description: Zdarzenia analityczne Strategy Hub (@syntance/analytics-events) — ładuj gdy dodajesz KPI, element lejka z CTA, lub cokolwiek co ma być mierzalne
+updated: 2026-07
+---
+
+## Słownik zdarzeń — jedno źródło prawdy
+
+- Rejestr zdarzeń żyje w `packages/analytics-events/src/index.ts` (`EVENT_REGISTRY`), importowany
+  jako `@/packages/analytics-events/src`. Zero zależności runtime — pakiet ma być konsumowalny
+  samodzielnie (np. przez skrypt trackingowy na stronie klienta).
+- `event_key` to `varchar`, NIE enum bazodanowy — nowe zdarzenie dodajesz edytując rejestr, bez migracji.
+- NIGDY nie hardkoduj nazw zdarzeń w komponentach — zawsze importuj z rejestru
+  (`EVENT_REGISTRY`, `getEventByKey`, `isConversionEvent`, `EVENT_CATEGORY_LABELS`).
+
+## Gdzie żyje powiązanie w bazie
+
+- `kpis.event_key` — jedno zdarzenie na KPI (`null` = KPI nie-analityczny, np. jakościowy).
+- `funnel_element_events` (PK złożony `funnel_element_id + event_key`) — element lejka może
+  emitować wiele zdarzeń; `is_conversion` jest kopiowane z rejestru w momencie przypisania
+  (denormalizacja pod szybkie filtrowanie w regułach — NIE czytaj `isConversion` z gdzie indziej).
+
+## UI
+
+- Wybór zdarzenia w formularzach: `RelationPicker` z `entityType="analytics_event"` (multi dla
+  elementów lejka, select natywny z opcjami `EVENT_REGISTRY` dla pojedynczego `kpis.event_key`).
+- `RelationPicker` pobiera opcje z `/api/strategy-hub/projects/[id]/entities?type=analytics_event` —
+  ten endpoint filtruje statyczny `EVENT_REGISTRY`, NIE odpytuje bazy.
+
+## Reguła mierzalności (silnik reguł)
+
+- Kryterium `kpi_measurable` (moduł `kpi`) i `lejek_cta_measurable` (moduł `lejek`) w
+  `lib/strategy-hub/rules/defaults.ts` liczą % KPI z `event_key` / % CTA z powiązanym zdarzeniem
+  konwersji. Ewaluacja w `lib/strategy-hub/rules/evaluate.ts` (`metric: "custom"`).
+- Kontekst (`kpiMeasurableRatio`, `ctaMeasurableRatio`) budowany w `health-score.ts` i
+  `strategy-map.ts` — przy dodawaniu nowego miejsca liczącego health-score/lock, PAMIĘTAJ
+  o policzeniu tych dwóch pól, inaczej kryterium zawsze wyjdzie 0.
+
+## Agent AI
+
+- Agent (`lib/strategy-hub/agent/run-agent.ts`) NIE zapisuje zdarzeń automatycznie — przypisanie
+  `event_key` do KPI/elementu lejka to decyzja człowieka w edytorze, nie propozycja w kolejce
+  `ai_proposals` (zbyt techniczne, niska wartość jako "audyt/research/poprawa/monitoring").

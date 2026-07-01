@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { db } from "@/db";
+import { clientUsers, passwordResetTokens } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { hashPassword, signToken } from "@/lib/auth";
-import { getProjectsForUser } from "@/sanity/queries";
+import { getProjectsForUser } from "@/lib/client-portal/queries";
 
 export async function POST(req: NextRequest) {
   const { token, password } = await req.json();
@@ -20,9 +22,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const resetToken = await prisma.passwordResetToken.findUnique({
-    where: { token },
-  });
+  const [resetToken] = await db
+    .select()
+    .from(passwordResetTokens)
+    .where(eq(passwordResetTokens.token, token))
+    .limit(1);
 
   if (!resetToken || resetToken.used || resetToken.expiresAt < new Date()) {
     return NextResponse.json(
@@ -33,17 +37,18 @@ export async function POST(req: NextRequest) {
 
   const passwordHash = await hashPassword(password);
 
-  await prisma.passwordResetToken.update({
-    where: { id: resetToken.id },
-    data: { used: true },
-  });
+  await db
+    .update(passwordResetTokens)
+    .set({ used: true })
+    .where(eq(passwordResetTokens.id, resetToken.id));
 
-  const client = await prisma.clientUser.update({
-    where: { email: resetToken.email },
-    data: { passwordHash },
-  });
+  const [client] = await db
+    .update(clientUsers)
+    .set({ passwordHash, updatedAt: new Date() })
+    .where(eq(clientUsers.email, resetToken.email))
+    .returning();
 
-  const { projects } = await getProjectsForUser(client.email);
+  const { projects: accessible } = await getProjectsForUser(client.email);
 
   const sessionToken = signToken({
     userId: client.id,
@@ -53,7 +58,7 @@ export async function POST(req: NextRequest) {
 
   const response = NextResponse.json({
     success: true,
-    slug: projects[0]?.slug,
+    slug: accessible[0]?.slug,
   });
   response.cookies.set("session", sessionToken, {
     httpOnly: true,

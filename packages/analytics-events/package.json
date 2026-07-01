@@ -1,0 +1,8 @@
+{
+  "name": "@syntance/analytics-events",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rejestr zdarzeń analitycznych Strategy Hub — konsumowalny samodzielnie, zero zależności runtime.",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

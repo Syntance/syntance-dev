@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { getProjectsForUser } from "@/sanity/queries";
+import { getProjectsForUser } from "@/lib/client-portal/queries";
 import { SyntanceLogo } from "@/components/logo";
 import Link from "next/link";
 

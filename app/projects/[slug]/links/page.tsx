@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { getClientSession } from "@/lib/auth";
-import { getProjectBySlugForUser } from "@/sanity/queries";
+import { getProjectBySlugForUser } from "@/lib/client-portal/queries";
 import { db } from "@/db";
 import { projects as dbProjects, clientResources } from "@/db/schema";
 import { eq, isNull, and, asc } from "drizzle-orm";

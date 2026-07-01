@@ -154,12 +154,21 @@ function KpiCard({
         <div className="space-y-1">
           <div className="h-1.5 rounded-full bg-muted overflow-hidden">
             <div
-              className="h-full rounded-full bg-brand transition-[width] duration-500"
+              className={cn(
+                "h-full rounded-full transition-[width] duration-500",
+                progress < 0.8 ? "bg-destructive" : "bg-success"
+              )}
               style={{ width: `${(progress * 100).toFixed(0)}%` }}
             />
           </div>
-          <p className="text-[10px] text-muted-foreground text-right tabular-nums">
+          <p
+            className={cn(
+              "text-[10px] text-right tabular-nums",
+              progress < 0.8 ? "text-destructive font-medium" : "text-muted-foreground"
+            )}
+          >
             {(progress * 100).toFixed(0)}% celu
+            {progress < 0.8 ? " · poniżej 80%" : ""}
           </p>
         </div>
       )}

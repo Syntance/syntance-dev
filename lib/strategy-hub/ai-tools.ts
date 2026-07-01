@@ -13,8 +13,13 @@ import {
   campaigns,
   geoAssets,
   offers,
+  purchaseStages,
+  funnelElements,
+  competitors,
+  brandPositioning,
+  channels,
 } from "@/db/schema";
-import { eq, isNull, and } from "drizzle-orm";
+import { eq, isNull, and, inArray } from "drizzle-orm";
 import {
   serializeStrategyListItems,
   parseStrategyListItems,
@@ -495,6 +500,229 @@ export const listGeoAndOffersTool = (projectId: string) =>
     },
   });
 
+// ─── Sugestie i analizy (2.0) ─────────────────────────────────────────────────
+
+/** hub_suggest_segments — kontekst do zaproponowania segmentów. */
+export const suggestSegmentsTool = (projectId: string) =>
+  tool({
+    description:
+      "Zbiera kontekst (branża, problemy biznesowe, UVP, konkurencja, istniejące segmenty) aby zaproponować 1–3 nowe segmenty klientów z personą, JTBD i priorytetem. Wywołaj gdy użytkownik prosi o pomysły na segmenty.",
+    parameters: z.object({}),
+    execute: async () => {
+      const [proj, strat, existing, comp] = await Promise.all([
+        db
+          .select({ name: projects.name, description: projects.description, domain: projects.domain })
+          .from(projects)
+          .where(eq(projects.id, projectId))
+          .limit(1)
+          .then((r) => r[0]),
+        db
+          .select({ goalsMd: businessStrategy.goalsMd, uvpMd: businessStrategy.uvpMd })
+          .from(businessStrategy)
+          .where(eq(businessStrategy.projectId, projectId))
+          .limit(1)
+          .then((r) => r[0]),
+        db
+          .select({ name: segments.name, persona: segments.personaName })
+          .from(segments)
+          .where(and(eq(segments.projectId, projectId), isNull(segments.deletedAt))),
+        db
+          .select({ name: competitors.name, type: competitors.type })
+          .from(competitors)
+          .where(and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))),
+      ]);
+      return {
+        project: proj ?? null,
+        goalsMd: strat?.goalsMd ?? null,
+        uvpMd: strat?.uvpMd ?? null,
+        existingSegments: existing,
+        competitors: comp,
+        instruction:
+          "Zaproponuj 1–3 segmenty, których jeszcze nie ma. Dla każdego: nazwa, persona, JTBD, główny problem, priorytet i szacunkowy % przychodów.",
+      };
+    },
+  });
+
+/** hub_suggest_funnel — kontekst do zaproponowania elementów lejka. */
+export const suggestFunnelTool = (projectId: string) =>
+  tool({
+    description:
+      "Zbiera kontekst lejka (segmenty, etapy zakupu i istniejące elementy) aby zaproponować brakujące elementy lejka per faza (TOFU/MOFU/BOFU/retencja). Wywołaj gdy użytkownik prosi o propozycję lejka lub pyta czego brakuje w lejku.",
+    parameters: z.object({
+      segmentId: z.string().uuid().optional().describe("Ogranicz do jednego segmentu"),
+    }),
+    execute: async ({ segmentId }) => {
+      const segConds = [eq(segments.projectId, projectId), isNull(segments.deletedAt)];
+      if (segmentId) segConds.push(eq(segments.id, segmentId));
+      const segRows = await db
+        .select({ id: segments.id, name: segments.name })
+        .from(segments)
+        .where(and(...segConds));
+
+      const segIds = segRows.map((s) => s.id);
+      const stageRows = segIds.length
+        ? await db
+            .select({
+              id: purchaseStages.id,
+              segmentId: purchaseStages.segmentId,
+              name: purchaseStages.name,
+              phase: purchaseStages.phase,
+            })
+            .from(purchaseStages)
+            .where(
+              and(
+                inArray(purchaseStages.segmentId, segIds),
+                isNull(purchaseStages.deletedAt)
+              )
+            )
+        : [];
+
+      const stageIds = stageRows.map((s) => s.id);
+      const elementRows = stageIds.length
+        ? await db
+            .select({
+              stageId: funnelElements.stageId,
+              name: funnelElements.name,
+            })
+            .from(funnelElements)
+            .where(
+              and(
+                inArray(funnelElements.stageId, stageIds),
+                isNull(funnelElements.deletedAt)
+              )
+            )
+        : [];
+
+      return {
+        segments: segRows,
+        stages: stageRows,
+        elements: elementRows,
+        phases: ["TOFU", "MOFU", "BOFU", "retention"],
+        instruction:
+          "Dla każdego segmentu sprawdź, których faz brakuje lub które mają < 3 elementy. Zaproponuj konkretne elementy lejka (treść, format, CTA, kanał) dla brakujących miejsc.",
+      };
+    },
+  });
+
+/** hub_analyze_strategy — audyt spójności strategii. */
+export const analyzeStrategyTool = (projectId: string) =>
+  tool({
+    description:
+      "Audytuje spójność strategii: zbiera przekrój danych ze wszystkich modułów (segmenty, lejek, kanały, KPI, strony, oferty) aby wykryć luki, sprzeczności i brakujące powiązania. Wywołaj gdy użytkownik pyta czy strategia jest spójna lub prosi o audyt.",
+    parameters: z.object({}),
+    execute: async () => {
+      const [segRows, kpiRows, pageRows, flowRows, chRows, offerRows] =
+        await Promise.all([
+          db
+            .select({ id: segments.id, name: segments.name })
+            .from(segments)
+            .where(and(eq(segments.projectId, projectId), isNull(segments.deletedAt))),
+          db
+            .select({ name: kpis.name, target: kpis.target, actual: kpis.actual })
+            .from(kpis)
+            .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt))),
+          db
+            .select({ urlPath: pages.urlPath })
+            .from(pages)
+            .where(and(eq(pages.projectId, projectId), isNull(pages.deletedAt))),
+          db
+            .select({ name: userFlows.name })
+            .from(userFlows)
+            .where(and(eq(userFlows.projectId, projectId), isNull(userFlows.deletedAt))),
+          db
+            .select({ name: channels.name })
+            .from(channels)
+            .where(and(eq(channels.projectId, projectId), isNull(channels.deletedAt))),
+          db
+            .select({ name: offers.name })
+            .from(offers)
+            .where(and(eq(offers.projectId, projectId), isNull(offers.deletedAt))),
+        ]);
+
+      const segIds = segRows.map((s) => s.id);
+      const stageCount = segIds.length
+        ? await db
+            .select({ segmentId: purchaseStages.segmentId })
+            .from(purchaseStages)
+            .where(
+              and(
+                inArray(purchaseStages.segmentId, segIds),
+                isNull(purchaseStages.deletedAt)
+              )
+            )
+        : [];
+
+      const segmentsWithoutFunnel = segRows.filter(
+        (s) => !stageCount.some((st) => st.segmentId === s.id)
+      );
+
+      return {
+        counts: {
+          segments: segRows.length,
+          kpis: kpiRows.length,
+          pages: pageRows.length,
+          flows: flowRows.length,
+          channels: chRows.length,
+          offers: offerRows.length,
+        },
+        segmentsWithoutFunnel: segmentsWithoutFunnel.map((s) => s.name),
+        kpisWithoutActual: kpiRows.filter((k) => !k.actual).map((k) => k.name),
+        instruction:
+          "Wskaż luki (segmenty bez lejka, KPI bez wartości, brak kanałów/stron), sprzeczności i 3 najważniejsze rekomendacje podnoszące Health Score.",
+      };
+    },
+  });
+
+/** hub_compare_competitors — porównanie pozycjonowania z konkurencją. */
+export const compareCompetitorsTool = (projectId: string) =>
+  tool({
+    description:
+      "Porównuje naszą markę z konkurencją: pozycjonowanie na quadrancie + mocne/słabe strony konkurentów. Wywołaj gdy użytkownik prosi o porównanie z konkurencją.",
+    parameters: z.object({
+      competitorId: z.string().uuid().optional().describe("Ogranicz do jednego konkurenta"),
+    }),
+    execute: async ({ competitorId }) => {
+      const pos = await db
+        .select({
+          axisXLabel: brandPositioning.axisXLabel,
+          axisYLabel: brandPositioning.axisYLabel,
+          ourX: brandPositioning.ourX,
+          ourY: brandPositioning.ourY,
+          ourLabel: brandPositioning.ourLabel,
+          statementMd: brandPositioning.statementMd,
+        })
+        .from(brandPositioning)
+        .where(eq(brandPositioning.projectId, projectId))
+        .limit(1)
+        .then((r) => r[0]);
+
+      const compConds = [
+        eq(competitors.projectId, projectId),
+        isNull(competitors.deletedAt),
+      ];
+      if (competitorId) compConds.push(eq(competitors.id, competitorId));
+      const comp = await db
+        .select({
+          name: competitors.name,
+          type: competitors.type,
+          strengthsMd: competitors.strengthsMd,
+          weaknessesMd: competitors.weaknessesMd,
+          pricingMd: competitors.pricingMd,
+          quadrantX: competitors.quadrantX,
+          quadrantY: competitors.quadrantY,
+        })
+        .from(competitors)
+        .where(and(...compConds));
+
+      return {
+        positioning: pos ?? null,
+        competitors: comp,
+        instruction:
+          "Porównaj naszą pozycję z konkurentami na obu osiach quadrantu, wskaż lukę rynkową i przewagi, których możemy użyć.",
+      };
+    },
+  });
+
 // ─── Tool registry ────────────────────────────────────────────────────────────
 
 export type ChatToolOptions = {
@@ -511,6 +739,10 @@ export function buildChatTools(projectId: string, options: ChatToolOptions): Too
     list_decisions: listStrategicDecisionsTool(projectId) as ToolSet[string],
     list_campaigns: listCampaignsTool(projectId) as ToolSet[string],
     list_geo_offers: listGeoAndOffersTool(projectId) as ToolSet[string],
+    suggest_segments: suggestSegmentsTool(projectId) as ToolSet[string],
+    suggest_funnel: suggestFunnelTool(projectId) as ToolSet[string],
+    analyze_strategy: analyzeStrategyTool(projectId) as ToolSet[string],
+    compare_competitors: compareCompetitorsTool(projectId) as ToolSet[string],
   };
 
   if (options.webSearch) {

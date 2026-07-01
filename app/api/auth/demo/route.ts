@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { db } from "@/db";
+import { adminUsers } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { verifyPassword, signToken } from "@/lib/auth";
 
 /**
@@ -18,7 +20,11 @@ export async function POST() {
     );
   }
 
-  const admin = await prisma.adminUser.findUnique({ where: { email: demoEmail } });
+  const [admin] = await db
+    .select()
+    .from(adminUsers)
+    .where(eq(adminUsers.email, demoEmail))
+    .limit(1);
 
   if (!admin || !(await verifyPassword(demoPassword, admin.passwordHash))) {
     return NextResponse.json(

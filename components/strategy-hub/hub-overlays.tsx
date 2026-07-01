@@ -21,6 +21,11 @@ import {
   Sparkles,
   LayoutDashboard,
   Clock,
+  Stethoscope,
+  MessageSquare,
+  Network,
+  FileDown,
+  FileType,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -51,7 +56,13 @@ import {
   useProjectIdFromPath,
 } from "@/components/strategy-hub/project-context";
 import { useHubHotkeys } from "@/components/strategy-hub/use-hotkeys";
+import { useUndoRedo } from "@/components/strategy-hub/undo-redo";
 import { CompareView } from "@/components/strategy-hub/compare-view";
+import {
+  ContextualSuggestions,
+  StrategyAnalyses,
+} from "@/components/strategy-hub/ai-contextual-suggestions";
+import { cn } from "@/lib/utils";
 
 const ChatPanel = dynamic(
   () =>
@@ -72,7 +83,8 @@ const ChatPanel = dynamic(
 
 interface OverlayApi {
   openPalette: () => void;
-  openSidekick: () => void;
+  /** Otwiera AI Sidekick; opcjonalny `prompt` zostaje wysłany do czatu. */
+  openSidekick: (prompt?: string) => void;
 }
 
 const OverlayContext = React.createContext<OverlayApi | null>(null);
@@ -148,6 +160,31 @@ function CommandPalette({
     router.push(href);
   };
 
+  const quickExport = async (type: "docx" | "md") => {
+    if (!projectId) return;
+    onOpenChange(false);
+    try {
+      const res = await fetch(`/api/strategy-hub/projects/${projectId}/exports`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const filename = match?.[1] ?? `eksport.${type}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // best-effort — pełny panel z historią jest na /measurement/exports
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -197,6 +234,27 @@ function CommandPalette({
                       ⌘J
                     </kbd>
                   </CommandItem>
+                  <CommandItem
+                    value="graf relacji projektu network"
+                    onSelect={() => go(`/strategy-hub/projects/${projectId}/relations`)}
+                  >
+                    <Network />
+                    <span>Graf relacji projektu</span>
+                  </CommandItem>
+                  <CommandItem
+                    value="eksportuj strategie docx word"
+                    onSelect={() => void quickExport("docx")}
+                  >
+                    <FileType />
+                    <span>Eksportuj strategię jako DOCX</span>
+                  </CommandItem>
+                  <CommandItem
+                    value="eksportuj strategie markdown md"
+                    onSelect={() => void quickExport("md")}
+                  >
+                    <FileDown />
+                    <span>Eksportuj strategię jako Markdown</span>
+                  </CommandItem>
                 </CommandGroup>
               </>
             )}
@@ -234,6 +292,7 @@ function CommandPalette({
               >
                 <Settings />
                 <span>Ustawienia</span>
+                <kbd className="ml-auto text-[10px] text-muted-foreground">⌘,</kbd>
               </CommandItem>
             </CommandGroup>
 
@@ -266,14 +325,56 @@ function CommandPalette({
 function AiSidekick({
   open,
   onOpenChange,
+  externalSeed,
+  forceTab,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  externalSeed?: { text: string; nonce: number };
+  forceTab?: { tab: "suggestions" | "chat" | "analyses"; nonce: number };
 }) {
   const project = useProject();
   const projectIdFromPath = useProjectIdFromPath();
   const projectId = project?.id ?? projectIdFromPath;
   const projectName = project?.name ?? "Projekt";
+
+  const [tab, setTab] = React.useState<"suggestions" | "chat" | "analyses">(
+    "suggestions"
+  );
+  const [seed, setSeed] = React.useState<{
+    text: string;
+    send: boolean;
+    nonce: number;
+  }>({ text: "", send: false, nonce: 0 });
+
+  const runPrompt = React.useCallback((prompt: string) => {
+    setSeed((prev) => ({ text: prompt, send: true, nonce: prev.nonce + 1 }));
+    setTab("chat");
+  }, []);
+
+  // Prompt przekazany z zewnątrz (np. przycisk „Zaproponuj dowód").
+  const lastExternalNonce = React.useRef(0);
+  React.useEffect(() => {
+    if (!externalSeed || externalSeed.nonce === 0) return;
+    if (externalSeed.nonce === lastExternalNonce.current) return;
+    lastExternalNonce.current = externalSeed.nonce;
+    runPrompt(externalSeed.text);
+  }, [externalSeed, runPrompt]);
+
+  // Wymuszona zakładka (np. ⌘/ → zawsze "Sugestie", w odróżnieniu od ⌘J).
+  const lastForceTabNonce = React.useRef(0);
+  React.useEffect(() => {
+    if (!forceTab || forceTab.nonce === 0) return;
+    if (forceTab.nonce === lastForceTabNonce.current) return;
+    lastForceTabNonce.current = forceTab.nonce;
+    setTab(forceTab.tab);
+  }, [forceTab]);
+
+  const TABS: { id: typeof tab; label: string; icon: LucideIcon }[] = [
+    { id: "suggestions", label: "Sugestie", icon: Sparkles },
+    { id: "chat", label: "Chat", icon: MessageSquare },
+    { id: "analyses", label: "Analizy", icon: Stethoscope },
+  ];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -286,18 +387,73 @@ function AiSidekick({
           <SheetTitle>AI Sidekick</SheetTitle>
           <SheetDescription>Asystent AI projektu</SheetDescription>
         </SheetHeader>
-        <div className="h-full flex flex-col">
-          {projectId ? (
-            <ChatPanel projectId={projectId} projectName={projectName} />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center gap-2 p-8 text-center">
-              <Sparkles className="size-6 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">
-                Otwórz projekt, aby skorzystać z asystenta AI.
-              </p>
+        {projectId ? (
+          <div className="flex h-full flex-col">
+            {/* Pasek zakładek */}
+            <div className="flex shrink-0 items-center gap-1 border-b border-border/60 px-2 py-1.5">
+              {TABS.map((t) => {
+                const Icon = t.icon;
+                const active = tab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTab(t.id)}
+                    className={cn(
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                      active
+                        ? "bg-brand/10 text-brand"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    aria-pressed={active}
+                  >
+                    <Icon className="size-3.5" />
+                    {t.label}
+                  </button>
+                );
+              })}
             </div>
-          )}
-        </div>
+
+            {/* Treść zakładek — ChatPanel zawsze zamontowany (trzyma stan rozmowy) */}
+            <div className="relative min-h-0 flex-1">
+              <div
+                className={cn(
+                  "absolute inset-0 overflow-y-auto",
+                  tab === "suggestions" ? "block" : "hidden"
+                )}
+              >
+                <ContextualSuggestions onRun={runPrompt} />
+              </div>
+              <div
+                className={cn(
+                  "absolute inset-0 overflow-y-auto",
+                  tab === "analyses" ? "block" : "hidden"
+                )}
+              >
+                <StrategyAnalyses onRun={runPrompt} />
+              </div>
+              <div
+                className={cn(
+                  "absolute inset-0",
+                  tab === "chat" ? "block" : "hidden"
+                )}
+              >
+                <ChatPanel
+                  projectId={projectId}
+                  projectName={projectName}
+                  seed={seed}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+            <Sparkles className="size-6 text-muted-foreground/40" />
+            <p className="text-sm text-muted-foreground">
+              Otwórz projekt, aby skorzystać z asystenta AI.
+            </p>
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   );
@@ -306,9 +462,26 @@ function AiSidekick({
 export function HubOverlays({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const projectIdFromPath = useProjectIdFromPath();
+  const undoRedo = useUndoRedo();
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [sidekickOpen, setSidekickOpen] = React.useState(false);
   const [compareOpen, setCompareOpen] = React.useState(false);
+  const [sidekickSeed, setSidekickSeed] = React.useState<{
+    text: string;
+    nonce: number;
+  }>({ text: "", nonce: 0 });
+  const [sidekickForceTab, setSidekickForceTab] = React.useState<{
+    tab: "suggestions" | "chat" | "analyses";
+    nonce: number;
+  }>({ tab: "suggestions", nonce: 0 });
+
+  const goModule = React.useCallback(
+    (segment: string) => {
+      if (!projectIdFromPath) return;
+      router.push(`/strategy-hub/projects/${projectIdFromPath}/${segment}`);
+    },
+    [projectIdFromPath, router]
+  );
 
   useHubHotkeys(
     React.useMemo(
@@ -323,15 +496,31 @@ export function HubOverlays({ children }: { children: React.ReactNode }) {
           }
         },
         onCompare: () => setCompareOpen((v) => !v),
+        onSettings: () => router.push("/strategy-hub/settings"),
+        onQuickAi: () => {
+          setSidekickForceTab((s) => ({ tab: "suggestions", nonce: s.nonce + 1 }));
+          setSidekickOpen(true);
+        },
+        onUndo: () => undoRedo.undo(),
+        onRedo: () => undoRedo.redo(),
+        onGoSegments: () => goModule("segments"),
+        onGoLejek: () => goModule("funnel"),
+        onGoWebsite: () => goModule("website"),
+        onGoChannels: () => goModule("funnel"),
       }),
-      [projectIdFromPath, router]
+      [projectIdFromPath, router, undoRedo, goModule]
     )
   );
 
   const api = React.useMemo<OverlayApi>(
     () => ({
       openPalette: () => setPaletteOpen(true),
-      openSidekick: () => setSidekickOpen(true),
+      openSidekick: (prompt?: string) => {
+        if (prompt) {
+          setSidekickSeed((s) => ({ text: prompt, nonce: s.nonce + 1 }));
+        }
+        setSidekickOpen(true);
+      },
     }),
     []
   );
@@ -344,7 +533,12 @@ export function HubOverlays({ children }: { children: React.ReactNode }) {
         onOpenChange={setPaletteOpen}
         onOpenSidekick={() => setSidekickOpen(true)}
       />
-      <AiSidekick open={sidekickOpen} onOpenChange={setSidekickOpen} />
+      <AiSidekick
+        open={sidekickOpen}
+        onOpenChange={setSidekickOpen}
+        externalSeed={sidekickSeed}
+        forceTab={sidekickForceTab}
+      />
       <CompareView
         open={compareOpen}
         onClose={() => setCompareOpen(false)}

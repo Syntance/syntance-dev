@@ -30,6 +30,8 @@ export interface FunnelElementData {
   kpiIds: string[];
   campaignIds: string[];
   geoAssetIds: string[];
+  /** Faza 11 (M3) — zdarzenia analityczne z @syntance/analytics-events emitowane przez ten element. */
+  eventKeys: string[];
 }
 
 interface FunnelElementEditorProps {
@@ -92,11 +94,13 @@ export function FunnelElementEditor({
     kpiIds: [],
     campaignIds: [],
     geoAssetIds: [],
+    eventKeys: [],
     ...initial,
   }));
 
   // Reset when initial changes (open new element)
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset formularza przy zmianie edytowanego elementu
     setData({
       name: "",
       format: "Post",
@@ -111,6 +115,7 @@ export function FunnelElementEditor({
       kpiIds: [],
       campaignIds: [],
       geoAssetIds: [],
+      eventKeys: [],
       ...initial,
     });
   }, [initial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -322,6 +327,17 @@ export function FunnelElementEditor({
               onChange={(v) => patch("geoAssetIds", (v as string[]) ?? [])}
               label="GEO/AEO — „cytowalny w AI przez” (multi)"
               placeholder="+ Powiąż asset GEO"
+              className="w-full"
+            />
+
+            <RelationPicker
+              projectId={projectId}
+              entityType="analytics_event"
+              cardinality="multi"
+              value={data.eventKeys}
+              onChange={(v) => patch("eventKeys", (v as string[]) ?? [])}
+              label="Zdarzenia analityczne — „mierzony przez” (multi)"
+              placeholder="+ Powiąż zdarzenie"
               className="w-full"
             />
           </Section>

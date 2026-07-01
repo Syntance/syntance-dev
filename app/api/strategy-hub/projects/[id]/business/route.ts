@@ -6,7 +6,7 @@ import { z } from "zod";
 import { sendStrategyUpdatedEmail } from "@/lib/email";
 import { getStrategyHubAccess } from "@/lib/strategy-hub/context";
 import { requireProjectAccess } from "@/lib/strategy-hub/api-helpers";
-import { getProjectClients } from "@/sanity/queries";
+import { getProjectClients } from "@/lib/client-portal/queries";
 
 const patchSchema = z.object({
   goalsMd: z.string().optional(),

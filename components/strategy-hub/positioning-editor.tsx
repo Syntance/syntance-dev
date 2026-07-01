@@ -8,10 +8,21 @@ import {
   useState,
   useTransition,
   type PointerEvent,
+  type WheelEvent,
 } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Loader2, Check, GripVertical } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Loader2,
+  Check,
+  GripVertical,
+  ZoomIn,
+  ZoomOut,
+  Maximize,
+  Download,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,9 +61,27 @@ const SVG_SIZE = 320;
 const PADDING = 24;
 const CHART = SVG_SIZE - PADDING * 2;
 
+/** Siatka 5x5 → punkty snapowania: -1, -0.5, 0, 0.5, 1. */
+const SNAP = 0.5;
+/** Linie siatki w jednostkach znormalizowanych. */
+const GRID_LINES = [-0.5, 0.5];
+
 function clamp(v: number, min = -1, max = 1) {
   return Math.max(min, Math.min(max, v));
 }
+
+/** Przyciąga współrzędną do najbliższego węzła siatki 5x5. */
+function snapCoord(v: number) {
+  return clamp(Math.round(v / SNAP) * SNAP);
+}
+
+interface ViewBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+const FULL_VIEW: ViewBox = { x: 0, y: 0, w: SVG_SIZE, h: SVG_SIZE };
 
 /** Znormalizowane (-1..1) → pixel w SVG. */
 function toPx(v: number, axis: "x" | "y") {
@@ -85,6 +114,14 @@ export function PositioningEditor({
   const dragRef = useRef<{ kind: "our" } | { kind: "comp"; idx: number } | null>(
     null
   );
+  const [view, setView] = useState<ViewBox>(FULL_VIEW);
+  const panRef = useRef<{
+    sx: number;
+    sy: number;
+    vx: number;
+    vy: number;
+    moved: boolean;
+  } | null>(null);
 
   const flashSaved = useCallback(() => {
     setSavedTick(true);
@@ -111,61 +148,173 @@ export function PositioningEditor({
     };
   }, [onSave, flashSaved]);
 
-  // ── Pointer → znormalizowane (-1..1) ──────────────────────────────
-  const pointerToCoord = useCallback((e: PointerEvent<SVGSVGElement>) => {
-    const svg = svgRef.current;
-    if (!svg) return null;
-    const rect = svg.getBoundingClientRect();
-    const px = ((e.clientX - rect.left) / rect.width) * SVG_SIZE;
-    const py = ((e.clientY - rect.top) / rect.height) * SVG_SIZE;
-    const half = CHART / 2;
-    const x = clamp((px - PADDING - half) / half);
-    const y = clamp(-(py - PADDING - half) / half);
-    return { x, y };
-  }, []);
+  // ── Pointer → znormalizowane (-1..1), z uwzględnieniem viewBox ─────
+  const pointerToCoord = useCallback(
+    (e: PointerEvent<SVGSVGElement>) => {
+      const svg = svgRef.current;
+      if (!svg) return null;
+      const rect = svg.getBoundingClientRect();
+      const px = view.x + ((e.clientX - rect.left) / rect.width) * view.w;
+      const py = view.y + ((e.clientY - rect.top) / rect.height) * view.h;
+      const half = CHART / 2;
+      const x = clamp((px - PADDING - half) / half);
+      const y = clamp(-(py - PADDING - half) / half);
+      return { x, y };
+    },
+    [view]
+  );
 
-  // ── Click na puste pole = ustaw nas, jeśli jeszcze brak punktu ────
-  const handleSvgClick = (e: PointerEvent<SVGSVGElement>) => {
+  // ── Tło: klik = ustaw nas (gdy brak punktu); drag = pan ───────────
+  const onBackgroundPointerDown = (e: PointerEvent<SVGSVGElement>) => {
     if (dragRef.current) return;
-    const coord = pointerToCoord(e);
-    if (!coord) return;
-    if (!our) {
-      setOur(coord);
-      debouncedSave({ ourX: coord.x, ourY: coord.y }, 0);
-    }
+    panRef.current = {
+      sx: e.clientX,
+      sy: e.clientY,
+      vx: view.x,
+      vy: view.y,
+      moved: false,
+    };
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
   };
 
-  // ── Drag ──────────────────────────────────────────────────────────
+  // ── Drag (markery + pan tła) ───────────────────────────────────────
   const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
-    if (!dragRef.current) return;
-    const coord = pointerToCoord(e);
-    if (!coord) return;
-    if (dragRef.current.kind === "our") {
-      setOur(coord);
-    } else {
-      const idx = dragRef.current.idx;
-      setComps((prev) =>
-        prev.map((c, i) => (i === idx ? { ...c, x: coord.x, y: coord.y } : c))
-      );
+    if (dragRef.current) {
+      const coord = pointerToCoord(e);
+      if (!coord) return;
+      if (dragRef.current.kind === "our") {
+        setOur(coord);
+      } else {
+        const idx = dragRef.current.idx;
+        setComps((prev) =>
+          prev.map((c, i) => (i === idx ? { ...c, x: coord.x, y: coord.y } : c))
+        );
+      }
+      return;
+    }
+    const pan = panRef.current;
+    if (pan && svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect();
+      const dx = ((e.clientX - pan.sx) / rect.width) * view.w;
+      const dy = ((e.clientY - pan.sy) / rect.height) * view.h;
+      if (Math.abs(e.clientX - pan.sx) + Math.abs(e.clientY - pan.sy) > 3) {
+        pan.moved = true;
+      }
+      if (view.w < SVG_SIZE) {
+        setView((v) => ({ ...v, x: pan.vx - dx, y: pan.vy - dy }));
+      }
     }
   };
 
   const onPointerUp = (e: PointerEvent<SVGSVGElement>) => {
     const drag = dragRef.current;
-    if (!drag) return;
-    const coord = pointerToCoord(e);
-    if (coord && drag.kind === "our") {
-      debouncedSave({ ourX: coord.x, ourY: coord.y }, 0);
-    } else if (coord && drag.kind === "comp") {
-      const idx = drag.idx;
-      const updated = comps.map((c, i) =>
-        i === idx ? { ...c, x: coord.x, y: coord.y } : c
-      );
-      debouncedSave({ competitorsOnQuadrant: updated }, 0);
+    if (drag) {
+      const coord = pointerToCoord(e);
+      if (coord && drag.kind === "our") {
+        const snapped = { x: snapCoord(coord.x), y: snapCoord(coord.y) };
+        setOur(snapped);
+        debouncedSave({ ourX: snapped.x, ourY: snapped.y }, 0);
+      } else if (coord && drag.kind === "comp") {
+        const idx = drag.idx;
+        const updated = comps.map((c, i) =>
+          i === idx
+            ? { ...c, x: snapCoord(coord.x), y: snapCoord(coord.y) }
+            : c
+        );
+        setComps(updated);
+        debouncedSave({ competitorsOnQuadrant: updated }, 0);
+      }
+      dragRef.current = null;
+      (e.target as Element).releasePointerCapture?.(e.pointerId);
+      return;
     }
-    dragRef.current = null;
-    (e.target as Element).releasePointerCapture?.(e.pointerId);
+
+    const pan = panRef.current;
+    panRef.current = null;
+    if (pan && !pan.moved && !our) {
+      const coord = pointerToCoord(e);
+      if (coord) {
+        const snapped = { x: snapCoord(coord.x), y: snapCoord(coord.y) };
+        setOur(snapped);
+        debouncedSave({ ourX: snapped.x, ourY: snapped.y }, 0);
+      }
+    }
   };
+
+  // ── Zoom (wheel + przyciski) ───────────────────────────────────────
+  const zoomBy = useCallback((factor: number) => {
+    setView((v) => {
+      const nextW = clamp(v.w * factor, SVG_SIZE / 4, SVG_SIZE);
+      const nextH = nextW;
+      const cx = v.x + v.w / 2;
+      const cy = v.y + v.h / 2;
+      let nx = cx - nextW / 2;
+      let ny = cy - nextH / 2;
+      nx = Math.max(0, Math.min(nx, SVG_SIZE - nextW));
+      ny = Math.max(0, Math.min(ny, SVG_SIZE - nextH));
+      return { x: nx, y: ny, w: nextW, h: nextH };
+    });
+  }, []);
+
+  const resetView = useCallback(() => setView(FULL_VIEW), []);
+
+  const onWheel = (e: WheelEvent<SVGSVGElement>) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    zoomBy(e.deltaY > 0 ? 1.1 : 0.9);
+  };
+
+  // ── Eksport SVG / PNG ──────────────────────────────────────────────
+  const exportSvg = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("viewBox", `0 0 ${SVG_SIZE} ${SVG_SIZE}`);
+    clone.setAttribute("width", String(SVG_SIZE));
+    clone.setAttribute("height", String(SVG_SIZE));
+    const data = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([data], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "pozycjonowanie.svg";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const exportPng = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("viewBox", `0 0 ${SVG_SIZE} ${SVG_SIZE}`);
+    const data = new XMLSerializer().serializeToString(clone);
+    const img = new Image();
+    const svgBlob = new Blob([data], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+    img.onload = () => {
+      const scale = 3;
+      const canvas = document.createElement("canvas");
+      canvas.width = SVG_SIZE * scale;
+      canvas.height = SVG_SIZE * scale;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#0a0a0a";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          const pngUrl = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = pngUrl;
+          a.download = "pozycjonowanie.png";
+          a.click();
+          URL.revokeObjectURL(pngUrl);
+        }, "image/png");
+      }
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }, []);
 
   // ── Add competitor ────────────────────────────────────────────────
   const addCompetitor = () => {
@@ -230,6 +379,59 @@ export function PositioningEditor({
             Zapisano
           </span>
         )}
+        <div className="flex items-center gap-0.5 ml-2">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-6"
+            onClick={() => zoomBy(0.9)}
+            aria-label="Przybliż"
+          >
+            <ZoomIn className="size-3.5" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-6"
+            onClick={() => zoomBy(1.1)}
+            aria-label="Oddal"
+          >
+            <ZoomOut className="size-3.5" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-6"
+            onClick={resetView}
+            aria-label="Dopasuj widok"
+          >
+            <Maximize className="size-3.5" />
+          </Button>
+          <span className="w-px h-4 bg-border mx-1" />
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 gap-1 px-2 text-xs"
+            onClick={exportSvg}
+          >
+            <Download className="size-3" />
+            SVG
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 gap-1 px-2 text-xs"
+            onClick={exportPng}
+          >
+            <Download className="size-3" />
+            PNG
+          </Button>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-[1fr_300px] gap-4 p-4">
@@ -264,11 +466,15 @@ export function PositioningEditor({
             </span>
             <svg
               ref={svgRef}
-              viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`}
-              className="w-full h-full touch-none cursor-crosshair"
+              viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
+              className={cn(
+                "w-full h-full touch-none",
+                view.w < SVG_SIZE ? "cursor-grab" : "cursor-crosshair"
+              )}
+              onPointerDown={onBackgroundPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
-              onClick={handleSvgClick}
+              onWheel={onWheel}
             >
               <rect
                 x={PADDING}
@@ -280,6 +486,29 @@ export function PositioningEditor({
                 strokeOpacity={0.15}
                 rx={4}
               />
+              {/* Siatka 5x5 */}
+              {GRID_LINES.map((g) => (
+                <line
+                  key={`gx-${g}`}
+                  x1={toPx(g, "x")}
+                  y1={PADDING}
+                  x2={toPx(g, "x")}
+                  y2={SVG_SIZE - PADDING}
+                  stroke="currentColor"
+                  strokeOpacity={0.08}
+                />
+              ))}
+              {GRID_LINES.map((g) => (
+                <line
+                  key={`gy-${g}`}
+                  x1={PADDING}
+                  y1={toPx(g, "y")}
+                  x2={SVG_SIZE - PADDING}
+                  y2={toPx(g, "y")}
+                  stroke="currentColor"
+                  strokeOpacity={0.08}
+                />
+              ))}
               <line
                 x1={toPx(0, "x")}
                 y1={PADDING}
@@ -303,6 +532,7 @@ export function PositioningEditor({
                 <g
                   key={`${c.id ?? idx}-${c.label}`}
                   onPointerDown={(e) => {
+                    e.stopPropagation();
                     dragRef.current = { kind: "comp", idx };
                     (e.target as Element).setPointerCapture?.(e.pointerId);
                   }}
@@ -332,6 +562,7 @@ export function PositioningEditor({
               {our && (
                 <g
                   onPointerDown={(e) => {
+                    e.stopPropagation();
                     dragRef.current = { kind: "our" };
                     (e.target as Element).setPointerCapture?.(e.pointerId);
                   }}

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { randomUUID } from "crypto";
+import { db } from "@/db";
+import { adminUsers } from "@/db/schema";
 import { hashPassword } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -19,7 +21,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existingAdmin = await prisma.adminUser.findFirst();
+  const [existingAdmin] = await db.select({ id: adminUsers.id }).from(adminUsers).limit(1);
   if (existingAdmin) {
     return NextResponse.json(
       { error: "Admin już istnieje" },
@@ -35,12 +37,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const admin = await prisma.adminUser.create({
-    data: {
-      email,
-      passwordHash: await hashPassword(password),
-    },
-  });
+  const [admin] = await db
+    .insert(adminUsers)
+    .values({ id: randomUUID(), email, passwordHash: await hashPassword(password) })
+    .returning();
 
   return NextResponse.json(
     { success: true, id: admin.id, email: admin.email },

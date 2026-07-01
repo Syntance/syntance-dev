@@ -14,6 +14,7 @@ import {
   offers,
 } from "@/db/schema";
 import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import { EVENT_REGISTRY, EVENT_CATEGORY_LABELS } from "@/packages/analytics-events/src";
 
 interface Result {
   id: string;
@@ -41,6 +42,8 @@ export async function GET(
   const type = searchParams.get("type") ?? "";
   const q = (searchParams.get("q") ?? "").trim();
   const segmentId = searchParams.get("segmentId") ?? undefined;
+  const stageId = searchParams.get("stageId") ?? undefined;
+  const phase = searchParams.get("phase") ?? undefined;
   const like = q ? `%${q}%` : "%";
 
   let results: Result[] = [];
@@ -125,6 +128,7 @@ export async function GET(
         ilike(purchaseStages.name, like),
       ];
       if (segmentId) filters.push(eq(purchaseStages.segmentId, segmentId));
+      if (phase) filters.push(eq(purchaseStages.phase, phase));
       results = await db
         .select({
           id: purchaseStages.id,
@@ -145,6 +149,7 @@ export async function GET(
         ilike(funnelElements.name, like),
       ];
       if (segmentId) filters.push(eq(funnelElements.segmentId, segmentId));
+      if (stageId) filters.push(eq(funnelElements.stageId, stageId));
       results = await db
         .select({
           id: funnelElements.id,
@@ -188,6 +193,21 @@ export async function GET(
           )
         )
         .limit(LIMIT);
+      break;
+
+    case "analytics_event":
+      results = EVENT_REGISTRY.filter(
+        (e) =>
+          !q ||
+          e.label.toLowerCase().includes(q.toLowerCase()) ||
+          e.key.toLowerCase().includes(q.toLowerCase())
+      )
+        .slice(0, LIMIT)
+        .map((e) => ({
+          id: e.key,
+          label: e.label,
+          meta: `${EVENT_CATEGORY_LABELS[e.category]}${e.isConversion ? " · konwersja" : ""}`,
+        }));
       break;
 
     case "offer":

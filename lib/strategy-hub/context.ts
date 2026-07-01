@@ -1,16 +1,38 @@
 import { db } from "@/db";
-import { workspaces, projects } from "@/db/schema";
+import { workspaces, projects, adminUsers } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { getAdminSession, getClientSession } from "@/lib/auth";
-import { getProjectsForUser } from "@/sanity/queries";
+import { getProjectsForUser } from "@/lib/client-portal/queries";
 import { redirect } from "next/navigation";
 
 /**
- * Zwraca workspace należący do danego admina (wg email).
- * Jeśli nie istnieje — tworzy nowy, pusty.
+ * Zwraca workspace danego admina.
+ *
+ * Faza 17 (Role SaaS, multi-seat): jeśli AdminUser ma już przypisany
+ * `workspace_id` (zaproszony member albo wcześniej zbackfillowany owner),
+ * używamy GO — to pozwala wielu adminom współdzielić jeden workspace.
+ * W przeciwnym razie: dotychczasowy fallback po `workspaces.owner_email`
+ * (jedno konto = jeden workspace), z leniwym backfillem `AdminUser.workspace_id`,
+ * żeby kolejne wywołania nie musiały już schodzić do tej gałęzi.
  */
 export async function getOrCreateWorkspaceForAdmin(email: string) {
   const normalized = email.toLowerCase().trim();
+
+  const [adminRow] = await db
+    .select()
+    .from(adminUsers)
+    .where(eq(adminUsers.email, normalized))
+    .limit(1);
+
+  if (adminRow?.workspaceId) {
+    const [ws] = await db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.id, adminRow.workspaceId))
+      .limit(1);
+    if (ws) return ws;
+    // workspace_id wskazuje na usunięty workspace — spadamy do fallbacku niżej.
+  }
 
   const existing = await db
     .select()
@@ -18,18 +40,41 @@ export async function getOrCreateWorkspaceForAdmin(email: string) {
     .where(eq(workspaces.ownerEmail, normalized))
     .limit(1);
 
-  if (existing[0]) return existing[0];
+  const ws =
+    existing[0] ??
+    (
+      await db
+        .insert(workspaces)
+        .values({
+          name: normalized.split("@")[0] ?? "Workspace",
+          ownerEmail: normalized,
+          ownerId: "00000000-0000-0000-0000-000000000001",
+        })
+        .returning()
+    )[0];
 
-  const [ws] = await db
-    .insert(workspaces)
-    .values({
-      name: normalized.split("@")[0] ?? "Workspace",
-      ownerEmail: normalized,
-      ownerId: "00000000-0000-0000-0000-000000000001",
-    })
-    .returning();
+  if (adminRow && !adminRow.workspaceId) {
+    await db
+      .update(adminUsers)
+      .set({ workspaceId: ws.id })
+      .where(eq(adminUsers.id, adminRow.id));
+  }
 
   return ws;
+}
+
+/**
+ * Rola admina w jego workspace ('owner' | 'member'). Domyślnie 'owner' —
+ * konta bez wiersza AdminUser (np. przyszłe SSO) traktujemy jako właścicieli.
+ */
+export async function getAdminRole(email: string): Promise<"owner" | "member"> {
+  const normalized = email.toLowerCase().trim();
+  const [row] = await db
+    .select({ role: adminUsers.role })
+    .from(adminUsers)
+    .where(eq(adminUsers.email, normalized))
+    .limit(1);
+  return row?.role === "member" ? "member" : "owner";
 }
 
 /**

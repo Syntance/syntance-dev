@@ -6,6 +6,7 @@ import { List, Map as MapIcon, Play, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ListView } from "./list-view";
 import { MapView } from "./map-view";
+import { TrackSwitcher } from "./track-switcher";
 import type { StrategyMapData } from "@/lib/strategy-hub/strategy-map-types";
 
 const InfluenceView = dynamic(
@@ -26,9 +27,16 @@ interface StrategyMapProps {
   projectId: string;
   data: StrategyMapData;
   mode: "editor" | "client";
+  /** Aktywna ścieżka strategii (z ?path=) — null = wszystkie. */
+  activePathId?: string | null;
 }
 
-export function StrategyMap({ projectId, data, mode }: StrategyMapProps) {
+export function StrategyMap({
+  projectId,
+  data,
+  mode,
+  activePathId = null,
+}: StrategyMapProps) {
   // Editor startuje na Liście, klient na Mapie (spec).
   const [view, setView] = useState<View>(mode === "client" ? "map" : "list");
   const [presentSignal, setPresentSignal] = useState(0);
@@ -42,19 +50,24 @@ export function StrategyMap({ projectId, data, mode }: StrategyMapProps) {
     <div className="space-y-4">
       {view !== "influence" && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex rounded-lg border border-border bg-card p-0.5">
-            <ToggleBtn
-              active={view === "list"}
-              onClick={() => setView("list")}
-              icon={<List className="size-3.5" />}
-              label="Lista"
-            />
-            <ToggleBtn
-              active={view === "map"}
-              onClick={() => setView("map")}
-              icon={<MapIcon className="size-3.5" />}
-              label="Mapa"
-            />
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-border bg-card p-0.5">
+              <ToggleBtn
+                active={view === "list"}
+                onClick={() => setView("list")}
+                icon={<List className="size-3.5" />}
+                label="Lista"
+              />
+              <ToggleBtn
+                active={view === "map"}
+                onClick={() => setView("map")}
+                icon={<MapIcon className="size-3.5" />}
+                label="Mapa"
+              />
+            </div>
+            {mode === "editor" && (
+              <TrackSwitcher projectId={projectId} activePathId={activePathId} />
+            )}
           </div>
 
           <button

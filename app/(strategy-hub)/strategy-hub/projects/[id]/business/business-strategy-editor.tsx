@@ -16,6 +16,7 @@ import {
   CompetitorsEditor,
   type CompetitorRow,
 } from "@/components/strategy-hub/competitors-editor";
+import { ObjectionsEditor } from "@/components/strategy-hub/objections-editor";
 import {
   listItemsPreview,
   parseStrategyListItems,
@@ -457,56 +458,9 @@ export function BusinessStrategyEditor({
     [problemsApi]
   );
 
-  // ── DB-backed CRUD: objections ────────────────────────────────────
-  const objectionsApi = `/api/strategy-hub/projects/${projectId}/objections`;
-
-  const addObjection = useCallback(
-    async (text: string): Promise<CalloutItem> => {
-      const res = await fetch(objectionsApi, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ objectionMd: text, priority: 2 }),
-      });
-      if (!res.ok) throw new Error("Failed to create objection");
-      const { item } = (await res.json()) as { item: ObjectionRow };
-      const callout = objectionToCallout(item);
-      setObjectionItems((prev) => [...prev, callout]);
-      return callout;
-    },
-    [objectionsApi]
-  );
-
-  const updateObjection = useCallback(
-    async (
-      id: string,
-      patch: Partial<Pick<CalloutItem, "text" | "note" | "weight">>
-    ) => {
-      const dbPatch: Record<string, unknown> = {};
-      if (patch.text !== undefined) dbPatch.objectionMd = patch.text;
-      if (patch.note !== undefined) dbPatch.responseMd = patch.note || null;
-      if (patch.weight !== undefined) dbPatch.priority = patch.weight;
-
-      setObjectionItems((prev) =>
-        prev.map((o) => (o.id === id ? { ...o, ...patch } : o))
-      );
-      const res = await fetch(`${objectionsApi}/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dbPatch),
-      });
-      if (!res.ok) throw new Error("Failed to update objection");
-    },
-    [objectionsApi]
-  );
-
-  const removeObjection = useCallback(
-    async (id: string) => {
-      setObjectionItems((prev) => prev.filter((o) => o.id !== id));
-      const res = await fetch(`${objectionsApi}/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete objection");
-    },
-    [objectionsApi]
-  );
+  // ── Objekcje: pełna edycja w dedykowanym ObjectionsEditor ─────────────
+  // (CRUD + pola response/proof/segment/stage/status obsługuje komponent;
+  //  tutaj trzymamy tylko listę do wskaźnika kompletności sekcji)
 
   // ── UVP (singleton) ───────────────────────────────────────────────
   const uvpApi = `/api/strategy-hub/projects/${projectId}/uvp`;
@@ -783,13 +737,19 @@ export function BusinessStrategyEditor({
                   emptyHint={activeSection.emptyHint}
                 />
               ) : (
-                <EntityCalloutList
-                  items={objectionItems}
-                  onAdd={addObjection}
-                  onUpdate={updateObjection}
-                  onRemove={removeObjection}
-                  placeholder={activeSection.placeholder}
-                  emptyHint={activeSection.emptyHint}
+                <ObjectionsEditor
+                  projectId={projectId}
+                  initial={objections}
+                  onItemsChange={(items) =>
+                    setObjectionItems(
+                      items.map((o) => ({
+                        id: o.id,
+                        text: o.objectionMd,
+                        note: "",
+                        weight: 2 as StrategyListWeight,
+                      }))
+                    )
+                  }
                 />
               )
             ) : activeSection.editor === "uvp" ? (

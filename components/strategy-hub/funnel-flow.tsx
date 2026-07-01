@@ -17,6 +17,7 @@ export interface ActivityRow {
   id: string;
   channelId: string;
   channelName?: string;
+  segmentId?: string | null;
   stage?: string | null;
   weeklyCount?: number | null;
   monthlyBudget?: number | null;

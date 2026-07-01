@@ -134,6 +134,8 @@ const kpiSchema = z.object({
   actual: z.string().optional(),
   unit: z.string().optional(),
   category: z.string().optional(),
+  /** Klucz zdarzenia z @syntance/analytics-events — reguła mierzalności (Faza 11, M3). */
+  eventKey: z.string().max(100).optional().nullable(),
 });
 
 export async function upsertKpi(
@@ -143,6 +145,7 @@ export async function upsertKpi(
   const insertData = {
     ...parsed,
     segmentId: parsed.segmentId || null,
+    eventKey: parsed.eventKey || null,
   };
   if (data.id) {
     await db.update(kpis).set(insertData).where(eq(kpis.id, data.id));

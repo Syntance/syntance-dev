@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, ArrowRight, Globe, Calendar } from "lucide-react";
+import { Plus, ArrowRight, Globe, Calendar, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { db } from "@/db";
@@ -145,14 +145,23 @@ function EmptyState() {
       </div>
       <h3 className="font-medium text-sm mb-1">Brak projektów</h3>
       <p className="text-xs text-muted-foreground mb-5 max-w-xs">
-        Utwórz pierwszy projekt i zacznij budować strategię dla swojego klienta.
+        Utwórz pierwszy projekt i zacznij budować strategię dla swojego klienta —
+        albo zaimportuj istniejącą strukturę z Notion.
       </p>
-      <Button asChild size="sm" className="bg-brand hover:bg-brand/90 text-white gap-1.5">
-        <Link href="/strategy-hub/projects/new">
-          <Plus className="size-4" />
-          Nowy projekt
-        </Link>
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button asChild size="sm" className="bg-brand hover:bg-brand/90 text-white gap-1.5">
+          <Link href="/strategy-hub/projects/new">
+            <Plus className="size-4" />
+            Nowy projekt
+          </Link>
+        </Button>
+        <Button asChild size="sm" variant="outline" className="gap-1.5">
+          <Link href="/strategy-hub/sync">
+            <RefreshCw className="size-4" />
+            Zaimportuj z Notion
+          </Link>
+        </Button>
+      </div>
     </div>
   );
 }

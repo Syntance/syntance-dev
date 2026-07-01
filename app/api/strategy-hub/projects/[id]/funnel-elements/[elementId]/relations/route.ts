@@ -7,17 +7,20 @@ import {
   funnelElementKpis,
   funnelElementCampaigns,
   funnelElementGeo,
+  funnelElementEvents,
   purchaseStages,
   segments,
 } from "@/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { isConversionEvent } from "@/packages/analytics-events/src";
 
 const schema = z.object({
   channelIds: z.array(z.string().uuid()).optional(),
   kpiIds: z.array(z.string().uuid()).optional(),
   campaignIds: z.array(z.string().uuid()).optional(),
   geoAssetIds: z.array(z.string().uuid()).optional(),
+  eventKeys: z.array(z.string().max(100)).optional(),
 });
 
 // GET current relations for an element
@@ -29,7 +32,7 @@ export async function GET(
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
 
-  const [channelRows, kpiRows, campaignRows, geoRows] = await Promise.all([
+  const [channelRows, kpiRows, campaignRows, geoRows, eventRows] = await Promise.all([
     db
       .select({ channelId: funnelElementChannels.channelId })
       .from(funnelElementChannels)
@@ -46,6 +49,10 @@ export async function GET(
       .select({ geoAssetId: funnelElementGeo.geoAssetId })
       .from(funnelElementGeo)
       .where(eq(funnelElementGeo.funnelElementId, elementId)),
+    db
+      .select({ eventKey: funnelElementEvents.eventKey })
+      .from(funnelElementEvents)
+      .where(eq(funnelElementEvents.funnelElementId, elementId)),
   ]);
 
   return NextResponse.json({
@@ -53,6 +60,7 @@ export async function GET(
     kpiIds: kpiRows.map((r) => r.kpiId),
     campaignIds: campaignRows.map((r) => r.campaignId),
     geoAssetIds: geoRows.map((r) => r.geoAssetId),
+    eventKeys: eventRows.map((r) => r.eventKey),
   });
 }
 
@@ -89,7 +97,7 @@ export async function PUT(
     return NextResponse.json({ error: "Element not found" }, { status: 404 });
   }
 
-  const { channelIds, kpiIds, campaignIds, geoAssetIds } = parsed.data;
+  const { channelIds, kpiIds, campaignIds, geoAssetIds, eventKeys } = parsed.data;
 
   await db.transaction(async (tx) => {
     if (channelIds !== undefined) {
@@ -137,6 +145,21 @@ export async function PUT(
           geoAssetIds.map((geoAssetId) => ({
             funnelElementId: elementId,
             geoAssetId,
+          }))
+        );
+      }
+    }
+
+    if (eventKeys !== undefined) {
+      await tx
+        .delete(funnelElementEvents)
+        .where(eq(funnelElementEvents.funnelElementId, elementId));
+      if (eventKeys.length > 0) {
+        await tx.insert(funnelElementEvents).values(
+          eventKeys.map((eventKey) => ({
+            funnelElementId: elementId,
+            eventKey,
+            isConversion: isConversionEvent(eventKey),
           }))
         );
       }

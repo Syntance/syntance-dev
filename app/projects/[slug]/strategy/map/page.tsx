@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { Map as MapIcon } from "lucide-react";
 import { getClientSession } from "@/lib/auth";
-import { getProjectBySlugForUser } from "@/sanity/queries";
+import { getProjectBySlugForUser } from "@/lib/client-portal/queries";
 import { db } from "@/db";
 import { projects as dbProjects } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";

@@ -5,6 +5,7 @@ import {
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
 import { getListEntity } from "@/lib/strategy-hub/entities/registry";
+import { trackChange, entityTypeFor } from "@/lib/strategy-hub/track-change";
 
 export async function PATCH(
   req: NextRequest,
@@ -23,6 +24,14 @@ export async function PATCH(
 
   const item = await list.update(id, itemId, parsed.data);
   if (!item) return notFound(list.label);
+
+  await trackChange({
+    projectId: id,
+    entityType: entityTypeFor(entity),
+    entityId: itemId,
+    patch: parsed.data as Record<string, unknown>,
+  });
+
   return NextResponse.json({ item });
 }
 

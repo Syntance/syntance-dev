@@ -85,6 +85,8 @@ export const MEASUREMENT_TABS: AreaTabDef[] = [
 export const INFO_TABS: AreaTabDef[] = [
   { slug: "access", label: "Dostępy i hosting" },
   { slug: "notes", label: "Notatki" },
+  { slug: "exports", label: "Eksporty" },
+  { slug: "agent", label: "Agent AI" },
 ];
 
 export const PROJECT_SETTINGS_TABS: AreaTabDef[] = [

@@ -8,6 +8,7 @@ import {
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
+import { trackChange } from "@/lib/strategy-hub/track-change";
 
 const STAGES = ["TOFU", "MOFU", "BOFU", "retention"] as const;
 const STATUSES = ["active", "resolved", "needs_proof"] as const;
@@ -46,6 +47,14 @@ export async function PATCH(
     .returning();
 
   if (!updated[0]) return notFound("Objection");
+
+  await trackChange({
+    projectId: id,
+    entityType: "objection",
+    entityId: itemId,
+    patch: data,
+  });
+
   return NextResponse.json({ item: updated[0] });
 }
 

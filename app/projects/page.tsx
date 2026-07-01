@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getClientSession } from "@/lib/auth";
-import { getProjectsForUser } from "@/sanity/queries";
+import { getProjectsForUser } from "@/lib/client-portal/queries";
 import { SyntanceLogo } from "@/components/logo";
 import { LogoutButton } from "@/components/logout-button";
 import { FolderOpen, ExternalLink } from "lucide-react";

@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Download, Loader2 } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { ProjectAlert } from "@/lib/strategy-hub/alerts";
+import type { ProjectHealth } from "@/lib/strategy-hub/health-score";
 
 interface ChangeRow {
   entityType: string;
@@ -22,6 +24,7 @@ interface Props {
 export function WeeklyReviewClient({ projectId, projectName }: Props) {
   const [changes, setChanges] = useState<ChangeRow[]>([]);
   const [alerts, setAlerts] = useState<ProjectAlert[]>([]);
+  const [health, setHealth] = useState<ProjectHealth | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,8 +35,11 @@ export function WeeklyReviewClient({ projectId, projectName }: Props) {
       fetch(`/api/strategy-hub/projects/${projectId}/alerts`).then((r) =>
         r.ok ? r.json() : { alerts: [] }
       ),
+      fetch(`/api/strategy-hub/projects/${projectId}/health`).then((r) =>
+        r.ok ? r.json() : null
+      ),
     ])
-      .then(([hist, al]) => {
+      .then(([hist, al, hlt]) => {
         const weekAgo = Date.now() - 7 * 86400000;
         setChanges(
           ((hist.items ?? []) as ChangeRow[]).filter(
@@ -41,6 +47,7 @@ export function WeeklyReviewClient({ projectId, projectName }: Props) {
           )
         );
         setAlerts((al.alerts ?? []) as ProjectAlert[]);
+        setHealth((hlt as ProjectHealth | null) ?? null);
       })
       .finally(() => setLoading(false));
   }, [projectId]);
@@ -67,6 +74,49 @@ export function WeeklyReviewClient({ projectId, projectName }: Props) {
           <Download className="size-3.5" /> Eksport PDF (druk)
         </Button>
       </div>
+
+      {health && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold flex items-center gap-2">
+            <Activity className="size-4 text-brand" />
+            Health score:{" "}
+            <span
+              className={cn(
+                health.score >= 70
+                  ? "text-success"
+                  : health.score >= 40
+                  ? "text-amber-500"
+                  : "text-destructive"
+              )}
+            >
+              {health.score}/100
+            </span>
+          </h2>
+          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {health.modules.map((m) => (
+              <Link
+                key={m.key}
+                href={m.href}
+                className="flex items-center justify-between gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs hover:border-brand/40"
+              >
+                <span className="truncate">{m.label}</span>
+                <span
+                  className={cn(
+                    "shrink-0 font-medium tabular-nums",
+                    m.score >= 70
+                      ? "text-success"
+                      : m.score >= 40
+                      ? "text-amber-500"
+                      : "text-destructive"
+                  )}
+                >
+                  {m.score}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">

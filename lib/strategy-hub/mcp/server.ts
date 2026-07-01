@@ -14,8 +14,18 @@ import {
   objections,
   pages,
   seoKeywords,
+  channels,
+  funnelElements,
+  funnelElementChannels,
+  buyerJourneyStages,
+  aiProposals,
 } from "@/db/schema";
-import { eq, isNull, and, asc } from "drizzle-orm";
+import { eq, isNull, and, asc, desc, inArray } from "drizzle-orm";
+import { EVENT_REGISTRY } from "@/packages/analytics-events/src";
+import { AGENT_MODES, runAgentMode } from "@/lib/strategy-hub/agent/run-agent";
+import { acceptProposal, rejectProposal } from "@/lib/strategy-hub/agent/accept-proposal";
+import { computeProjectHealth } from "@/lib/strategy-hub/health-score";
+import { getProjectAlerts } from "@/lib/strategy-hub/alerts";
 import {
   getListEntity,
   getSingletonEntity,
@@ -768,6 +778,244 @@ export function createStrategyHubMcpServer() {
       })
   );
 
+  // ── Narzędzia relacyjne (Faza 12, M3) ───────────────────────────────────────
+
+  server.registerTool(
+    "hub_list_analytics_events",
+    {
+      description:
+        "Zwraca pełny słownik zdarzeń analitycznych (@syntance/analytics-events) — klucze do przypisania w kpis.event_key i funnel_element_events.",
+      inputSchema: z.object({}),
+    },
+    async () => jsonText(EVENT_REGISTRY)
+  );
+
+  server.registerTool(
+    "hub_link_element_to_channel",
+    {
+      description:
+        "Dowiązuje kanał do elementu lejka (append, idempotentne — nie usuwa istniejących powiązań, w przeciwieństwie do PUT /relations w UI).",
+      inputSchema: z.object({
+        funnelElementId: z.string().uuid(),
+        channelId: z.string().uuid(),
+      }),
+    },
+    async ({ funnelElementId, channelId }) =>
+      safeRun(async () => {
+        const existing = await db
+          .select()
+          .from(funnelElementChannels)
+          .where(
+            and(
+              eq(funnelElementChannels.funnelElementId, funnelElementId),
+              eq(funnelElementChannels.channelId, channelId)
+            )
+          )
+          .limit(1);
+        if (existing.length === 0) {
+          await db.insert(funnelElementChannels).values({ funnelElementId, channelId });
+        }
+        return { ok: true };
+      })
+  );
+
+  server.registerTool(
+    "hub_promote_to_funnel",
+    {
+      description:
+        "Przekuwa etap mapy myśli klienta (buyer journey stage) na nowy element lejka we wskazanym etapie zakupu (purchase stage). Odpowiednik akcji „Przekuj na lejek” w UI.",
+      inputSchema: z.object({
+        buyerJourneyStageId: z.string().uuid(),
+        targetPurchaseStageId: z.string().uuid(),
+      }),
+    },
+    async ({ buyerJourneyStageId, targetPurchaseStageId }) =>
+      safeRun(async () => {
+        const [stage] = await db
+          .select()
+          .from(buyerJourneyStages)
+          .where(eq(buyerJourneyStages.id, buyerJourneyStageId))
+          .limit(1);
+        if (!stage) throw new Error("Buyer journey stage not found");
+        const inserted = await db
+          .insert(funnelElements)
+          .values({
+            stageId: targetPurchaseStageId,
+            segmentId: stage.segmentId,
+            name: stage.name,
+            contentMd: stage.ourActionMd,
+            position: 0,
+          })
+          .returning();
+        return inserted[0];
+      })
+  );
+
+  // ── Narzędzia AI-workflow (Faza 12, M3) — spinają się z Agentem AI (Faza 10) ─
+
+  server.registerTool(
+    "hub_suggest_relations",
+    {
+      description:
+        "Sugeruje relacje do ręcznego dowiązania (NIE zapisuje niczego — czysta podpowiedź). entityType: funnel_element (sugeruje kanały używane przez sąsiednie elementy tego samego etapu, jeszcze niepowiązane) | segment (sugeruje KPI projektu bez przypisanego segmentu).",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        entityType: z.enum(["funnel_element", "segment"]),
+        entityId: z.string().uuid(),
+      }),
+    },
+    async ({ projectId, entityType, entityId }) =>
+      safeRun(async () => {
+        if (entityType === "funnel_element") {
+          const [element] = await db
+            .select()
+            .from(funnelElements)
+            .where(eq(funnelElements.id, entityId))
+            .limit(1);
+          if (!element) throw new Error("Funnel element not found");
+
+          const linked = await db
+            .select({ channelId: funnelElementChannels.channelId })
+            .from(funnelElementChannels)
+            .where(eq(funnelElementChannels.funnelElementId, entityId));
+          const linkedIds = new Set(linked.map((l) => l.channelId));
+
+          const siblings = await db
+            .select({ id: funnelElements.id })
+            .from(funnelElements)
+            .where(
+              and(
+                eq(funnelElements.stageId, element.stageId),
+                isNull(funnelElements.deletedAt)
+              )
+            );
+          const siblingIds = siblings.map((s) => s.id).filter((id) => id !== entityId);
+          if (siblingIds.length === 0) return { suggestions: [] };
+
+          const usedChannels = await db
+            .select({ channelId: funnelElementChannels.channelId })
+            .from(funnelElementChannels)
+            .where(inArray(funnelElementChannels.funnelElementId, siblingIds));
+          const candidateIds = Array.from(
+            new Set(usedChannels.map((u) => u.channelId).filter((id) => !linkedIds.has(id)))
+          );
+          if (candidateIds.length === 0) return { suggestions: [] };
+
+          const rows = await db
+            .select({ id: channels.id, name: channels.name })
+            .from(channels)
+            .where(inArray(channels.id, candidateIds));
+          return {
+            suggestions: rows.map((r) => ({
+              type: "channel",
+              id: r.id,
+              label: r.name,
+              reason: "Używany przez inne elementy tego samego etapu lejka",
+            })),
+          };
+        }
+
+        const rows = await db
+          .select({ id: kpis.id, name: kpis.name })
+          .from(kpis)
+          .where(
+            and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt), isNull(kpis.segmentId))
+          )
+          .limit(10);
+        return {
+          suggestions: rows.map((r) => ({
+            type: "kpi",
+            id: r.id,
+            label: r.name,
+            reason: "KPI projektu bez przypisanego segmentu",
+          })),
+        };
+      })
+  );
+
+  server.registerTool(
+    "run_agent_mode",
+    {
+      description:
+        "Uruchamia jeden z 4 trybów Agenta AI (audit|research|improve|monitor). Tworzy propozycje w kolejce ai_proposals — TWARDA zasada zero-direct-write: to narzędzie NIGDY nie zapisuje bezpośrednio do encji strategicznych.",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        mode: z.enum(AGENT_MODES),
+      }),
+    },
+    async ({ projectId, mode }) => safeRun(() => runAgentMode(projectId, mode))
+  );
+
+  server.registerTool(
+    "list_ai_proposals",
+    {
+      description:
+        "Listuje propozycje agenta AI z kolejki ai_proposals, opcjonalnie filtrowane po statusie.",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        status: z.enum(["pending", "accepted", "rejected", "expired"]).optional(),
+      }),
+    },
+    async ({ projectId, status }) =>
+      safeRun(async () =>
+        db
+          .select()
+          .from(aiProposals)
+          .where(
+            status
+              ? and(eq(aiProposals.projectId, projectId), eq(aiProposals.status, status))
+              : eq(aiProposals.projectId, projectId)
+          )
+          .orderBy(desc(aiProposals.createdAt))
+          .limit(100)
+      )
+  );
+
+  server.registerTool(
+    "accept_ai_proposal",
+    {
+      description:
+        "Akceptuje propozycję agenta AI — jedyna droga, którą zmiana wygenerowana przez AI trafia do encji strategicznej (source='ai' + wpis w change_history).",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        proposalId: z.string().uuid(),
+      }),
+    },
+    async ({ projectId, proposalId }) => safeRun(() => acceptProposal(projectId, proposalId))
+  );
+
+  server.registerTool(
+    "reject_ai_proposal",
+    {
+      description: "Odrzuca propozycję agenta AI bez żadnego zapisu do encji strategicznej.",
+      inputSchema: z.object({
+        projectId: z.string().uuid(),
+        proposalId: z.string().uuid(),
+      }),
+    },
+    async ({ projectId, proposalId }) => safeRun(() => rejectProposal(projectId, proposalId))
+  );
+
+  server.registerTool(
+    "get_project_health",
+    {
+      description:
+        "Zwraca health-score projektu (0-100 ogólny + per moduł: discovery/brand/business/segments/funnel/sales/website/kpi) wg silnika reguł.",
+      inputSchema: z.object({ projectId: z.string().uuid() }),
+    },
+    async ({ projectId }) => safeRun(() => computeProjectHealth(projectId))
+  );
+
+  server.registerTool(
+    "get_project_alerts",
+    {
+      description:
+        "Zwraca aktywne alerty projektu: KPI poniżej progu, domena wygasająca, brak wizyt klienta.",
+      inputSchema: z.object({ projectId: z.string().uuid() }),
+    },
+    async ({ projectId }) => safeRun(() => getProjectAlerts(projectId))
+  );
+
   return server;
 }
 
@@ -799,4 +1047,14 @@ export const MCP_TOOL_NAMES = [
   "upsert_objection",
   "upsert_segment",
   "upsert_kpi",
+  "hub_list_analytics_events",
+  "hub_link_element_to_channel",
+  "hub_promote_to_funnel",
+  "hub_suggest_relations",
+  "run_agent_mode",
+  "list_ai_proposals",
+  "accept_ai_proposal",
+  "reject_ai_proposal",
+  "get_project_health",
+  "get_project_alerts",
 ] as const;

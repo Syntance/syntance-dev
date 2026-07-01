@@ -21,9 +21,15 @@ const SUGGESTION_PROMPTS = [
 interface ChatPanelProps {
   projectId: string;
   projectName: string;
+  /**
+   * Zewnętrzny "zasiew" wiadomości — gdy zmieni się `nonce`, panel wstawia
+   * `text` do inputa, a jeśli `send` jest true — wysyła od razu.
+   * Używane przez zakładki Sugestie / Analizy w AI Sidekick.
+   */
+  seed?: { text: string; send: boolean; nonce: number };
 }
 
-export function ChatPanel({ projectId, projectName }: ChatPanelProps) {
+export function ChatPanel({ projectId, projectName, seed }: ChatPanelProps) {
   const [model, setModel] = useState<ChatModelId>("claude-sonnet-4-5");
   const [webSearch, setWebSearch] = useState(false);
   const [notionRead, setNotionRead] = useState(false);
@@ -36,7 +42,7 @@ export function ChatPanel({ projectId, projectName }: ChatPanelProps) {
     setAiRulesState(stored);
   }, []);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages, stop } =
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages, stop, append } =
     useChat({
       api: "/api/strategy-hub/chat",
       body: {
@@ -53,6 +59,22 @@ export function ChatPanel({ projectId, projectName }: ChatPanelProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const lastSeedNonce = useRef<number>(0);
+  useEffect(() => {
+    if (!seed || seed.nonce === 0 || seed.nonce === lastSeedNonce.current) return;
+    lastSeedNonce.current = seed.nonce;
+    if (seed.send) {
+      void append({ role: "user", content: seed.text });
+    } else {
+      const ev = {
+        target: { value: seed.text },
+      } as React.ChangeEvent<HTMLTextAreaElement>;
+      handleInputChange(ev);
+      setTimeout(() => textareaRef.current?.focus(), 0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed?.nonce]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

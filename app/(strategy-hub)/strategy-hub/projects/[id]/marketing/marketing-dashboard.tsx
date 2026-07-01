@@ -4,6 +4,8 @@ import * as React from "react";
 import { Users, Target, GitBranch, Layers, Radio, Plus, Pencil, Trash2 } from "lucide-react";
 import { ResourceList } from "@/components/strategy-hub/resource-list";
 import { FunnelElementEditor, FunnelElementData } from "@/components/strategy-hub/entity-editor";
+import { RelationPicker } from "@/components/strategy-hub/relation-picker";
+import { EVENT_REGISTRY } from "@/packages/analytics-events/src";
 import {
   upsertSegment,
   deleteSegment,
@@ -39,6 +41,7 @@ interface Kpi {
   actual: string | null;
   unit: string | null;
   category: string | null;
+  eventKey?: string | null;
 }
 interface UserFlow {
   id: string;
@@ -67,6 +70,7 @@ interface FunnelElementRow {
   kpiIds: string[];
   campaignIds?: string[];
   geoAssetIds?: string[];
+  eventKeys?: string[];
 }
 interface Channel {
   id: string;
@@ -147,10 +151,11 @@ export function MarketingDashboard({
       kpiIds: el.kpiIds,
       campaignIds: el.campaignIds ?? [],
       geoAssetIds: el.geoAssetIds ?? [],
+      eventKeys: el.eventKeys ?? [],
     });
     setEditorOpen(true);
 
-    // Hydrate wszystkie relacje (w tym kampanie/GEO) ze świeżego stanu serwera.
+    // Hydrate wszystkie relacje (w tym kampanie/GEO/zdarzenia) ze świeżego stanu serwera.
     try {
       const res = await fetch(
         `/api/strategy-hub/projects/${projectId}/funnel-elements/${el.id}/relations`
@@ -161,6 +166,7 @@ export function MarketingDashboard({
           kpiIds: string[];
           campaignIds: string[];
           geoAssetIds: string[];
+          eventKeys: string[];
         };
         setEditingElement((prev) =>
           prev && prev.id === el.id ? { ...prev, ...rel } : prev
@@ -198,6 +204,7 @@ export function MarketingDashboard({
             kpiIds: data.kpiIds,
             campaignIds: data.campaignIds,
             geoAssetIds: data.geoAssetIds,
+            eventKeys: data.eventKeys,
           }),
         }
       );
@@ -209,6 +216,24 @@ export function MarketingDashboard({
   async function handleDeleteElement(id: string) {
     await deleteFunnelElement(id, projectId);
     setElements((prev) => prev.filter((e) => e.id !== id));
+  }
+
+  async function handleInlineChannels(elementId: string, channelIds: string[]) {
+    setElements((prev) =>
+      prev.map((e) => (e.id === elementId ? { ...e, channelIds } : e))
+    );
+    try {
+      await fetch(
+        `/api/strategy-hub/projects/${projectId}/funnel-elements/${elementId}/relations`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channelIds }),
+        }
+      );
+    } catch {
+      /* best-effort — modal edytora ma pełną synchronizację */
+    }
   }
 
   return (
@@ -359,15 +384,21 @@ export function MarketingDashboard({
                         </Badge>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-1">
                       {el.stageName && (
-                        <span className="text-xs text-muted-foreground">{el.stageName}</span>
-                      )}
-                      {el.channelIds.length > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          · {el.channelIds.length} kanał{el.channelIds.length !== 1 ? "ów" : ""}
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {el.stageName}
                         </span>
                       )}
+                      <RelationPicker
+                        projectId={projectId}
+                        entityType="channel"
+                        cardinality="multi"
+                        value={el.channelIds}
+                        onChange={(v) => void handleInlineChannels(el.id, (v as string[]) ?? [])}
+                        placeholder="+ kanał"
+                        className="w-auto min-w-0 max-w-[280px]"
+                      />
                     </div>
                   </div>
 
@@ -424,6 +455,16 @@ export function MarketingDashboard({
             { name: "actual", label: "Aktualna wartość" },
             { name: "unit", label: "Jednostka", placeholder: "np. %, PLN, sztuk" },
             { name: "segmentId", label: "Segment (id)", placeholder: "opcjonalnie", full: true },
+            {
+              name: "eventKey",
+              label: "Zdarzenie analityczne (mierzalność KPI)",
+              type: "select",
+              full: true,
+              options: [
+                { value: "", label: "— brak (KPI nie-analityczny) —" },
+                ...EVENT_REGISTRY.map((e) => ({ value: e.key, label: e.label })),
+              ],
+            },
           ]}
           renderRow={(k) => (
             <div className="flex items-center gap-3 min-w-0">

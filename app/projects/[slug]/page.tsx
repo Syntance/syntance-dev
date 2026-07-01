@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getClientSession } from "@/lib/auth";
-import { getProjectBySlugForUser } from "@/sanity/queries";
+import { getProjectBySlugForUser } from "@/lib/client-portal/queries";
 import {
   Monitor,
   Server,
@@ -9,20 +9,10 @@ import {
   BarChart3,
   Globe,
   ArrowRight,
-  CheckCircle2,
-  Circle,
   Users,
   Gauge,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-
-const STATUS_STEPS = [
-  { key: "design", label: "Projektowanie" },
-  { key: "development", label: "Development" },
-  { key: "qa", label: "Testowanie" },
-  { key: "review", label: "Review" },
-  { key: "live", label: "Live" },
-];
+import { ClientOnboardingTracker } from "@/components/dashboard/client-onboarding-tracker";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -42,8 +32,6 @@ export default async function ProjectOverviewPage({ params }: Props) {
   }
 
   if (!project) notFound();
-
-  const currentStepIdx = STATUS_STEPS.findIndex((s) => s.key === project.status);
 
   const quickLinks = [
     {
@@ -120,72 +108,8 @@ export default async function ProjectOverviewPage({ params }: Props) {
         )}
       </div>
 
-      {/* Status projektu */}
-      <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-medium text-sm">Status realizacji</h2>
-          <Badge
-            variant={project.status === "live" ? "default" : "secondary"}
-            className={
-              project.status === "live"
-                ? "bg-success/20 text-success border-success/30"
-                : ""
-            }
-          >
-            {STATUS_STEPS[currentStepIdx]?.label ?? project.status}
-          </Badge>
-        </div>
-
-        <div className="relative">
-          {/* Progress line */}
-          <div className="absolute top-3.5 left-3.5 right-3.5 h-0.5 bg-border" />
-          <div
-            className="absolute top-3.5 left-3.5 h-0.5 bg-brand transition-all duration-500"
-            style={{
-              width: `${(currentStepIdx / (STATUS_STEPS.length - 1)) * 100}%`,
-            }}
-          />
-
-          <div className="relative flex justify-between">
-            {STATUS_STEPS.map((step, i) => {
-              const done = i < currentStepIdx;
-              const active = i === currentStepIdx;
-              return (
-                <div key={step.key} className="flex flex-col items-center gap-2">
-                  <div
-                    className={`size-7 rounded-full border-2 flex items-center justify-center z-10 bg-background transition-colors ${
-                      done
-                        ? "border-brand bg-brand"
-                        : active
-                          ? "border-brand bg-brand/10"
-                          : "border-border"
-                    }`}
-                  >
-                    {done ? (
-                      <CheckCircle2 className="size-3.5 text-white" />
-                    ) : (
-                      <Circle
-                        className={`size-3 ${active ? "text-brand" : "text-muted-foreground/30"}`}
-                      />
-                    )}
-                  </div>
-                  <span
-                    className={`text-[10px] font-medium hidden sm:block ${
-                      active
-                        ? "text-brand"
-                        : done
-                          ? "text-foreground"
-                          : "text-muted-foreground/50"
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      {/* Status realizacji — tracker dostawy (7 kroków, Faza 16) */}
+      <ClientOnboardingTracker status={project.status} />
 
       {/* Szybki dostęp */}
       <div>

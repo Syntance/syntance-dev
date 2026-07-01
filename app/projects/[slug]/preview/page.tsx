@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { getClientSession } from "@/lib/auth";
-import { getProjectBySlugForUser } from "@/sanity/queries";
+import { getProjectBySlugForUser } from "@/lib/client-portal/queries";
 import { ExternalLink, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 

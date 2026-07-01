@@ -1,10 +1,10 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../app/generated/prisma/client";
+import { db } from "../db";
+import { clientUsers, adminUsers } from "../db/schema";
+import { eq } from "drizzle-orm";
 import { hashPassword } from "../lib/auth";
-import { getDatabaseUrl } from "../lib/strategy-hub/db-url";
 
 const email = process.argv[2];
 const password = process.argv[3];
@@ -15,27 +15,26 @@ if (!email || !password) {
 }
 
 async function main() {
-  const prisma = new PrismaClient({
-    adapter: new PrismaPg({ connectionString: getDatabaseUrl() }),
-  });
-
   const passwordHash = await hashPassword(password);
 
-  await prisma.clientUser.update({
-    where: { email },
-    data: { passwordHash },
-  });
+  const clientResult = await db
+    .update(clientUsers)
+    .set({ passwordHash, updatedAt: new Date() })
+    .where(eq(clientUsers.email, email))
+    .returning({ id: clientUsers.id });
 
-  const admin = await prisma.adminUser.findUnique({ where: { email } });
-  if (admin) {
-    await prisma.adminUser.update({
-      where: { email },
-      data: { passwordHash },
-    });
+  const adminResult = await db
+    .update(adminUsers)
+    .set({ passwordHash })
+    .where(eq(adminUsers.email, email))
+    .returning({ id: adminUsers.id });
+
+  if (clientResult.length === 0 && adminResult.length === 0) {
+    console.error(`Brak konta ClientUser/AdminUser dla ${email}`);
+    process.exit(1);
   }
 
   console.log(`Hasło zaktualizowane dla ${email}`);
-  await prisma.$disconnect();
 }
 
 main().catch((err: unknown) => {

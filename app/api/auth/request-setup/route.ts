@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { db } from "@/db";
+import { clientUsers, passwordResetTokens } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { randomUUID } from "crypto";
 import { generateResetToken } from "@/lib/auth";
 import { sendPasswordSetupEmail } from "@/lib/email";
-import { getClientByEmail } from "@/sanity/queries";
+import { getClientAccessSummary } from "@/lib/client-portal/queries";
 
 export async function POST(req: NextRequest) {
   const { email } = await req.json();
@@ -14,40 +17,43 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const sanityClient = await getClientByEmail(email);
-  if (!sanityClient) {
+  const summary = await getClientAccessSummary(email);
+  if (!summary.isKnownClient) {
+    // Nie ujawniamy, czy e-mail istnieje w systemie.
     return NextResponse.json({ success: true });
   }
 
-  let localClient = await prisma.clientUser.findUnique({ where: { email } });
-
-  if (!localClient) {
-    localClient = await prisma.clientUser.create({
-      data: {
-        email,
-        name: sanityClient.name,
-      },
-    });
-  }
-
-  if (localClient.passwordHash) {
+  if (summary.hasPassword) {
     return NextResponse.json(
       {
-        error: "Konto ma już ustawione hasło. Użyj 'Zapomniałem hasła', jeśli chcesz je zresetować.",
+        error:
+          "Konto ma już ustawione hasło. Użyj 'Zapomniałem hasła', jeśli chcesz je zresetować.",
         code: "HAS_PASSWORD",
       },
       { status: 400 }
     );
   }
 
-  const token = generateResetToken();
-
-  await prisma.passwordResetToken.create({
-    data: {
+  const [existing] = await db
+    .select()
+    .from(clientUsers)
+    .where(eq(clientUsers.email, email))
+    .limit(1);
+  if (!existing) {
+    await db.insert(clientUsers).values({
+      id: randomUUID(),
       email,
-      token,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    },
+      name: summary.name,
+      updatedAt: new Date(),
+    });
+  }
+
+  const token = generateResetToken();
+  await db.insert(passwordResetTokens).values({
+    id: randomUUID(),
+    email,
+    token,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
   });
 
   await sendPasswordSetupEmail(email, token);

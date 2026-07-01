@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Sun, Moon, Leaf, Monitor, Save, CheckCircle2, Sparkles, Brain } from "lucide-react";
+import { Sun, Moon, Leaf, Monitor, Save, CheckCircle2, Sparkles, Brain, Users, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -205,6 +205,42 @@ export function SettingsDashboard() {
         </Button>
       </section>
 
+      {/* ── Zespół ── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="size-7 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center">
+            <Users className="size-3.5 text-brand" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Zespół</h2>
+            <p className="text-xs text-muted-foreground">
+              Zaproś współpracowników do wspólnego workspace
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/strategy-hub/settings/team">Zarządzaj zespołem</Link>
+        </Button>
+      </section>
+
+      {/* ── White-label ── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="size-7 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center">
+            <Palette className="size-3.5 text-brand" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">White-label</h2>
+            <p className="text-xs text-muted-foreground">
+              Branding portalu klienta — logo, kolory, domena
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/strategy-hub/settings/branding">Ustawienia brandingu</Link>
+        </Button>
+      </section>
+
       {/* ── Zasady AI ── */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
@@ -224,9 +260,9 @@ export function SettingsDashboard() {
             <Sparkles className="size-3.5 text-violet-400 shrink-0 mt-0.5" />
             <p className="text-xs text-muted-foreground leading-relaxed">
               Napisz tutaj dodatkowe instrukcje, kontekst lub styl odpowiedzi.
-              Przykłady: <em>„Zawsze odpowiadaj po polsku"</em>,{" "}
-              <em>„Jestem agencją digital — skupiaj się na ROI"</em>,{" "}
-              <em>„Unikaj słowa 'innowacyjny'"</em>.
+              Przykłady: <em>&bdquo;Zawsze odpowiadaj po polsku&rdquo;</em>,{" "}
+              <em>&bdquo;Jestem agencją digital — skupiaj się na ROI&rdquo;</em>,{" "}
+              <em>&bdquo;Unikaj słowa &apos;innowacyjny&apos;&rdquo;</em>.
             </p>
           </div>
 

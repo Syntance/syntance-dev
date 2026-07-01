@@ -81,6 +81,7 @@ export async function computeProjectHealth(
     [scriptCount],
     [pageCount],
     [kpiCount],
+    kpiEventRows,
     [qCount],
     [matCount],
   ] = await Promise.all([
@@ -131,6 +132,10 @@ export async function computeProjectHealth(
       .from(kpis)
       .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt))),
     db
+      .select({ eventKey: kpis.eventKey })
+      .from(kpis)
+      .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt))),
+    db
       .select({ count: count() })
       .from(projectQuestions)
       .where(
@@ -169,6 +174,10 @@ export async function computeProjectHealth(
     brandIdentity: identity ?? null,
     brandVisual: visual ?? null,
     businessStrategy: strategy ?? null,
+    kpiMeasurableRatio:
+      kpiEventRows.length > 0
+        ? kpiEventRows.filter((k) => !!k.eventKey).length / kpiEventRows.length
+        : 0,
   };
 
   const modules: ModuleHealth[] = HEALTH_MODULE_KEYS.flatMap((key) => {

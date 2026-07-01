@@ -43,6 +43,50 @@ export async function sendPasswordSetupEmail(
   }
 }
 
+/**
+ * Zaproszenie do zespołu agencji (Faza 17, Role SaaS) — reużywa flow
+ * /set-password, ale token ma purpose='admin_invite', więc
+ * /api/auth/set-password zapisze hasło do AdminUser, nie clientUsers.
+ */
+export async function sendTeamInviteEmail(
+  email: string,
+  token: string,
+  workspaceName: string
+) {
+  const url = `${BASE_URL}/set-password?token=${token}`;
+
+  const { error } = await resend.emails.send({
+    from: FROM_EMAIL,
+    to: email,
+    subject: `Zaproszenie do zespołu ${workspaceName} — Syntance`,
+    html: `
+      <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h1 style="font-size: 24px; font-weight: 700; color: #fafafa; margin: 0;">Syntance</h1>
+        </div>
+        <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 32px;">
+          <h2 style="font-size: 18px; font-weight: 600; color: #fafafa; margin: 0 0 12px;">Zostałeś zaproszony do zespołu</h2>
+          <p style="font-size: 14px; color: #a1a1aa; margin: 0 0 24px; line-height: 1.6;">
+            <strong style="color:#fafafa;">${workspaceName}</strong> zaprosiło Cię do współpracy w panelu Strategy Hub.
+            Ustaw hasło, aby uzyskać dostęp. Link jest ważny przez 7 dni.
+          </p>
+          <a href="${url}" style="display: inline-block; background: #6d28d9; color: #ffffff; font-size: 14px; font-weight: 500; padding: 12px 24px; border-radius: 8px; text-decoration: none;">
+            Dołącz do zespołu
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #52525b; text-align: center; margin-top: 24px;">
+          Jeśli nie spodziewałeś się tego zaproszenia, zignoruj ten email.
+        </p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    console.error("Failed to send team invite email:", error);
+    throw new Error("Nie udało się wysłać emaila");
+  }
+}
+
 export async function sendPasswordResetEmail(
   email: string,
   token: string

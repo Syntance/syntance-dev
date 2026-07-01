@@ -11,6 +11,7 @@ import {
   index,
   primaryKey,
   uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -58,8 +59,20 @@ export const projects = pgTable(
     notionPageUrl: text("notion_page_url"),
     clientAccessToken: text("client_access_token"),
     clientAccessExpiresAt: timestamp("client_access_expires_at"),
+    /** URL live preview strony (dashboard klienta) — dawniej Sanity `previewUrl`. */
+    previewUrl: text("preview_url"),
+    /**
+     * Etap realizacji widoczny klientowi (design/development/qa/review/live) —
+     * ODDZIELNY od `status` (cykl życia workspace: active/paused/completed/archived),
+     * dawniej Sanity `project.status`. NIE mylić tych dwóch pól (Faza 16, M2).
+     */
+    deliveryStatus: varchar("delivery_status", { length: 50 })
+      .notNull()
+      .default("design"),
     hourlyRateDevelopment: real("hourly_rate_development"),
     hourlyRateMaintenance: real("hourly_rate_maintenance"),
+    /** Układ węzłów grafu relacji projektu (React Flow). */
+    graphLayout: jsonb("graph_layout"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     deletedAt: timestamp("deleted_at"),
@@ -202,7 +215,9 @@ export const competitors = pgTable(
       onDelete: "set null",
     }),
     /** Główny segment dla którego ten konkurent jest istotny (opcjonalnie). */
-    segmentId: uuid("segment_id"),
+    segmentId: uuid("segment_id").references(() => segments.id, {
+      onDelete: "set null",
+    }),
     name: varchar("name", { length: 255 }).notNull(),
     url: text("url"),
     type: varchar("type", { length: 20 }).notNull().default("direct"),
@@ -239,7 +254,9 @@ export const objections = pgTable(
     pathId: uuid("path_id").references(() => strategyPaths.id, {
       onDelete: "set null",
     }),
-    segmentId: uuid("segment_id"),
+    segmentId: uuid("segment_id").references(() => segments.id, {
+      onDelete: "set null",
+    }),
     stage: varchar("stage", { length: 20 }),
     objectionMd: text("objection_md").notNull(),
     responseMd: text("response_md"),
@@ -248,6 +265,7 @@ export const objections = pgTable(
     status: varchar("status", { length: 20 }).notNull().default("active"),
     orderIdx: integer("order_idx").notNull().default(0),
     source: varchar("source", { length: 20 }).notNull().default("hub"),
+    reviewFlag: boolean("review_flag").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     deletedAt: timestamp("deleted_at"),
@@ -301,6 +319,8 @@ export const segments = pgTable(
     jtbd: text("jtbd"),
     problem: text("problem"),
     uvpText: text("uvp_text"),
+    /** Propagacja „do przeglądu": ustawiane gdy zmienił się upstream. */
+    reviewFlag: boolean("review_flag").notNull().default(false),
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("segments_project_idx").on(t.projectId)]
@@ -363,6 +383,7 @@ export const funnelElements = pgTable(
     ctaUrl: varchar("cta_url", { length: 500 }),
     format: varchar("format", { length: 100 }),
     status: varchar("status", { length: 50 }).default("draft"),
+    reviewFlag: boolean("review_flag").notNull().default(false),
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("funnel_elements_stage_idx").on(t.stageId)]
@@ -417,7 +438,9 @@ export const userFlows = pgTable(
     segmentId: uuid("segment_id").references(() => segments.id, {
       onDelete: "set null",
     }),
-    entryElementId: uuid("entry_element_id"),
+    entryElementId: uuid("entry_element_id").references(() => funnelElements.id, {
+      onDelete: "set null",
+    }),
     name: varchar("name", { length: 255 }).notNull(),
     stepsMd: text("steps_md"),
     conversionGoal: text("conversion_goal"),
@@ -447,6 +470,10 @@ export const kpis = pgTable(
     unit: varchar("unit", { length: 50 }),
     category: varchar("category", { length: 100 }),
     deadline: timestamp("deadline"),
+    /** Klucz zdarzenia z pakietu @syntance/analytics-events (null = KPI nie-analityczny). */
+    eventKey: text("event_key"),
+    /** Propagacja „do przeglądu": ustawiane gdy zmienił się upstream. */
+    reviewFlag: boolean("review_flag").notNull().default(false),
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("kpis_project_idx").on(t.projectId)]
@@ -507,6 +534,7 @@ export const pages = pgTable(
     status: varchar("status", { length: 50 }).default("draft"),
     priority: integer("priority").default(0),
     priorityTier: varchar("priority_tier", { length: 20 }),
+    reviewFlag: boolean("review_flag").notNull().default(false),
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("pages_project_idx").on(t.projectId)]
@@ -1093,7 +1121,9 @@ export const navItems = pgTable(
     pageId: uuid("page_id").references(() => pages.id, { onDelete: "set null" }),
     position: varchar("position", { length: 50 }),
     type: varchar("type", { length: 50 }),
-    parentId: uuid("parent_id"),
+    parentId: uuid("parent_id").references((): AnyPgColumn => navItems.id, {
+      onDelete: "set null",
+    }),
     orderIdx: integer("order_idx").notNull().default(0),
     deletedAt: timestamp("deleted_at"),
   },
@@ -1175,6 +1205,43 @@ export const changeHistory = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [index("change_history_project_idx").on(t.projectId)]
+);
+
+// ─── Raporty klienta (Faza 16, M2 — trend health score + historia digestów) ──
+// Snapshoty budują się od momentu wdrożenia (cron tygodniowy w /digest) —
+// bez retroaktywnego backfillu, bo wcześniej nic nie było zapisywane.
+
+export const healthScoreSnapshots = pgTable(
+  "health_score_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    score: integer("score").notNull(),
+    /** [{key, label, score}] — kopia ModuleHealth[] z lib/strategy-hub/health-score.ts */
+    breakdown: jsonb("breakdown"),
+    capturedAt: timestamp("captured_at").defaultNow().notNull(),
+  },
+  (t) => [index("health_snapshots_project_idx").on(t.projectId, t.capturedAt)]
+);
+
+export const digestLog = pgTable(
+  "digest_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sentTo: varchar("sent_to", { length: 255 }),
+    sent: boolean("sent").notNull().default(false),
+    reason: text("reason"),
+    alertCount: integer("alert_count").notNull().default(0),
+    /** [{name, target, actual}] — kopia kpiSummary z DigestPayload */
+    kpiSummary: jsonb("kpi_summary"),
+    sentAt: timestamp("sent_at").defaultNow().notNull(),
+  },
+  (t) => [index("digest_log_project_idx").on(t.projectId, t.sentAt)]
 );
 
 // ─── Time tracking (Custom Apps) ─────────────────────────────────────────────
@@ -1708,6 +1775,7 @@ export const strategicDecisions = pgTable(
     evidenceMd: text("evidence_md"),
     status: varchar("status", { length: 20 }).default("active"),
     authorType: varchar("author_type", { length: 10 }).default("human"),
+    reviewFlag: boolean("review_flag").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
     deletedAt: timestamp("deleted_at"),
@@ -1894,4 +1962,257 @@ export const strategyRuleSets = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("strategy_rule_sets_scope_uq").on(t.scope)]
+);
+
+// ─── Strategy Hub 2.1 — kolejka propozycji AI (zero direct write) ────────────
+
+/**
+ * Jedyna ścieżka zapisu agenta AI w trybie autonomicznym.
+ * Agent NIE pisze wprost do tabel domenowych — generuje propozycję (diff
+ * przed/po), człowiek akceptuje/odrzuca, apply zapisuje z source='ai'.
+ */
+export const aiProposals = pgTable(
+  "ai_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** 'audit' | 'research' | 'improve' | 'monitor' */
+    mode: varchar("mode", { length: 20 }).notNull(),
+    /** klucz encji docelowej (np. 'objections'); null = propozycja nowej encji */
+    entityType: varchar("entity_type", { length: 50 }),
+    entityId: uuid("entity_id"),
+    /** {before, after} per pole */
+    diff: jsonb("diff"),
+    rationaleMd: text("rationale_md"),
+    /** [{title, url}] — źródła z trybu research */
+    sources: jsonb("sources"),
+    /** 'pending' | 'accepted' | 'rejected' | 'expired' */
+    status: varchar("status", { length: 20 }).notNull().default("pending"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at"),
+    resolvedBy: uuid("resolved_by"),
+  },
+  (t) => [
+    index("ai_proposals_project_idx").on(t.projectId),
+    index("ai_proposals_status_idx").on(t.projectId, t.status),
+  ]
+);
+
+// ─── Strategy Hub 2.1 — eksporty i wysyłka ──────────────────────────────────
+
+export const exportJobs = pgTable(
+  "export_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** 'pdf_full' | 'pdf_report' | 'docx' | 'md' | 'png_map' | 'svg_graph' | 'json' */
+    type: varchar("type", { length: 30 }).notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("pending"),
+    fileId: varchar("file_id", { length: 255 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("export_jobs_project_idx").on(t.projectId)]
+);
+
+export const deliveryLog = pgTable(
+  "delivery_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    exportJobId: uuid("export_job_id").references(() => exportJobs.id, {
+      onDelete: "set null",
+    }),
+    recipientEmail: varchar("recipient_email", { length: 255 }).notNull(),
+    sentAt: timestamp("sent_at").defaultNow().notNull(),
+    openedAt: timestamp("opened_at"),
+    channel: varchar("channel", { length: 20 }).notNull().default("email"),
+  },
+  (t) => [index("delivery_log_project_idx").on(t.projectId)]
+);
+
+// ─── Strategy Hub 2.1 — słownik zdarzeń analityki (oś Pomiar) ────────────────
+
+/** Element lejka deklaruje zdarzenia, które emituje. event_key walidowany Zod enumem z pakietu. */
+export const funnelElementEvents = pgTable(
+  "funnel_element_events",
+  {
+    funnelElementId: uuid("funnel_element_id")
+      .notNull()
+      .references(() => funnelElements.id, { onDelete: "cascade" }),
+    eventKey: varchar("event_key", { length: 100 }).notNull(),
+    isConversion: boolean("is_conversion").notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.funnelElementId, t.eventKey] })]
+);
+
+export const funnelElementEventsRelations = relations(
+  funnelElementEvents,
+  ({ one }) => ({
+    funnelElement: one(funnelElements, {
+      fields: [funnelElementEvents.funnelElementId],
+      references: [funnelElements.id],
+    }),
+  })
+);
+
+// ─── Strategy Hub 2.1 — ścieżki strategii: warstwa N:N (owned/shared) ────────
+
+/**
+ * Rozszerzenie modelu ścieżek: zachowujemy `strategyPaths` + single `path_id`,
+ * a `track_entities` pozwala encji należeć do wielu ścieżek z rolą owned/shared.
+ * Backfill z istniejącego `path_id` w migracji.
+ */
+export const trackEntities = pgTable(
+  "track_entities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    trackId: uuid("track_id")
+      .notNull()
+      .references(() => strategyPaths.id, { onDelete: "cascade" }),
+    entityType: varchar("entity_type", { length: 50 }).notNull(),
+    entityId: uuid("entity_id").notNull(),
+    /** 'owned' | 'shared' */
+    relation: varchar("relation", { length: 10 }).notNull().default("owned"),
+  },
+  (t) => [
+    index("track_entities_track_idx").on(t.trackId),
+    uniqueIndex("track_entities_uq").on(t.trackId, t.entityType, t.entityId),
+  ]
+);
+
+// ─── Strategy Hub 2.1 — junctiony kampanii i ofert ──────────────────────────
+
+export const campaignChannels = pgTable(
+  "campaign_channels",
+  {
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.channelId] })]
+);
+
+export const campaignKpis = pgTable(
+  "campaign_kpis",
+  {
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    kpiId: uuid("kpi_id")
+      .notNull()
+      .references(() => kpis.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.kpiId] })]
+);
+
+export const offerFunnelElements = pgTable(
+  "offer_funnel_elements",
+  {
+    offerId: uuid("offer_id")
+      .notNull()
+      .references(() => offers.id, { onDelete: "cascade" }),
+    funnelElementId: uuid("funnel_element_id")
+      .notNull()
+      .references(() => funnelElements.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.offerId, t.funnelElementId] })]
+);
+
+export const offerPages = pgTable(
+  "offer_pages",
+  {
+    offerId: uuid("offer_id")
+      .notNull()
+      .references(() => offers.id, { onDelete: "cascade" }),
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => pages.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.offerId, t.pageId] })]
+);
+
+// ─── Strategy Hub 2.1 — white-label workspace ───────────────────────────────
+
+export const workspaceBranding = pgTable("workspace_branding", {
+  workspaceId: uuid("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  logoFileId: varchar("logo_file_id", { length: 255 }),
+  /** [{name, value, role}] — paleta OKLCH */
+  colors: jsonb("colors"),
+  customDomain: varchar("custom_domain", { length: 255 }),
+  emailFrom: varchar("email_from", { length: 255 }),
+  status: varchar("status", { length: 50 }).default("active"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ─── Client Portal (Faza 16, M2) — wygaszenie Sanity/Prisma jako źródła prawdy ──
+//
+// `ClientUser`/`AdminUser`/`PasswordResetToken` istniały już wcześniej jako
+// tabele Prisma w TEJ SAMEJ bazie Postgres (ten sam `DATABASE_URL`) — poniższe
+// deklaracje Drizzle wskazują na te same, istniejące tabele/kolumny (PascalCase
+// bez `@@map` po stronie Prisma), żeby zlikwidować zależność runtime od klienta
+// Prisma bez ruszania jednego bajtu danych. Docelowo `prisma/` można usunąć.
+
+export const clientUsers = pgTable("ClientUser", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  passwordHash: text("passwordHash"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export const adminUsers = pgTable("AdminUser", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("passwordHash").notNull(),
+  /** Współdzielony workspace zespołu (Faza 17, Role SaaS) — nullable dla starych kont, patrz ADR. */
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+    onDelete: "set null",
+  }),
+  /** 'owner' (może zarządzać zespołem) | 'member' (pełny dostęp do projektów, bez zarządzania zespołem). */
+  role: varchar("role", { length: 20 }).notNull().default("owner"),
+});
+
+export const passwordResetTokens = pgTable("PasswordResetToken", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  used: boolean("used").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  /** 'client_setup' (portal klienta) | 'admin_invite' (zaproszenie do zespołu agencji). */
+  purpose: varchar("purpose", { length: 20 }).notNull().default("client_setup"),
+});
+
+/**
+ * Dostęp klienta (po e-mailu) do projektu w dashboardzie `/projects/[slug]`.
+ * Zastępuje relację `client.projects[]` z Sanity. Klient z e-mailem obecnym w
+ * `AdminUser` widzi WSZYSTKIE projekty bez wpisu tutaj (parytet z dawnym
+ * `client.isAdmin` w Sanity) — patrz `lib/client-portal/queries.ts`.
+ */
+export const projectClients = pgTable(
+  "project_clients",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    email: varchar("email", { length: 255 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("project_clients_project_idx").on(t.projectId),
+    index("project_clients_email_idx").on(t.email),
+  ]
 );
