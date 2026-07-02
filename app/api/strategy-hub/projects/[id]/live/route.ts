@@ -9,8 +9,7 @@ export const runtime = "nodejs";
 /**
  * Realtime (spec: propagacja zmian < 5s do Hub + Dashboard klienta).
  *
- * DB to Neon Postgres (nie Supabase — `@supabase/supabase-js` w zależnościach
- * jest nieużywane), więc zamiast Supabase Realtime channels: SSE z pollingiem
+ * DB to Neon Postgres (nie Supabase), więc zamiast Supabase Realtime channels: SSE z pollingiem
  * po stronie serwera co 2s po `change_history` (już zapisywanej przez większość
  * ścieżek zapisu przez `trackChange`). Klient trzyma jedno długie połączenie
  * zamiast odpytywać co kilka sekund sam — mniej requestów, ten sam efekt.

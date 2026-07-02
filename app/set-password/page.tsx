@@ -12,7 +12,7 @@ function SetPasswordForm() {
   const tokenFromUrl = searchParams.get("token");
   const emailFromUrl = searchParams.get("email");
 
-  const [step, setStep] = useState<"request" | "set">(
+  const [step] = useState<"request" | "set">(
     tokenFromUrl ? "set" : "request"
   );
   const [email, setEmail] = useState(emailFromUrl || "");

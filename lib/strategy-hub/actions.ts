@@ -7,7 +7,6 @@ import {
   funnelElements,
   userFlows,
   kpis,
-  channels,
   pages,
   seoKeywords,
   techStack,

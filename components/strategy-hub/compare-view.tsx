@@ -2,7 +2,6 @@
 
 import { useCallback, useRef, useState } from "react";
 import { GripVertical, X } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 interface CompareViewProps {

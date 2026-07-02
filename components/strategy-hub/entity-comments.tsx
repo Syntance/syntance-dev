@@ -36,7 +36,8 @@ export function EntityComments({
   const [pending, startTransition] = useTransition();
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // Bez synchronicznego setLoading tutaj — `loading` startuje `true`, a wywołanie
+    // `load()` w efekcie nie ustawia stanu synchronicznie (React 19: set-state-in-effect).
     try {
       const params = new URLSearchParams({ entityType, entityId });
       const res = await fetch(

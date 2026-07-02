@@ -37,12 +37,13 @@ export function DecisionOverlay({
   open,
   onClose,
 }: DecisionOverlayProps) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [decisions, setDecisions] = useState<DecisionRow[]>([]);
   const [chain, setChain] = useState<ChainLink[]>([]);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // `loading` startuje `true`; brak synchronicznego setState przed await, żeby
+    // wywołanie `load()` w efekcie nie łamało reguły set-state-in-effect.
     try {
       const params = new URLSearchParams({ entityType, entityId });
       const res = await fetch(

@@ -47,14 +47,22 @@ export function AlertsToaster() {
     });
   }, [incoming, dismiss]);
 
-  // Reset przy zmianie projektu
-  React.useEffect(() => {
-    seenRef.current = new Set();
-    const timers = timersRef.current;
+  // Reset widocznych toastów przy zmianie projektu — liczony podczas renderu
+  // (wzorzec „poprzedni prop"), bez set-state-in-effect.
+  const [prevProjectId, setPrevProjectId] = React.useState(projectId);
+  if (projectId !== prevProjectId) {
+    setPrevProjectId(projectId);
     setActive([]);
+  }
+
+  // Sprzątanie timerów i pamięci „widzianych" przy zmianie projektu / odmontowaniu.
+  React.useEffect(() => {
+    const timers = timersRef.current;
+    const seen = seenRef.current;
     return () => {
       timers.forEach((t) => clearTimeout(t));
       timers.clear();
+      seen.clear();
     };
   }, [projectId]);
 

@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -128,14 +127,13 @@ export function PositioningEditor({
     setTimeout(() => setSavedTick(false), 1500);
   }, []);
 
-  const debouncedSave = useMemo(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    return (
-      patch: Parameters<typeof onSave>[0],
-      delay = 500
-    ) => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
+  // Timer debounce w refie (nie w zmiennej domknięcia useMemo) — mutacja po
+  // renderze jest wtedy dozwolona (React 19: react-hooks/immutability).
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedSave = useCallback(
+    (patch: Parameters<typeof onSave>[0], delay = 500) => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
         startTransition(async () => {
           try {
             await onSave(patch);
@@ -145,8 +143,9 @@ export function PositioningEditor({
           }
         });
       }, delay);
-    };
-  }, [onSave, flashSaved]);
+    },
+    [onSave, flashSaved]
+  );
 
   // ── Pointer → znormalizowane (-1..1), z uwzględnieniem viewBox ─────
   const pointerToCoord = useCallback(

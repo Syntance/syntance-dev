@@ -11,7 +11,7 @@ import {
   purchaseStages,
   segments,
 } from "@/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { isConversionEvent } from "@/packages/analytics-events/src";
 

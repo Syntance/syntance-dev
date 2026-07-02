@@ -149,7 +149,9 @@ export function TimeTrackingApp() {
   );
   const [editComment, setEditComment] = useState("");
 
-  const [tick, setTick] = useState(0);
+  // Bieżący czas trzymamy w stanie (tyka co 30 s przy aktywnym wpisie), zamiast
+  // wywoływać `Date.now()` w renderze/useMemo (React 19: react-hooks/purity).
+  const [now, setNow] = useState(() => Date.now());
 
   const todayMinutes = useMemo(() => {
     const today = todayIso();
@@ -159,36 +161,36 @@ export function TimeTrackingApp() {
         if (e.durationMinutes != null) return sum + e.durationMinutes;
         if (e.id === activeEntry?.id) {
           const mins = Math.round(
-            (Date.now() - new Date(e.startedAt).getTime()) / 60_000
+            (now - new Date(e.startedAt).getTime()) / 60_000
           );
           return sum + mins;
         }
         return sum;
       }, 0);
-  }, [entries, activeEntry, tick]);
+  }, [entries, activeEntry, now]);
 
   const monthMinutes = useMemo(() => {
-    const month = new Date().toISOString().slice(0, 7);
+    const month = new Date(now).toISOString().slice(0, 7);
     return entries
       .filter((e) => e.startedAt.slice(0, 7) === month)
       .reduce((sum, e) => {
         if (e.durationMinutes != null) return sum + e.durationMinutes;
         if (e.id === activeEntry?.id) {
           const mins = Math.round(
-            (Date.now() - new Date(e.startedAt).getTime()) / 60_000
+            (now - new Date(e.startedAt).getTime()) / 60_000
           );
           return sum + mins;
         }
         return sum;
       }, 0);
-  }, [entries, activeEntry, tick]);
+  }, [entries, activeEntry, now]);
 
   const activeElapsed = useMemo(() => {
     if (!activeEntry) return 0;
     return Math.round(
-      (Date.now() - new Date(activeEntry.startedAt).getTime()) / 60_000
+      (now - new Date(activeEntry.startedAt).getTime()) / 60_000
     );
-  }, [activeEntry, tick]);
+  }, [activeEntry, now]);
 
   const loadProjects = useCallback(async () => {
     const res = await fetch("/api/strategy-hub/projects");
@@ -245,32 +247,43 @@ export function TimeTrackingApp() {
   }, [loadProjects, loadEntries]);
 
   useEffect(() => {
-    if (tab === "summary") void loadSummary();
+    if (tab !== "summary") return;
+    void (async () => {
+      await loadSummary();
+    })();
   }, [tab, loadSummary]);
 
   useEffect(() => {
-    if (tab === "list") void loadEntries();
+    if (tab !== "list") return;
+    void (async () => {
+      await loadEntries();
+    })();
   }, [tab, listProjectId, loadEntries]);
 
   useEffect(() => {
     if (!activeEntry) return;
-    const id = window.setInterval(() => setTick((t) => t + 1), 30_000);
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(id);
   }, [activeEntry]);
 
-  useEffect(() => {
-    const project = projects.find((p) => p.id === selectedProjectId);
+  // Prefill pól stawek wynika z wybranego projektu — liczony podczas renderu
+  // (wzorzec „poprzedni prop"), bez set-state-in-effect.
+  const selectedProject = projects.find((p) => p.id === selectedProjectId);
+  const rateKey = `${selectedProjectId}|${selectedProject?.hourlyRateDevelopment ?? ""}|${selectedProject?.hourlyRateMaintenance ?? ""}`;
+  const [prevRateKey, setPrevRateKey] = useState(rateKey);
+  if (rateKey !== prevRateKey) {
+    setPrevRateKey(rateKey);
     setDevRateInput(
-      project?.hourlyRateDevelopment != null
-        ? String(project.hourlyRateDevelopment)
+      selectedProject?.hourlyRateDevelopment != null
+        ? String(selectedProject.hourlyRateDevelopment)
         : ""
     );
     setMaintenanceRateInput(
-      project?.hourlyRateMaintenance != null
-        ? String(project.hourlyRateMaintenance)
+      selectedProject?.hourlyRateMaintenance != null
+        ? String(selectedProject.hourlyRateMaintenance)
         : ""
     );
-  }, [selectedProjectId, projects]);
+  }
 
   async function saveHourlyRates() {
     if (!selectedProjectId) return;

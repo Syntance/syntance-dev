@@ -12,7 +12,9 @@ export function useProjectLiveUpdates(
   onChange: (info: { at: string; entityType?: string }) => void
 ): void {
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -39,7 +41,9 @@ export function useClientPortalLiveUpdates(
   onChange: (info: { at: string }) => void
 ): void {
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     if (!slug) return;

@@ -6,6 +6,7 @@ import { Send, Globe, BookOpen, Square, Trash2, AlertCircle } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useLocalStorageString } from "@/hooks/use-local-storage-string";
 import { ModelSelector, type ChatModelId } from "./model-selector";
 import { MessageBubble } from "./message-bubble";
 import { Badge } from "@/components/ui/badge";
@@ -33,14 +34,9 @@ export function ChatPanel({ projectId, projectName, seed }: ChatPanelProps) {
   const [model, setModel] = useState<ChatModelId>("claude-sonnet-4-5");
   const [webSearch, setWebSearch] = useState(false);
   const [notionRead, setNotionRead] = useState(false);
-  const [aiRules, setAiRulesState] = useState("");
+  const [aiRules] = useLocalStorageString("strategy-hub-ai-rules");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("strategy-hub-ai-rules") ?? "";
-    setAiRulesState(stored);
-  }, []);
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages, stop, append } =
     useChat({

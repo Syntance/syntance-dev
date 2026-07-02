@@ -80,14 +80,6 @@ function phaseAt(x: number): Phase | null {
   return null;
 }
 
-function statusDot(status: string | null): string {
-  return (
-    { active: "bg-emerald-500", draft: "bg-zinc-400", paused: "bg-amber-400", archived: "bg-zinc-300" }[
-      status ?? ""
-    ] ?? "bg-zinc-400"
-  );
-}
-
 export function FunnelBoard({
   projectId,
   mode = "editor",
@@ -107,17 +99,22 @@ export function FunnelBoard({
   const layoutSeq = useRef(0);
 
   const refresh = useCallback(async () => {
-    const res = await fetch(`/api/strategy-hub/projects/${projectId}/funnel-board`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return;
-    const json = (await res.json()) as BoardData;
-    setData(json);
-    setSegmentId((prev) => prev || json.segments[0]?.id || "");
+    const url = `/api/strategy-hub/projects/${projectId}/funnel-board`;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) return;
+      const json = (await res.json()) as BoardData;
+      setData(json);
+      setSegmentId((prev) => prev || json.segments[0]?.id || "");
+    } catch {
+      /* abort/timeout — kolejny refresh naprawi stan */
+    }
   }, [projectId]);
 
   useEffect(() => {
-    void refresh();
+    void (async () => {
+      await refresh();
+    })();
   }, [refresh]);
 
   const buildGraph = useCallback(

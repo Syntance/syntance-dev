@@ -148,27 +148,36 @@ export function MapView({
     setOpenSub(null);
   }, []);
 
-  useEffect(() => {
-    if (presentSignal === 0) return;
-    setPresenting(true);
+  // Start prezentacji na sygnał (licznik) — liczony podczas renderu (wzorzec „poprzedni prop").
+  const [prevSignal, setPrevSignal] = useState(presentSignal);
+  if (presentSignal !== prevSignal) {
+    setPrevSignal(presentSignal);
+    if (presentSignal !== 0) {
+      setPresenting(true);
+      setStep(0);
+    }
+  }
+
+  // Koniec autopilota (krok poza listą) — wygaszamy podczas renderu, nie w efekcie.
+  if (presenting && step >= order.length) {
+    setPresenting(false);
     setStep(0);
-  }, [presentSignal]);
+    setExpandedKey(null);
+    setOpenSub(null);
+  }
 
   useEffect(() => {
     if (!presenting) return;
     const key = order[step];
-    if (!key) {
-      stopPresentation();
-      return;
-    }
-    setExpandedKey(key);
-    setOpenSub(null);
+    if (!key) return;
+    // Rozwinięcie węzła jest liczone (`currentKey`) — tu tylko efekt zewnętrzny
+    // (scroll) i zaplanowanie następnego kroku w callbacku timera.
     scrollToNode(key);
     const t = setTimeout(() => {
       setStep((s) => s + 1);
     }, reduce ? 1600 : 3200);
     return () => clearTimeout(t);
-  }, [presenting, step, order, scrollToNode, stopPresentation, reduce]);
+  }, [presenting, step, order, scrollToNode, reduce]);
 
   // ── Klawiatura ──
   useEffect(() => {
@@ -183,10 +192,15 @@ export function MapView({
     return () => window.removeEventListener("keydown", onKey);
   }, [active, openSub, presenting, expandedKey, stopPresentation]);
 
-  const activeNode = expandedKey ? posByKey.get(expandedKey)?.node : null;
+  // Podczas prezentacji rozwinięty węzeł wynika z kroku (order[step]); poza nią
+  // to zwykły stan sterowany kliknięciami. Liczymy zamiast ustawiać w efekcie.
+  const currentKey = presenting ? (order[step] ?? null) : expandedKey;
+  const currentSub = presenting ? null : openSub;
+
+  const activeNode = currentKey ? posByKey.get(currentKey)?.node : null;
   const openSubData =
-    openSub && activeNode && openSub.nodeKey === expandedKey
-      ? activeNode.subcategories[openSub.subIdx]
+    currentSub && activeNode && currentSub.nodeKey === currentKey
+      ? activeNode.subcategories[currentSub.subIdx]
       : null;
 
   return (
@@ -248,7 +262,7 @@ export function MapView({
               const x1 = from.cx + NODE_W / 2;
               const x2 = to.cx - NODE_W / 2;
               const gap = to.index - from.index;
-              const dimmed = expandedKey && expandedKey !== e.from && expandedKey !== e.to;
+              const dimmed = currentKey && currentKey !== e.from && currentKey !== e.to;
               // Łuk dla skoków, prosta krzywa dla sąsiadów.
               const arc = gap > 1 ? -28 * gap : 0;
               const my = CENTER_Y + arc;
@@ -270,8 +284,8 @@ export function MapView({
 
           {/* Węzły L1 + gałęzie L2 */}
           {ordered.map(({ node, cx }) => {
-            const isExpanded = expandedKey === node.key;
-            const dimmed = expandedKey != null && !isExpanded;
+            const isExpanded = currentKey === node.key;
+            const dimmed = currentKey != null && !isExpanded;
             const locked = lockedKeys.has(node.key);
             return (
               <div key={node.key}>

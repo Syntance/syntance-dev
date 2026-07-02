@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  useEffect,
   useRef,
   useState,
   useTransition,
@@ -77,14 +76,17 @@ function CompetitorCard({
   const [notes, setNotes] = useState(item.notesMd ?? "");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  // Sync ze źródłem `item` bez efektu (React 19): reset podczas renderu przy zmianie identyczności.
+  const [prevItem, setPrevItem] = useState(item);
+  if (item !== prevItem) {
+    setPrevItem(item);
     setName(item.name);
     setUrl(item.url ?? "");
     setStrengths(item.strengthsMd ?? "");
     setWeaknesses(item.weaknessesMd ?? "");
     setPricing(item.pricingMd ?? "");
     setNotes(item.notesMd ?? "");
-  }, [item]);
+  }
 
   const debouncedUpdate = useCallback(
     (patch: Partial<CompetitorRow>) => {

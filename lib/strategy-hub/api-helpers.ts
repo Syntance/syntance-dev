@@ -37,8 +37,7 @@ export async function requireProjectAccess(projectId: string) {
       ),
     };
   }
-  const { ok: _ok, ...rest } = check;
-  return { ok: true as const, ...rest };
+  return { ...check, ok: true as const };
 }
 
 export type ProjectReadRole = "editor" | "client";
@@ -50,8 +49,7 @@ export type ProjectReadRole = "editor" | "client";
 export async function requireProjectReadAccess(projectId: string) {
   const adminCheck = await assertProjectAccess(projectId);
   if (adminCheck.ok) {
-    const { ok: _ok, ...rest } = adminCheck;
-    return { ok: true as const, role: "editor" as const, ...rest };
+    return { ...adminCheck, ok: true as const, role: "editor" as const };
   }
 
   const session = await getClientSession();

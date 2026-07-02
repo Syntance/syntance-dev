@@ -20,6 +20,10 @@
 /.next/
 /out/
 
+# decommissioned Sanity (stale studio build + runtime cache)
+/dist/
+/.sanity/
+
 # production
 /build
 

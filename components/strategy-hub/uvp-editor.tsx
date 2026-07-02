@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -39,9 +38,13 @@ export function UvpEditor({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
+  // Sync z propem `core` bez efektu (React 19): wzorzec „poprzedni prop" — reset
+  // podczas renderu, gdy wartość ze źródła się zmieniła.
+  const [prevCore, setPrevCore] = useState(core);
+  if (core !== prevCore) {
+    setPrevCore(core);
     setCoreLocal(core);
-  }, [core]);
+  }
 
   const syncHeight = useCallback(() => {
     const el = textareaRef.current;

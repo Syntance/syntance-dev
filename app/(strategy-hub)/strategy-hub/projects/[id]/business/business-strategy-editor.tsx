@@ -685,6 +685,11 @@ export function BusinessStrategyEditor({
                   <div className="text-sm font-medium leading-tight truncate">
                     {section.label}
                   </div>
+                  {preview && (
+                    <div className="text-[11px] text-muted-foreground/70 leading-tight truncate">
+                      {preview}
+                    </div>
+                  )}
                 </div>
                 <div className="shrink-0 flex items-center gap-0.5">
                   {isFilled && <span className="text-[10px] text-success font-bold">✓</span>}

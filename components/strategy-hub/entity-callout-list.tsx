@@ -198,9 +198,12 @@ function EntityRow({
   const [text, setText] = useState(item.text);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  // Sync z propem bez efektu (React 19) — wzorzec „poprzedni prop".
+  const [prevText, setPrevText] = useState(item.text);
+  if (item.text !== prevText) {
+    setPrevText(item.text);
     setText(item.text);
-  }, [item.text]);
+  }
 
   const onTextChange = (next: string) => {
     setText(next);

@@ -1,6 +1,12 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useCallback,
+  useSyncExternalStore,
+} from "react";
 
 export type Theme = "dark" | "light" | "earth" | "auto";
 
@@ -25,19 +31,38 @@ function applyTheme(theme: Theme) {
   document.documentElement.setAttribute("data-theme", theme);
 }
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
+/**
+ * Motyw trzymamy w localStorage jako zewnętrznym źródle (external store), czytanym
+ * przez `useSyncExternalStore` — dzięki temu nie ustawiamy stanu w efekcie
+ * (React 19: `set-state-in-effect`). `storage` łapie zmiany między kartami,
+ * a `emitThemeChange` — zmiany w tej samej karcie.
+ */
+const themeListeners = new Set<() => void>();
 
+function subscribeTheme(callback: () => void) {
+  themeListeners.add(callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    themeListeners.delete(callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function readTheme(): Theme {
+  return (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? DEFAULT_THEME;
+}
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const theme = useSyncExternalStore(subscribeTheme, readTheme, () => DEFAULT_THEME);
+
+  // Zapis do DOM = synchronizacja z systemem zewnętrznym, dozwolona w efekcie.
   useEffect(() => {
-    const stored = (localStorage.getItem(STORAGE_KEY) as Theme | null) ?? DEFAULT_THEME;
-    setThemeState(stored);
-    applyTheme(stored);
-  }, []);
+    applyTheme(theme);
+  }, [theme]);
 
   const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
     localStorage.setItem(STORAGE_KEY, t);
-    applyTheme(t);
+    themeListeners.forEach((l) => l());
   }, []);
 
   return (

@@ -159,16 +159,21 @@ export function NavSidebar() {
     });
   }, []);
 
-  useEffect(() => {
+  // Rozwinięcie obszaru i reset health wynikają z lokalizacji/projektu — liczymy je
+  // podczas renderu (wzorzec „poprzedni prop"), bez set-state-in-effect.
+  const [prevNav, setPrevNav] = useState({ pathname, projectId });
+  if (pathname !== prevNav.pathname || projectId !== prevNav.projectId) {
+    setPrevNav({ pathname, projectId });
     if (!projectId) {
       setExpandedAreas(new Set());
-      return;
+    } else {
+      const active = areaItems(projectId).find((item) =>
+        pathname.startsWith(item.href)
+      );
+      setExpandedAreas(active ? new Set([active.key]) : new Set());
     }
-    const active = areaItems(projectId).find((item) =>
-      pathname.startsWith(item.href)
-    );
-    setExpandedAreas(active ? new Set([active.key]) : new Set());
-  }, [pathname, projectId]);
+    if (projectId !== prevNav.projectId) setHealthModules([]);
+  }
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -178,10 +183,7 @@ export function NavSidebar() {
   }, []);
 
   const fetchHealth = useCallback((signal?: AbortSignal) => {
-    if (!projectId) {
-      setHealthModules([]);
-      return;
-    }
+    if (!projectId) return;
     fetch(`/api/strategy-hub/projects/${projectId}/health`, { signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { modules?: HealthModule[] } | null) => {
@@ -191,10 +193,7 @@ export function NavSidebar() {
   }, [projectId]);
 
   useEffect(() => {
-    if (!projectId) {
-      setHealthModules([]);
-      return;
-    }
+    if (!projectId) return;
     const ctrl = new AbortController();
     fetchHealth(ctrl.signal);
     return () => ctrl.abort();

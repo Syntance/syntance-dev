@@ -52,13 +52,20 @@ function HeatmapCellEditor({
   const [whatToPublishMd, setWhatToPublishMd] = useState(existing?.whatToPublishMd ?? "");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    setCadence(existing?.cadence ?? "");
-    setWeeklyCount(existing?.weeklyCount?.toString() ?? "");
-    setMonthlyBudget(existing?.monthlyBudget?.toString() ?? "");
-    setWhatToPublishMd(existing?.whatToPublishMd ?? "");
-  }, [open, existing]);
+  // Reset pól po otwarciu popovera / zmianie danych — bez efektu (React 19),
+  // wzorzec „poprzedni prop" podczas renderu.
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [prevExisting, setPrevExisting] = useState(existing);
+  if (open !== prevOpen || existing !== prevExisting) {
+    setPrevOpen(open);
+    setPrevExisting(existing);
+    if (open) {
+      setCadence(existing?.cadence ?? "");
+      setWeeklyCount(existing?.weeklyCount?.toString() ?? "");
+      setMonthlyBudget(existing?.monthlyBudget?.toString() ?? "");
+      setWhatToPublishMd(existing?.whatToPublishMd ?? "");
+    }
+  }
 
   async function save() {
     setSaving(true);

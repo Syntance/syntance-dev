@@ -194,9 +194,12 @@ function DateCalendarPanel({
     value ? parseIsoDate(value) : new Date()
   );
 
-  useEffect(() => {
+  // Sync z propem bez efektu (React 19) — wzorzec „poprzedni prop".
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
     if (value) setViewDate(parseIsoDate(value));
-  }, [value]);
+  }
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -349,10 +352,13 @@ export function DateInputField({
   const [text, setText] = useState(() => isoToDisplayDate(value));
   const [invalid, setInvalid] = useState(false);
 
-  useEffect(() => {
+  // Sync z propem bez efektu (React 19) — wzorzec „poprzedni prop".
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
     setText(isoToDisplayDate(value));
     setInvalid(false);
-  }, [value]);
+  }
 
   function commitDate(raw: string) {
     const parsed = parseDisplayDate(raw);
@@ -444,10 +450,13 @@ export function TimeInputField({
   const [text, setText] = useState(display);
   const [invalid, setInvalid] = useState(false);
 
-  useEffect(() => {
+  // Sync z propami bez efektu (React 19) — wzorzec „poprzedni prop".
+  const [prevHM, setPrevHM] = useState({ hour, minute });
+  if (hour !== prevHM.hour || minute !== prevHM.minute) {
+    setPrevHM({ hour, minute });
     setText(formatTimeDisplay(hour, minute));
     setInvalid(false);
-  }, [hour, minute]);
+  }
 
   function commitTime(raw: string) {
     const parsed = parseTimeDisplay(raw);

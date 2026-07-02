@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireProjectAccess, requireProjectReadAccess } from "@/lib/strategy-hub/api-helpers";
+import { requireProjectReadAccess } from "@/lib/strategy-hub/api-helpers";
 import { db } from "@/db";
 import {
   segments,

@@ -63,9 +63,12 @@ function KpiCard({
   const [measure, setMeasure] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  // Sync z propem bez efektu (React 19) — wzorzec „poprzedni prop".
+  const [prevActual, setPrevActual] = useState(kpi.actual);
+  if (kpi.actual !== prevActual) {
+    setPrevActual(kpi.actual);
     setActual(kpi.actual ?? "");
-  }, [kpi.actual]);
+  }
 
   const target = parseNum(kpi.target);
   const actualN = parseNum(kpi.actual);
@@ -300,7 +303,9 @@ export function KpiClient({ projectId, projectName, mode = "editor" }: Props) {
 
   useEffect(() => {
     mounted.current = true;
-    void load();
+    void (async () => {
+      await load();
+    })();
     return () => {
       mounted.current = false;
     };

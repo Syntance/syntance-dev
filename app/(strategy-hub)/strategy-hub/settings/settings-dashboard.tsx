@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useTheme, type Theme } from "@/components/strategy-hub/theme-provider";
+import { useLocalStorageString } from "@/hooks/use-local-storage-string";
 
 const AI_RULES_KEY = "strategy-hub-ai-rules";
 
@@ -131,17 +132,20 @@ function ThemeCard({
 
 export function SettingsDashboard() {
   const { theme, setTheme } = useTheme();
-  const [aiRules, setAiRules] = useState("");
+  const [storedRules, setStoredRules] = useLocalStorageString(AI_RULES_KEY);
+  const [aiRules, setAiRules] = useState(storedRules);
   const [saved, setSaved] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem(AI_RULES_KEY) ?? "";
-    setAiRules(stored);
-  }, []);
+  // Bufor edycji synchronizowany ze źródłem w localStorage bez efektu (wzorzec „poprzedni prop").
+  const [prevStored, setPrevStored] = useState(storedRules);
+  if (storedRules !== prevStored) {
+    setPrevStored(storedRules);
+    setAiRules(storedRules);
+  }
 
   function saveAiRules() {
-    localStorage.setItem(AI_RULES_KEY, aiRules);
+    setStoredRules(aiRules);
     setSaved(true);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => setSaved(false), 2500);
