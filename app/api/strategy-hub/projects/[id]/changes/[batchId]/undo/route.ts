@@ -10,7 +10,12 @@ export async function POST(
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
 
-  const result = await undoBatch(id, batchId, auth.access.userId ?? null);
+  const actorId =
+    auth.access.type === "admin"
+      ? auth.access.session.adminId
+      : auth.access.session.userId;
+
+  const result = await undoBatch(id, batchId, actorId);
   return NextResponse.json({ ok: true, ...result });
 }
 
