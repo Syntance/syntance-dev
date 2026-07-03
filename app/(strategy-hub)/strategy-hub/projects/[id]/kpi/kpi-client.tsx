@@ -141,9 +141,10 @@ function KpiCard({
         <>
           <div className="flex items-end justify-between gap-3">
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              {/* Podpis wartości — nie zawsze ma sparowany control (tryb podglądu pokazuje tekst, nie Input), stąd span zamiast label. */}
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
                 Aktualnie
-              </label>
+              </span>
               <div className="flex items-baseline gap-1">
                 {mode === "editor" ? (
                   <Input
@@ -413,10 +414,11 @@ export function KpiClient({ projectId, projectName, mode = "editor" }: Props) {
         <div className="rounded-xl border border-border bg-card/60 p-4 space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="new-kpi-name" className="text-xs font-medium text-muted-foreground">
                 Nazwa
               </label>
               <Input
+                id="new-kpi-name"
                 value={draft.name}
                 onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
                 placeholder="np. Konwersja landing page"
@@ -424,10 +426,11 @@ export function KpiClient({ projectId, projectName, mode = "editor" }: Props) {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="new-kpi-category" className="text-xs font-medium text-muted-foreground">
                 Kategoria
               </label>
               <Input
+                id="new-kpi-category"
                 value={draft.category}
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, category: e.target.value }))
@@ -437,10 +440,11 @@ export function KpiClient({ projectId, projectName, mode = "editor" }: Props) {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="new-kpi-target" className="text-xs font-medium text-muted-foreground">
                 Cel (target)
               </label>
               <Input
+                id="new-kpi-target"
                 value={draft.target}
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, target: e.target.value }))
@@ -450,10 +454,11 @@ export function KpiClient({ projectId, projectName, mode = "editor" }: Props) {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label htmlFor="new-kpi-unit" className="text-xs font-medium text-muted-foreground">
                 Jednostka
               </label>
               <Input
+                id="new-kpi-unit"
                 value={draft.unit}
                 onChange={(e) => setDraft((d) => ({ ...d, unit: e.target.value }))}
                 placeholder="np. %, zł, szt."

@@ -52,7 +52,7 @@ function token() {
  * Minimalny konwerter markdown → bloki Notion.
  * Obsługuje: nagłówki (#, ##, ###), listy (-, *, 1.), paragrafy, puste linie.
  */
-export function markdownToNotionBlocks(md: string): NotionBlock[] {
+function markdownToNotionBlocks(md: string): NotionBlock[] {
   const lines = md.split("\n");
   const blocks: NotionBlock[] = [];
 
@@ -112,6 +112,7 @@ async function notionFetch(
 ): Promise<unknown> {
   const res = await fetch(`${NOTION_API}${path}`, {
     ...init,
+    signal: AbortSignal.timeout(15_000),
     headers: {
       Authorization: `Bearer ${token()}`,
       "Notion-Version": NOTION_VERSION,

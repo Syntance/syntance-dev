@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 
 function Label({ className, ...props }: React.ComponentProps<"label">) {
   return (
+    // eslint-disable-next-line jsx-a11y/label-has-associated-control -- generyczny wrapper design-systemu; `htmlFor`/zagnieżdżony control ustawia wywołujący (weryfikowane per-użycie).
     <label
       data-slot="label"
       className={cn(

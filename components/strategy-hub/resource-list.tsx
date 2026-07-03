@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export interface FieldConfig {
+interface FieldConfig {
   name: string;
   label: string;
   type?: "text" | "textarea" | "number" | "date" | "select" | "hidden";

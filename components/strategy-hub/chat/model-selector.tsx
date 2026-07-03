@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
-export const CHAT_MODELS = [
+const CHAT_MODELS = [
   {
     id: "claude-opus-4-5",
     label: "Claude Opus 4.5",

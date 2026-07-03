@@ -4,7 +4,7 @@ import * as React from "react";
 import { Undo2, Redo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export interface UndoEntry {
+interface UndoEntry {
   label: string;
   undo: () => Promise<void> | void;
   redo: () => Promise<void> | void;

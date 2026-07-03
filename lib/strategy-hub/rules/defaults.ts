@@ -1,20 +1,14 @@
 import { ENTITY_COLORS } from "../strategy-map-types";
-import type { ModuleRule, RulesConfig } from "./types";
+import { RulesConfigSchema, type ModuleRule, type RulesConfig } from "./types";
 
-/** Klucze modułów health-score (sidebar). */
+/**
+ * Klucze modułów health-score (sidebar). Po scaleniu taksonomii (2.1):
+ * jedna lista kluczy mapy + dwa moduły bez węzła na mapie (discovery, brand).
+ * Zniknęły duplikaty health (business/segments/funnel/sales/website).
+ */
 export const HEALTH_MODULE_KEYS = [
   "discovery",
   "brand",
-  "business",
-  "segments",
-  "funnel",
-  "sales",
-  "website",
-  "kpi",
-] as const;
-
-/** Klucze węzłów mapy makro. */
-export const MAP_NODE_KEYS = [
   "fundament",
   "segmenty",
   "lejek",
@@ -28,13 +22,18 @@ export const MAP_NODE_KEYS = [
  * Domyślna konfiguracja reguł — 1:1 z dotychczasowym hardcode
  * (health-score.ts, strategy-map.ts:491–510, strategy-map-types.ts, buildInfluenceGraph).
  */
-export const DEFAULT_RULES: RulesConfig = {
-  version: 1,
+/**
+ * Domyślne reguły przez `RulesConfigSchema.parse` — defaulty (`onMap`, `version`,
+ * nested optional) wypełniają się tak samo jak dla configów zapisanych w DB.
+ */
+export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
+  version: 2,
 
   modules: [
     {
       key: "discovery",
       label: "Discovery",
+      onMap: false,
       readyThreshold: 80,
       inProgressThreshold: 1,
       criteria: [
@@ -62,6 +61,7 @@ export const DEFAULT_RULES: RulesConfig = {
     {
       key: "brand",
       label: "Marka",
+      onMap: false,
       readyThreshold: 80,
       inProgressThreshold: 1,
       criteria: [
@@ -95,133 +95,6 @@ export const DEFAULT_RULES: RulesConfig = {
           weight: 0.25,
           metric: "custom",
           entity: "brandVisual",
-        },
-      ],
-      lock: { enabled: false, requiresUpstream: [] },
-      stale: { enabled: false },
-      visibleInClient: true,
-    },
-    {
-      key: "business",
-      label: "Strategia biznesowa",
-      readyThreshold: 80,
-      inProgressThreshold: 1,
-      criteria: [
-        {
-          id: "biz_goals",
-          label: "Cele strategiczne",
-          weight: 0.25,
-          metric: "field_filled",
-          entity: "businessStrategy",
-          field: "goalsMd",
-        },
-        {
-          id: "biz_uvp",
-          label: "UVP",
-          weight: 0.25,
-          metric: "field_filled",
-          entity: "businessStrategy",
-          field: "uvpMd",
-        },
-        {
-          id: "biz_competitors",
-          label: "Konkurencja",
-          weight: 0.25,
-          metric: "field_filled",
-          entity: "businessStrategy",
-          field: "competitorsMd",
-        },
-        {
-          id: "biz_objections",
-          label: "Obiekcje",
-          weight: 0.25,
-          metric: "field_filled",
-          entity: "businessStrategy",
-          field: "objectionsMd",
-        },
-      ],
-      lock: { enabled: false, requiresUpstream: [] },
-      stale: { enabled: false },
-      visibleInClient: true,
-    },
-    {
-      key: "segments",
-      label: "Segmenty",
-      readyThreshold: 80,
-      inProgressThreshold: 1,
-      criteria: [
-        {
-          id: "seg_count",
-          label: "≥3 segmenty",
-          weight: 1,
-          metric: "count_gte",
-          entity: "segments",
-          target: 3,
-        },
-      ],
-      lock: { enabled: false, requiresUpstream: [] },
-      stale: { enabled: false },
-      visibleInClient: true,
-    },
-    {
-      key: "funnel",
-      label: "Lejek i kanały",
-      readyThreshold: 80,
-      inProgressThreshold: 1,
-      criteria: [
-        {
-          id: "funnel_channels",
-          label: "≥4 kanały",
-          weight: 1,
-          metric: "count_gte",
-          entity: "channels",
-          target: 4,
-        },
-      ],
-      lock: { enabled: false, requiresUpstream: [] },
-      stale: { enabled: false },
-      visibleInClient: true,
-    },
-    {
-      key: "sales",
-      label: "Sprzedaż i copy",
-      readyThreshold: 80,
-      inProgressThreshold: 1,
-      criteria: [
-        {
-          id: "sales_pitches",
-          label: "≥1 pitch",
-          weight: 0.5,
-          metric: "count_gte",
-          entity: "salesPitches",
-          target: 1,
-        },
-        {
-          id: "sales_scripts",
-          label: "≥1 skrypt",
-          weight: 0.5,
-          metric: "count_gte",
-          entity: "salesScripts",
-          target: 1,
-        },
-      ],
-      lock: { enabled: false, requiresUpstream: [] },
-      stale: { enabled: false },
-      visibleInClient: true,
-    },
-    {
-      key: "website",
-      label: "Strona",
-      readyThreshold: 80,
-      inProgressThreshold: 1,
-      criteria: [
-        {
-          id: "web_pages",
-          label: "≥4 podstrony",
-          weight: 1,
-          metric: "count_gte",
-          entity: "pages",
-          target: 4,
         },
       ],
       lock: { enabled: false, requiresUpstream: [] },
@@ -730,6 +603,7 @@ export const DEFAULT_RULES: RulesConfig = {
   alerts: {
     kpiBelowPct: 80,
     kpiBelowDays: 14,
+    visitDays: 7,
     domainExpiringDays: 30,
     syncFailThreshold: 3,
   },
@@ -739,7 +613,7 @@ export const DEFAULT_RULES: RulesConfig = {
     campaign: "#a78bfa",
     geo: "#22d3ee",
   },
-};
+});
 
 export function findModuleRule(
   rules: RulesConfig,

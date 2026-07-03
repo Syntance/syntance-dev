@@ -9,7 +9,7 @@ export interface ScoringCriterion {
   weight: number; // 1-5
 }
 
-export const DEFAULT_SCORING_CRITERIA: ScoringCriterion[] = [
+const DEFAULT_SCORING_CRITERIA: ScoringCriterion[] = [
   { key: "market_size", label: "Wielkość rynku (TAM)", weight: 5 },
   { key: "reachability", label: "Łatwość dotarcia", weight: 4 },
   { key: "buying_readiness", label: "Gotowość do zakupu", weight: 5 },

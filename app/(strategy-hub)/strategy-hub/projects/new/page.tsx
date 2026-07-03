@@ -88,6 +88,7 @@ export default function NewProjectPage() {
               name="name"
               placeholder="RetroHouse"
               required
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- pierwsze pole formularza nowego projektu.
               autoFocus
             />
           </div>

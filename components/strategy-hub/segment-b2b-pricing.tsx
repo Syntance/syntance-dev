@@ -82,8 +82,9 @@ export function SegmentB2bPricing({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <label className="text-sm font-medium">Warunki trade</label>
+        <label htmlFor="b2b-trade-terms" className="text-sm font-medium">Warunki trade</label>
         <Textarea
+          id="b2b-trade-terms"
           value={data.tradeTermsMd}
           onChange={(e) => setData((d) => ({ ...d, tradeTermsMd: e.target.value }))}
           onBlur={() => commit(data)}
@@ -94,7 +95,7 @@ export function SegmentB2bPricing({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium">Tabela rabatów</label>
+        <span className="text-sm font-medium">Tabela rabatów</span>
         <JsonListEditor
           value={data.discounts as Record<string, unknown>[]}
           columns={[
@@ -118,8 +119,9 @@ export function SegmentB2bPricing({
       </label>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium">Faktura / rozliczenia</label>
+        <label htmlFor="b2b-invoice" className="text-sm font-medium">Faktura / rozliczenia</label>
         <Textarea
+          id="b2b-invoice"
           value={data.invoiceMd}
           onChange={(e) => setData((d) => ({ ...d, invoiceMd: e.target.value }))}
           onBlur={() => commit(data)}
@@ -130,8 +132,9 @@ export function SegmentB2bPricing({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium">Notatki cenowe</label>
+        <label htmlFor="b2b-notes" className="text-sm font-medium">Notatki cenowe</label>
         <Textarea
+          id="b2b-notes"
           value={data.notesMd}
           onChange={(e) => setData((d) => ({ ...d, notesMd: e.target.value }))}
           onBlur={() => commit(data)}

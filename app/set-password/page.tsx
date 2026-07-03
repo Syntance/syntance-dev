@@ -133,6 +133,7 @@ function SetPasswordForm() {
                 className="w-full rounded-lg border border-border bg-background py-3 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-accent-light focus:outline-none focus:ring-2 focus:ring-accent/20"
                 disabled={loading}
                 required
+                // eslint-disable-next-line jsx-a11y/no-autofocus -- jedyne pole formularza.
                 autoFocus
               />
             </div>
@@ -161,6 +162,7 @@ function SetPasswordForm() {
                 className="w-full rounded-lg border border-border bg-background py-3 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-accent-light focus:outline-none focus:ring-2 focus:ring-accent/20"
                 disabled={loading}
                 required
+                // eslint-disable-next-line jsx-a11y/no-autofocus -- pierwsze pole formularza.
                 autoFocus
               />
             </div>

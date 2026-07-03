@@ -45,7 +45,7 @@ export interface GraphNode {
   color: string;
 }
 
-export interface GraphEdge {
+interface GraphEdge {
   id: string;
   source: string;
   target: string;

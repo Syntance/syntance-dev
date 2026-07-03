@@ -42,9 +42,10 @@ import { PathSelector } from "@/components/strategy-hub/path-selector";
 import { useProjectLiveUpdates } from "@/lib/strategy-hub/use-live-updates";
 import {
   type AreaKey,
+  type AreaState,
   AREA_SEGMENT,
   AREA_TABS,
-  areaScoreFromModules,
+  areaStateFromModules,
   areaTabHref,
   healthDotClass,
   projectAreaHref,
@@ -131,6 +132,7 @@ const areaItems = (projectId: string) =>
 interface HealthModule {
   key: string;
   score: number;
+  state: AreaState | "review";
 }
 
 export function NavSidebar() {
@@ -213,8 +215,8 @@ export function NavSidebar() {
     return pathname.startsWith(href);
   };
 
-  function areaDotScore(areaKey: AreaKey): number {
-    return areaScoreFromModules(areaKey, healthModules);
+  function areaDotState(areaKey: AreaKey): AreaState {
+    return areaStateFromModules(areaKey, healthModules);
   }
 
   return (
@@ -284,7 +286,7 @@ export function NavSidebar() {
               </SidebarGroupLabel>
               <SidebarMenu>
                 {areaItems(projectId).map((item) => {
-                  const score = areaDotScore(item.key);
+                  const areaState = areaDotState(item.key);
                   const segment = AREA_SEGMENT[item.key];
                   const tabs = AREA_TABS[item.key];
                   const areaActive = isActive(item.href);
@@ -302,7 +304,7 @@ export function NavSidebar() {
                         <span className="flex-1 truncate">{item.label}</span>
                         <span
                           aria-hidden
-                          className={`size-2 shrink-0 rounded-full ${healthDotClass(score)} group-data-[collapsible=icon]:hidden`}
+                          className={`size-2 shrink-0 rounded-full ${healthDotClass(areaState)} group-data-[collapsible=icon]:hidden`}
                         />
                       </SidebarMenuButton>
                       <SidebarMenuAction

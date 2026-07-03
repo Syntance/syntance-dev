@@ -38,19 +38,18 @@ import {
   type StrategyNode,
   type StrategyEdge,
   type StrategyNodeKey,
-  type NodeStatus,
   type MapLeaf,
   type InfluenceGraph,
   type InfluenceNode,
   type InfluenceLink,
   type InfluenceElement,
   normalizePhase,
-  statusFromScore,
   isStrategyNodeKey,
 } from "./strategy-map-types";
 import { findModuleRule } from "./rules/defaults";
 import { computeModuleScore, type CriterionContext } from "./rules/evaluate";
 import { resolveRules } from "./rules/resolve";
+import { resolveModuleStatuses, type ModuleStatus } from "./rules/state";
 import { projectModuleHref } from "./area-routes";
 import type { Correlation, RulesConfig } from "./rules/types";
 
@@ -58,18 +57,6 @@ function mapNodeScore(rules: RulesConfig, key: string, ctx: CriterionContext): n
   const moduleRule = findModuleRule(rules, key);
   if (!moduleRule) return 0;
   return computeModuleScore(moduleRule, ctx);
-}
-
-/**
- * Propagacja „do przeglądu": moduł ✅ z co najmniej jedną flagowaną encją
- * (upstream zmienił się po tym, jak moduł osiągnął gotowość) → status `review`.
- */
-function withReview(
-  status: NodeStatus,
-  rows: { reviewFlag?: boolean | null }[]
-): NodeStatus {
-  if (status === "ready" && rows.some((r) => r.reviewFlag)) return "review";
-  return status;
 }
 
 function correlationMeta(
@@ -341,13 +328,40 @@ export async function getStrategyMapData(
     })(),
   };
 
-  const fundamentScore = mapNodeScore(rules, "fundament", evalCtx);
-  const segmentScore = mapNodeScore(rules, "segmenty", evalCtx);
-  const lejekScore = mapNodeScore(rules, "lejek", evalCtx);
-  const kanalyScore = mapNodeScore(rules, "kanaly", evalCtx);
-  const przekazScore = mapNodeScore(rules, "przekaz", evalCtx);
-  const stronaScore = mapNodeScore(rules, "strona", evalCtx);
-  const kpiScore = mapNodeScore(rules, "kpi", evalCtx);
+  /**
+   * Jedno źródło stanu modułów: maszyna stanów `resolveModuleStatuses`
+   * (próg gotowości z reguł, locki z `lock.requiresUpstream`, propagacja review).
+   * `statusFromScore`/lokalny licznik locków po stronie klienta zostały usunięte.
+   */
+  const reviewByKey: Record<string, boolean> = {
+    fundament: objectionRows.some((r) => r.reviewFlag),
+    segmenty: segmentRows.some((r) => r.reviewFlag),
+    lejek: elementRows.some((r) => r.reviewFlag),
+    strona: pageRows.some((r) => r.reviewFlag),
+    kpi: kpiRows.some((r) => r.reviewFlag),
+  };
+  const statuses = resolveModuleStatuses(rules, {
+    scoreOf: (key) => mapNodeScore(rules, key, evalCtx),
+    reviewOf: (key) => reviewByKey[key] ?? false,
+  });
+
+  const statusOf = (key: StrategyNodeKey): ModuleStatus =>
+    statuses.get(key) ?? {
+      key,
+      score: mapNodeScore(rules, key, evalCtx),
+      state: "empty",
+      locked: false,
+      blockedBy: [],
+      review: false,
+    };
+
+  const fundamentSt = statusOf("fundament");
+  const segmentSt = statusOf("segmenty");
+  const lejekSt = statusOf("lejek");
+  const kanalySt = statusOf("kanaly");
+  const przekazSt = statusOf("przekaz");
+  const stronaSt = statusOf("strona");
+  const kpiSt = statusOf("kpi");
 
   const toLeaves = <T,>(
     rows: T[],
@@ -373,9 +387,11 @@ export async function getStrategyMapData(
       key: "fundament",
       label: "Fundament",
       icon: "🎯",
-      status: withReview(statusFromScore(fundamentScore), objectionRows),
-      score: fundamentScore,
-      href: projectModuleHref(projectId, "business"),
+      status: fundamentSt.state,
+      score: fundamentSt.score,
+      locked: fundamentSt.locked,
+      blockedBy: fundamentSt.blockedBy,
+      href: projectModuleHref(projectId, "fundament"),
       subcategories: [
         {
           id: "problemy",
@@ -421,9 +437,11 @@ export async function getStrategyMapData(
       key: "segmenty",
       label: "Segmenty",
       icon: "👥",
-      status: withReview(statusFromScore(segmentScore), segmentRows),
-      score: segmentScore,
-      href: projectModuleHref(projectId, "segments"),
+      status: segmentSt.state,
+      score: segmentSt.score,
+      locked: segmentSt.locked,
+      blockedBy: segmentSt.blockedBy,
+      href: projectModuleHref(projectId, "segmenty"),
       subcategories: segmentRows.map((s) => ({
         id: s.id,
         label: s.name,
@@ -435,9 +453,11 @@ export async function getStrategyMapData(
       key: "lejek",
       label: "Lejek",
       icon: "📣",
-      status: withReview(statusFromScore(lejekScore), elementRows),
-      score: lejekScore,
-      href: projectModuleHref(projectId, "funnel"),
+      status: lejekSt.state,
+      score: lejekSt.score,
+      locked: lejekSt.locked,
+      blockedBy: lejekSt.blockedBy,
+      href: projectModuleHref(projectId, "lejek"),
       subcategories: [
         {
           id: "etapy",
@@ -475,9 +495,11 @@ export async function getStrategyMapData(
       key: "kanaly",
       label: "Kanały",
       icon: "📡",
-      status: statusFromScore(kanalyScore),
-      score: kanalyScore,
-      href: `/strategy-hub/projects/${projectId}/execution/channels`,
+      status: kanalySt.state,
+      score: kanalySt.score,
+      locked: kanalySt.locked,
+      blockedBy: kanalySt.blockedBy,
+      href: projectModuleHref(projectId, "kanaly"),
       subcategories: [
         {
           id: "lista-kanalow",
@@ -495,9 +517,11 @@ export async function getStrategyMapData(
       key: "przekaz",
       label: "Przekaz",
       icon: "✍️",
-      status: statusFromScore(przekazScore),
-      score: przekazScore,
-      href: projectModuleHref(projectId, "sales"),
+      status: przekazSt.state,
+      score: przekazSt.score,
+      locked: przekazSt.locked,
+      blockedBy: przekazSt.blockedBy,
+      href: projectModuleHref(projectId, "przekaz"),
       subcategories: [
         {
           id: "pitche",
@@ -531,9 +555,11 @@ export async function getStrategyMapData(
       key: "strona",
       label: "Strona",
       icon: "🌐",
-      status: withReview(statusFromScore(stronaScore), pageRows),
-      score: stronaScore,
-      href: projectModuleHref(projectId, "website"),
+      status: stronaSt.state,
+      score: stronaSt.score,
+      locked: stronaSt.locked,
+      blockedBy: stronaSt.blockedBy,
+      href: projectModuleHref(projectId, "strona"),
       subcategories: [
         {
           id: "podstrony",
@@ -567,8 +593,10 @@ export async function getStrategyMapData(
       key: "kpi",
       label: "KPI",
       icon: "📊",
-      status: withReview(statusFromScore(kpiScore), kpiRows),
-      score: kpiScore,
+      status: kpiSt.state,
+      score: kpiSt.score,
+      locked: kpiSt.locked,
+      blockedBy: kpiSt.blockedBy,
       href: projectModuleHref(projectId, "kpi"),
       subcategories: [
         {

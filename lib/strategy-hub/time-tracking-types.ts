@@ -24,7 +24,7 @@ export interface TimeEntryRow {
   hourlyRate: number | null;
 }
 
-export interface DaySummary {
+interface DaySummary {
   date: string;
   minutes: number;
   entries: number;
@@ -39,7 +39,7 @@ export interface WorkTypeSummary {
   entryCount: number;
 }
 
-export interface ProjectHourlyRates {
+interface ProjectHourlyRates {
   development: number | null;
   maintenance: number | null;
 }

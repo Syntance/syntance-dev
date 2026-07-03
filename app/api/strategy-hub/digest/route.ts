@@ -4,29 +4,17 @@ import { projects, workspaces, healthScoreSnapshots, digestLog } from "@/db/sche
 import { and, eq, isNull } from "drizzle-orm";
 import { buildWeeklyDigest, sendWeeklyDigest } from "@/lib/strategy-hub/digest";
 import { computeProjectHealth } from "@/lib/strategy-hub/health-score";
-
-function isAuthorized(req: NextRequest): boolean {
-  if (!process.env.CRON_SECRET) return true;
-  const headerSecret = req.headers.get("x-cron-secret");
-  if (headerSecret === process.env.CRON_SECRET) return true;
-  // Vercel Cron Jobs wysyłają `Authorization: Bearer ${CRON_SECRET}` automatycznie.
-  const auth = req.headers.get("authorization");
-  return auth === `Bearer ${process.env.CRON_SECRET}`;
-}
+import { isCronAuthorized, cronUnauthorizedResponse } from "@/lib/strategy-hub/api-helpers";
 
 /** Vercel Cron (vercel.json, weekly) — wywołanie GET bez ciała, wszystkie projekty. */
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isCronAuthorized(req)) return cronUnauthorizedResponse();
   return runDigest({});
 }
 
 /** Cron / manual trigger tygodniowego digestu (Resend). */
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!isCronAuthorized(req)) return cronUnauthorizedResponse();
 
   const body = (await req.json().catch(() => ({}))) as {
     projectId?: string;

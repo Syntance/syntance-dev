@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { db } from "@/db";
 import {
   projects,
-  businessStrategy,
   businessProblems,
   objections,
   uvp,
@@ -29,18 +28,12 @@ async function getData(id: string) {
   if (!project) return null;
 
   const [
-    stratRows,
     problemRows,
     objectionRows,
     uvpRows,
     positioningRows,
     competitorRows,
   ] = await Promise.all([
-    db
-      .select()
-      .from(businessStrategy)
-      .where(eq(businessStrategy.projectId, id))
-      .limit(1),
     db
       .select()
       .from(businessProblems)
@@ -69,16 +62,6 @@ async function getData(id: string) {
       .orderBy(asc(competitors.createdAt)),
   ]);
 
-  const strategy = stratRows[0] ?? {
-    projectId: id,
-    goalsMd: "",
-    uvpMd: "",
-    competitorsMd: "",
-    objectionsMd: "",
-    updatedAt: new Date(),
-    updatedBy: null,
-  };
-
   const uvpRow = uvpRows[0] ?? {
     projectId: id,
     coreUvpMd: null,
@@ -98,7 +81,6 @@ async function getData(id: string) {
 
   return {
     project,
-    strategy,
     problems: problemRows,
     objections: objectionRows,
     uvp: uvpRow,
@@ -123,7 +105,6 @@ export default async function BusinessStrategyPage({ params }: Props) {
     <BusinessStrategyEditorLoader
       projectId={id}
       projectName={data.project.name}
-      strategy={data.strategy}
       problems={data.problems}
       objections={data.objections}
       uvp={data.uvp}

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/popover";
 
 export type VisibilityStatus = "visible" | "hidden" | "in_progress";
-export type VisibilityScope = "module" | "record";
+type VisibilityScope = "module" | "record";
 
 interface Option {
   value: VisibilityStatus;

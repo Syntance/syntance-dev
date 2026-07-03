@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import type { ActivityRow, ChannelRow } from "@/components/strategy-hub/funnel-flow";
 
-export const HEATMAP_STAGES = [
+const HEATMAP_STAGES = [
   { key: "TOFU", label: "TOFU", color: "#60a5fa" },
   { key: "MOFU", label: "MOFU", color: "#a78bfa" },
   { key: "BOFU", label: "BOFU", color: "#34d399" },

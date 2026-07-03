@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useMemo, useState } from "react";
 import {
   CalendarDays,
   Check,
@@ -24,13 +24,13 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-export function isoToDisplayDate(iso: string): string {
+function isoToDisplayDate(iso: string): string {
   if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
   const [y, m, d] = iso.split("-");
   return `${d}.${m}.${y}`;
 }
 
-export function parseDisplayDate(input: string): string | null {
+function parseDisplayDate(input: string): string | null {
   const trimmed = input.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
 
@@ -54,11 +54,11 @@ export function parseDisplayDate(input: string): string | null {
   return iso;
 }
 
-export function formatTimeDisplay(hour: string, minute: string): string {
+function formatTimeDisplay(hour: string, minute: string): string {
   return `${hour}:${minute}`;
 }
 
-export function parseTimeDisplay(input: string): { hour: string; minute: string } | null {
+function parseTimeDisplay(input: string): { hour: string; minute: string } | null {
   const trimmed = input.trim();
   const match = /^(\d{1,2}):(\d{1,2})$/.exec(trimmed);
   if (!match) return null;
@@ -70,8 +70,8 @@ export function parseTimeDisplay(input: string): { hour: string; minute: string 
   return { hour: pad2(h), minute: pad2(m) };
 }
 
-export const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => pad2(i));
-export const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => pad2(i));
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => pad2(i));
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => pad2(i));
 
 function parseIsoDate(iso: string): Date {
   return new Date(`${iso}T12:00:00`);
@@ -101,81 +101,6 @@ const PickerTrigger = forwardRef<HTMLButtonElement, PickerTriggerProps>(
   }
 );
 PickerTrigger.displayName = "PickerTrigger";
-
-interface TimeUnitPickerProps {
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-  label: string;
-  columns?: number;
-  className?: string;
-}
-
-export function TimeUnitPicker({
-  value,
-  options,
-  onChange,
-  label,
-  columns = 4,
-  className,
-}: TimeUnitPickerProps) {
-  const [open, setOpen] = useState(false);
-  const selectedRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      selectedRef.current?.scrollIntoView({ block: "center" });
-    }
-  }, [open]);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <PickerTrigger aria-label={label} aria-expanded={open} className={cn("flex-1 min-w-0", className)}>
-          <span className="font-medium tabular-nums">{value}</span>
-          <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
-        </PickerTrigger>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="z-[100] w-[min(16rem,calc(100vw-2rem))] p-2 border-border bg-popover"
-      >
-        <p className="px-1 pb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        <ScrollArea className="h-44">
-          <div
-            className="grid gap-1 pr-2"
-            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-          >
-            {options.map((option) => {
-              const selected = option === value;
-              return (
-                <button
-                  key={option}
-                  ref={selected ? selectedRef : undefined}
-                  type="button"
-                  onClick={() => {
-                    onChange(option);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "flex h-9 items-center justify-center rounded-md text-sm tabular-nums transition-colors",
-                    selected
-                      ? "bg-brand text-white font-medium shadow-[var(--brand-glow)]"
-                      : "text-foreground hover:bg-muted/80"
-                  )}
-                >
-                  {option}
-                </button>
-              );
-            })}
-          </div>
-        </ScrollArea>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 interface DateCalendarPanelProps {
   value: string;
@@ -601,7 +526,7 @@ export function DatePickerField({
   );
 }
 
-export interface SelectOption {
+interface SelectOption {
   value: string;
   label: string;
   icon?: string | null;

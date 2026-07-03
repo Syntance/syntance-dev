@@ -111,21 +111,6 @@ export async function getProjectForAdmin(projectId: string, adminEmail: string) 
   return rows[0] ?? null;
 }
 
-export async function getProjectBySlug(slug: string, workspaceId: string) {
-  const rows = await db
-    .select()
-    .from(projects)
-    .where(
-      and(
-        eq(projects.slug, slug),
-        eq(projects.workspaceId, workspaceId),
-        isNull(projects.deletedAt)
-      )
-    )
-    .limit(1);
-  return rows[0] ?? null;
-}
-
 /**
  * Dostęp do Strategy Hub: konto admin (Prisma) lub klient Sanity z flagą isAdmin.
  */
@@ -171,9 +156,4 @@ export async function assertProjectAccess(projectId: string) {
 
   const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
   return { ok: true as const, access, workspace: ws, project };
-}
-
-export async function requireAdmin() {
-  const access = await requireStrategyHubAccess();
-  return access.session;
 }

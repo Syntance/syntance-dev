@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Pojedyncze kryterium kompletności modułu (health-score / mapa). */
-export const HealthCriterionSchema = z.object({
+const HealthCriterionSchema = z.object({
   id: z.string(),
   label: z.string(),
   weight: z.number().min(0).max(1),
@@ -11,9 +11,14 @@ export const HealthCriterionSchema = z.object({
   field: z.string().optional(),
 });
 
-export const ModuleRuleSchema = z.object({
+const ModuleRuleSchema = z.object({
   key: z.string(),
   label: z.string(),
+  /**
+   * Czy moduł ma węzeł na mapie makro. `false` = moduł tylko health-score
+   * (np. discovery, brand — bez węzła na mapie, ale z kropką w sidebarze).
+   */
+  onMap: z.boolean().default(true),
   readyThreshold: z.number().default(80),
   inProgressThreshold: z.number().default(1),
   criteria: z.array(HealthCriterionSchema),
@@ -31,12 +36,12 @@ export const ModuleRuleSchema = z.object({
   visibleInClient: z.boolean().default(true),
 });
 
-export const ConnectionSchema = z.object({
+const ConnectionSchema = z.object({
   from: z.string(),
   to: z.string(),
 });
 
-export const CorrelationSchema = z.object({
+const CorrelationSchema = z.object({
   id: z.string(),
   sourceType: z.string(),
   targetType: z.string(),
@@ -45,17 +50,21 @@ export const CorrelationSchema = z.object({
   required: z.boolean().default(false),
 });
 
-export const AlertsSchema = z.object({
+const AlertsSchema = z.object({
   kpiBelowPct: z.number().default(80),
   kpiBelowDays: z.number().default(14),
+  /** Okno „brak wizyt klienta" — niezależne od `kpiBelowDays` (audyt 2026-07). */
+  visitDays: z.number().default(7),
   domainExpiringDays: z.number().default(30),
   syncFailThreshold: z.number().default(3),
 });
 
-export const PaletteSchema = z.record(z.string(), z.string());
+const PaletteSchema = z.record(z.string(), z.string());
 
 export const RulesConfigSchema = z.object({
-  version: z.literal(1),
+  // Wersja informacyjna (2 = po scaleniu taksonomii). Celowo `number`, nie
+  // `literal`: stare zapisane configi (v1) nie mogą wywalać `resolveRules`.
+  version: z.number().default(2),
   modules: z.array(ModuleRuleSchema),
   connections: z.array(ConnectionSchema),
   presentationOrder: z.array(z.string()),
@@ -68,5 +77,4 @@ export type HealthCriterion = z.infer<typeof HealthCriterionSchema>;
 export type ModuleRule = z.infer<typeof ModuleRuleSchema>;
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type Correlation = z.infer<typeof CorrelationSchema>;
-export type AlertsConfig = z.infer<typeof AlertsSchema>;
 export type RulesConfig = z.infer<typeof RulesConfigSchema>;

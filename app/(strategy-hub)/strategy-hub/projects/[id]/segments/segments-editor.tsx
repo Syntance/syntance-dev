@@ -496,8 +496,9 @@ export function SegmentsEditor({ projectId, projectName, mode = "editor" }: Prop
                 {isEditor ? (
                   <>
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Status</label>
+                      <label htmlFor="segment-status" className="text-sm font-medium">Status</label>
                       <select
+                        id="segment-status"
                         value={String(selected.status ?? "active")}
                         onChange={(e) =>
                           patchSegment(selected.id, { status: e.target.value })
@@ -510,8 +511,9 @@ export function SegmentsEditor({ projectId, projectName, mode = "editor" }: Prop
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Priorytet</label>
+                      <label htmlFor="segment-priority" className="text-sm font-medium">Priorytet</label>
                       <Input
+                        id="segment-priority"
                         type="number"
                         value={selected.priority == null ? "" : String(selected.priority)}
                         onChange={(e) =>
@@ -524,8 +526,9 @@ export function SegmentsEditor({ projectId, projectName, mode = "editor" }: Prop
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Udział w przych. (%)</label>
+                      <label htmlFor="segment-revenue-share" className="text-sm font-medium">Udział w przych. (%)</label>
                       <Input
+                        id="segment-revenue-share"
                         type="number"
                         min={0}
                         max={100}
@@ -630,7 +633,8 @@ export function SegmentsEditor({ projectId, projectName, mode = "editor" }: Prop
                 rows={3}
               />
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Cennik B2B</label>
+                {/* Nagłówek sekcji nad widgetem kompozytowym (nie pojedynczy control) — span, nie label. */}
+                <span className="text-sm font-medium">Cennik B2B</span>
                 <SegmentB2bPricing
                   value={(selected.segmentPricingMd as string | null) ?? null}
                   onCommit={(v) =>
@@ -647,7 +651,7 @@ export function SegmentsEditor({ projectId, projectName, mode = "editor" }: Prop
                 rows={3}
               />
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">Dane rynkowe</label>
+                <span className="text-sm font-medium">Dane rynkowe</span>
                 <JsonListEditor
                   value={
                     Array.isArray(selected.marketData)

@@ -4,23 +4,8 @@ import { elementVisibility } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
 export type VisibilityStatus = "visible" | "hidden" | "in_progress";
-export type VisibilityOverride = "hidden" | "in_progress";
-export type VisibilityScope = "module" | "record";
-
-/** Klucze modułów strategii — używane dla scope="module". */
-export const MODULE_KEYS = [
-  "discovery",
-  "brand",
-  "business",
-  "segments",
-  "funnel",
-  "sales",
-  "marketing",
-  "website",
-  "kpi",
-  "audit",
-] as const;
-export type ModuleKey = (typeof MODULE_KEYS)[number];
+type VisibilityOverride = "hidden" | "in_progress";
+type VisibilityScope = "module" | "record";
 
 export interface ProjectVisibility {
   /** moduleKey → override (brak klucza = visible) */
@@ -66,7 +51,7 @@ export function moduleStatus(
 }
 
 /** Odczytuje status rekordu (domyślnie visible). */
-export function recordStatus(
+function recordStatus(
   vis: ProjectVisibility,
   entityType: string,
   recordId: string

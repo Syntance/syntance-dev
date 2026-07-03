@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "scripts/reset-password.ts",
+    "scripts/run-sql.ts",
+    "scripts/seed-primary-sites.ts",
+    "scripts/seed-rules.ts",
+    "scripts/migrate-business-strategy.ts"
+  ],
+  "ignore": [
+    "scripts/archive/**",
+    "components/ui/**",
+    "packages/analytics-events/src/index.ts"
+  ]
+}

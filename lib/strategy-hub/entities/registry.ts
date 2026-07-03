@@ -100,7 +100,7 @@ export interface SingletonEntityDef<TPatch = unknown> {
 function listDef<C, P>(d: ListEntityDef<C, P>): ListEntityDef {
   return d as unknown as ListEntityDef;
 }
-export function singletonDef<P>(d: SingletonEntityDef<P>): SingletonEntityDef {
+function singletonDef<P>(d: SingletonEntityDef<P>): SingletonEntityDef {
   return d as unknown as SingletonEntityDef;
 }
 
@@ -1646,11 +1646,6 @@ export function getKpiChild(key: string): ListEntityDef | undefined {
 
 export function registerListEntities(entries: Record<string, ListEntityDef>) {
   Object.assign(listEntities, entries);
-}
-export function registerSingletonEntities(
-  entries: Record<string, SingletonEntityDef>
-) {
-  Object.assign(singletonEntities, entries);
 }
 
 export const listEntityKeys = () => Object.keys(listEntities);

@@ -14,7 +14,7 @@ import {
   type VisibilityStatus,
 } from "@/components/strategy-hub/visibility-control";
 
-export type FieldType =
+type FieldType =
   | "text"
   | "textarea"
   | "url"

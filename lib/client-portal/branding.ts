@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { projects, workspaceBranding } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-export interface BrandColor {
+interface BrandColor {
   name: string;
   value: string;
   /** np. 'brand' | 'brand-light' — nazwa CSS custom property do nadpisania. */

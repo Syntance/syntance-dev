@@ -1,15 +1,23 @@
 import type { Metadata } from "next";
-import { requireStrategyHubAccess } from "@/lib/strategy-hub/context";
+import {
+  requireStrategyHubAccess,
+  getOrCreateWorkspaceForAdmin,
+} from "@/lib/strategy-hub/context";
 import { db } from "@/db";
 import { projects, notionSyncLog } from "@/db/schema";
-import { isNull, desc, eq } from "drizzle-orm";
+import { and, isNull, desc, eq, inArray } from "drizzle-orm";
 import { SyncDashboard, type SyncProject } from "./sync-dashboard";
 
 export const metadata: Metadata = {
   title: "Sync z Notion",
 };
 
-async function getSyncProjects(): Promise<SyncProject[]> {
+/**
+ * Scoped do workspace admina — bez tego widok pokazywał projekty WSZYSTKICH
+ * workspace'ów (wyciek multi-tenant, audyt 2026-07). Log synca dociągany
+ * jednym zapytaniem `DISTINCT ON` zamiast N+1 per projekt.
+ */
+async function getSyncProjects(workspaceId: string): Promise<SyncProject[]> {
   const rows = await db
     .select({
       id: projects.id,
@@ -18,24 +26,29 @@ async function getSyncProjects(): Promise<SyncProject[]> {
       notionPageUrl: projects.notionPageUrl,
     })
     .from(projects)
-    .where(isNull(projects.deletedAt))
+    .where(and(isNull(projects.deletedAt), eq(projects.workspaceId, workspaceId)))
     .orderBy(desc(projects.updatedAt));
 
-  const result: SyncProject[] = [];
-  for (const p of rows) {
-    const [last] = await db
-      .select({
-        direction: notionSyncLog.direction,
-        status: notionSyncLog.status,
-        syncedAt: notionSyncLog.syncedAt,
-        error: notionSyncLog.error,
-      })
-      .from(notionSyncLog)
-      .where(eq(notionSyncLog.projectId, p.id))
-      .orderBy(desc(notionSyncLog.syncedAt))
-      .limit(1);
+  if (rows.length === 0) return [];
 
-    result.push({
+  const projectIds = rows.map((p) => p.id);
+  const lastSyncRows = await db
+    .selectDistinctOn([notionSyncLog.projectId], {
+      projectId: notionSyncLog.projectId,
+      direction: notionSyncLog.direction,
+      status: notionSyncLog.status,
+      syncedAt: notionSyncLog.syncedAt,
+      error: notionSyncLog.error,
+    })
+    .from(notionSyncLog)
+    .where(inArray(notionSyncLog.projectId, projectIds))
+    .orderBy(notionSyncLog.projectId, desc(notionSyncLog.syncedAt));
+
+  const lastSyncByProject = new Map(lastSyncRows.map((r) => [r.projectId, r]));
+
+  return rows.map((p) => {
+    const last = lastSyncByProject.get(p.id);
+    return {
       id: p.id,
       name: p.name,
       icon: p.icon,
@@ -48,13 +61,13 @@ async function getSyncProjects(): Promise<SyncProject[]> {
             error: last.error,
           }
         : null,
-    });
-  }
-  return result;
+    };
+  });
 }
 
 export default async function SyncPage() {
-  await requireStrategyHubAccess();
-  const items = await getSyncProjects();
+  const access = await requireStrategyHubAccess();
+  const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
+  const items = await getSyncProjects(ws.id);
   return <SyncDashboard projects={items} />;
 }

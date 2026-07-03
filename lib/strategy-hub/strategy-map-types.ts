@@ -42,6 +42,13 @@ export interface StrategyNode {
   status: NodeStatus;
   /** 0–100 — kompletność modułu. */
   score: number;
+  /**
+   * Blokada z maszyny stanów (`resolveModuleStatuses`): wymagany upstream jest
+   * 🔴 pusty. Liczona na serwerze — klient tylko renderuje.
+   */
+  locked: boolean;
+  /** Klucze pustych wymaganych upstreamów (do komunikatu „Najpierw uzupełnij X"). */
+  blockedBy: string[];
   /** Link do edytora modułu (tryb editor). */
   href: string;
   subcategories: MapSubcategory[];
@@ -178,12 +185,6 @@ export function normalizePhase(
   if (v.includes("reten") || v.includes("loja") || v.includes("utrzym"))
     return "retention";
   return null;
-}
-
-export function statusFromScore(score: number): NodeStatus {
-  if (score >= 80) return "ready";
-  if (score > 0) return "in_progress";
-  return "empty";
 }
 
 const STRATEGY_NODE_KEY_SET = new Set<string>([

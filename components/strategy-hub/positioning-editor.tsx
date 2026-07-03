@@ -593,10 +593,11 @@ export function PositioningEditor({
         {/* ── Sidebar: my + konkurenci + statement ──────────── */}
         <div className="space-y-3">
           <div>
-            <label className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
+            <label htmlFor="positioning-our-label" className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
               Nasza marka
             </label>
             <Input
+              id="positioning-our-label"
               value={ourLabel}
               onChange={(e) => onOurLabelChange(e.target.value)}
               placeholder="np. Syntance"
@@ -606,9 +607,10 @@ export function PositioningEditor({
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
+              {/* Nagłówek nad listą konkurentów, nie pojedynczy control — span, nie label. */}
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
                 Konkurenci
-              </label>
+              </span>
               <Button
                 type="button"
                 size="sm"
@@ -649,10 +651,11 @@ export function PositioningEditor({
           </div>
 
           <div>
-            <label className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
+            <label htmlFor="positioning-statement" className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
               Statement pozycjonowania
             </label>
             <textarea
+              id="positioning-statement"
               value={statement}
               onChange={(e) => onStatementChange(e.target.value)}
               placeholder="Dla [klient], który [potrzeba], jesteśmy [marką], która [korzyść], w przeciwieństwie do [konkurenta], my [różnica]."

@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RelationPicker } from "@/components/strategy-hub/relation-picker";
 import { upsertFunnelElement } from "@/lib/strategy-hub/actions";
 
-export interface SegmentOption {
+interface SegmentOption {
   id: string;
   name: string;
   code: string | null;
@@ -292,10 +292,11 @@ export function BuyerJourneyEditor({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-muted-foreground">
+                  <label htmlFor={`stage-${stage.id}-what`} className="text-[11px] font-medium text-muted-foreground">
                     Co robi klient
                   </label>
                   <Textarea
+                    id={`stage-${stage.id}-what`}
                     value={stage.whatDoesMd ?? ""}
                     onChange={(e) =>
                       saveField(activeSegmentId, stage.id, "whatDoesMd", e.target.value)
@@ -306,10 +307,11 @@ export function BuyerJourneyEditor({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-muted-foreground">
+                  <label htmlFor={`stage-${stage.id}-action`} className="text-[11px] font-medium text-muted-foreground">
                     Nasza akcja
                   </label>
                   <Textarea
+                    id={`stage-${stage.id}-action`}
                     value={stage.ourActionMd ?? ""}
                     onChange={(e) =>
                       saveField(activeSegmentId, stage.id, "ourActionMd", e.target.value)

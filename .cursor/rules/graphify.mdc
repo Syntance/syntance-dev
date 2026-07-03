@@ -1,0 +1,52 @@
+---
+description: Graph-first workflow — debugowanie, refaktor, planowanie przez graphify (kontrola kosztów)
+alwaysApply: true
+updated: 2026-07
+---
+
+Jeśli w repo istnieje `graphify-out/graph.json`, obowiązuje reguła: **kontekst składasz za darmo, drogie tokeny (Opus / Fable 5) wydajesz tylko na decyzje i edycje.** `graphify query/path/explain/affected/update` to lokalny odczyt JSON — 0 wywołań LLM, 1–5 s.
+
+## Drabina kosztów (zawsze od góry)
+1. DARMOWE — `graphify query/path/explain/affected`, `graphify-out/GRAPH_REPORT.md`, `graphify-out/wiki/index.md`
+2. TANIE — Read TYLKO 1–3 plików wskazanych przez graf (konkretne zakresy linii)
+3. DROGIE — reasoning i edycje na złożonym już kontekście
+Nigdy odwrotnie: zero listowania katalogów, multi-file readów i grepa zanim graf Cię zorientuje. Dotyczy też KAŻDEGO subagenta — wpisz tę regułę do jego promptu.
+
+## Dyscyplina zapytań
+- Zawsze `--budget` (wąskie pytanie → `--budget 800`, szerokie → `1500–2000`).
+- Jeden przepływ → `--dfs`. Szczegóły symbolu → `explain`, nie `query`. Relacja A↔B → `path`.
+
+## DEBUG
+1. `graphify query "<objaw>: <błąd/zachowanie>" --budget 1500`
+2. `graphify path "<entry point>" "<failing symbol>"` — łańcuch wywołań
+3. `graphify explain "<podejrzany>"` — sąsiedzi + lekcje z work-memory
+4. Read tylko wskazanych plików (zwykle 1–3) → fix → `graphify update .` (AST, darmowe)
+5. `graphify save-result --outcome useful|dead_end|corrected` — przyszłe query rankują lepiej
+NIGDY: grep po repo z istniejącym grafem; czytanie katalogu „dla kontekstu".
+
+## REFAKTOR / przebudowa
+1. PRZED zmianą: `graphify affected "<symbol>" --depth 2` — promień rażenia (co się wysypie)
+2. `explain` na węzłach o wysokim degree w promieniu (god nodes = strefy ryzyka)
+3. Plan edycji per plik Z PROMIENIA, nie z odkrywania w trakcie
+4. Edycja → `graphify update .` → ponowny `affected` — domknięcie promienia
+Pominięcie kroku 1 = główne źródło drogich pętli fix-the-fix.
+
+## PLANOWANIE / przeprojektowanie systemu
+Planowanie pali najwięcej Opus/Fable — najpierw wyczerp darmowe artefakty:
+1. `GRAPH_REPORT.md` — architektura, communities, god nodes (już wygenerowany)
+2. `graphify query "current architecture of <obszar>" --budget 2000`
+3. God nodes = hotspoty couplingu — pierwsi kandydaci do rozbicia
+4. Communities = naturalne granice modułów — nowy design zgodny z nimi albo świadomie uzasadnij odstępstwo
+5. `graphify affected "<moduł>"` dla każdej wymienianej części — blast radius migracji
+6. Dopiero TERAZ drogi model podejmuje decyzję projektową na wynikach grafu
+7. Plan wymienia pliki per faza Z GRAFU, nie z domysłów
+
+## Higiena grafu
+- Po sesji edycji: `graphify update .` (hook gita robi to też przy commicie)
+- Pełny rebuild tylko po masywnym refaktorze: `graphify extract . --force`
+- Brak grafu w repo → najpierw go zbuduj, potem obowiązuje ta reguła
+
+## Zakazane
+- Eksploracja grep/read w repo z grafem; `query` bez `--budget`
+- GRAPH_REPORT.md do wąskiego pytania (query jest ~10× mniejsze)
+- Rebuild gdy wystarczy `update`; drogi model czytający surowe pliki „na orientację"

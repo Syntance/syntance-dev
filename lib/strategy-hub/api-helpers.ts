@@ -40,8 +40,6 @@ export async function requireProjectAccess(projectId: string) {
   return { ...check, ok: true as const };
 }
 
-export type ProjectReadRole = "editor" | "client";
-
 /**
  * Odczyt projektu: admin Strategy Hub albo klient portalu z dostępem przez project_clients.
  * Używaj wyłącznie w handlerach GET — mutacje zostają na requireProjectAccess.
@@ -86,6 +84,26 @@ export async function requireProjectReadAccess(projectId: string) {
     session,
     projectId,
   };
+}
+
+/**
+ * Autoryzacja endpointów cron/webhook (digest, notion/cron). Fail-closed na
+ * produkcji: brak `CRON_SECRET` = 401, tak jak MCP (`lib/strategy-hub/mcp/handle-request.ts`).
+ * Lokalnie bez sekretu przepuszcza — wygodne dev.
+ */
+export function isCronAuthorized(req: Request): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return process.env.NODE_ENV !== "production";
+
+  const headerSecret = req.headers.get("x-cron-secret");
+  if (headerSecret === secret) return true;
+  // Vercel Cron Jobs wysyłają `Authorization: Bearer ${CRON_SECRET}` automatycznie.
+  const auth = req.headers.get("authorization");
+  return auth === `Bearer ${secret}`;
+}
+
+export function cronUnauthorizedResponse() {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
 /**

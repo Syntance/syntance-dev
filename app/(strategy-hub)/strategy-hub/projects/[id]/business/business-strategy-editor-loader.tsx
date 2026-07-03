@@ -40,14 +40,6 @@ const BusinessStrategyEditor = dynamic(
   }
 );
 
-interface Strategy {
-  projectId: string;
-  goalsMd: string | null;
-  uvpMd: string | null;
-  competitorsMd: string | null;
-  objectionsMd: string | null;
-}
-
 interface ProblemRow {
   id: string;
   problemMd: string;
@@ -102,7 +94,6 @@ interface CompetitorRow {
 interface Props {
   projectId: string;
   projectName: string;
-  strategy: Strategy;
   problems: ProblemRow[];
   objections: ObjectionRow[];
   uvp: UvpRow;

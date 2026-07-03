@@ -163,6 +163,7 @@ export function TrackSwitcher({
         {creating ? (
           <div className="flex items-center gap-1 p-1">
             <Input
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- pole pojawia się po kliknięciu "nowa ścieżka".
               autoFocus
               value={newName}
               onChange={(e) => setNewName(e.target.value)}

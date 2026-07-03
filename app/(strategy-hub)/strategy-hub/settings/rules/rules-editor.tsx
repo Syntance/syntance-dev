@@ -542,6 +542,12 @@ function AlertsEditor({
         hint="…utrzymuje się poniżej progu."
       />
       <NumberField
+        label="Brak wizyty klienta (dni)"
+        value={alerts.visitDays}
+        onChange={(v) => onChange({ ...alerts, visitDays: v })}
+        hint="Alert, gdy klient nie odwiedził dashboardu tyle dni."
+      />
+      <NumberField
         label="Domena wygasa za (dni)"
         value={alerts.domainExpiringDays}
         onChange={(v) => onChange({ ...alerts, domainExpiringDays: v })}

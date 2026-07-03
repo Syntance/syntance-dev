@@ -53,7 +53,7 @@ async function isAdminEmail(email: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-export async function getAllActiveProjects(): Promise<ClientPortalProject[]> {
+async function getAllActiveProjects(): Promise<ClientPortalProject[]> {
   const rows = await db.select().from(projects).where(isNull(projects.deletedAt));
   return rows.map(toPortalProject);
 }

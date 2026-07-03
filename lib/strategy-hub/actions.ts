@@ -3,7 +3,6 @@
 import { db } from "@/db";
 import {
   segments,
-  purchaseStages,
   funnelElements,
   userFlows,
   kpis,
@@ -48,40 +47,6 @@ export async function deleteSegment(id: string, projectId: string) {
     .update(segments)
     .set({ deletedAt: new Date() })
     .where(eq(segments.id, id));
-  revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
-}
-
-// ─── Purchase stages ─────────────────────────────────────────────────────────
-
-const stageSchema = z.object({
-  segmentId: z.string().uuid(),
-  name: z.string().min(1),
-  phase: z.string().optional(),
-  orderIdx: z.coerce.number().int().optional(),
-  trigger: z.string().optional(),
-  objections: z.string().optional(),
-  emotionalState: z.string().optional(),
-  questions: z.string().optional(),
-});
-
-export async function upsertStage(
-  data: z.infer<typeof stageSchema> & { id?: string; projectId: string }
-) {
-  const { projectId, id, ...rest } = data;
-  const parsed = stageSchema.parse(rest);
-  if (id) {
-    await db.update(purchaseStages).set(parsed).where(eq(purchaseStages.id, id));
-  } else {
-    await db.insert(purchaseStages).values(parsed);
-  }
-  revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
-}
-
-export async function deleteStage(id: string, projectId: string) {
-  await db
-    .update(purchaseStages)
-    .set({ deletedAt: new Date() })
-    .where(eq(purchaseStages.id, id));
   revalidatePath(`/strategy-hub/projects/${projectId}/execution/channels`);
 }
 

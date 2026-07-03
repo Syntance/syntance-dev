@@ -224,6 +224,7 @@ export function PathSelector({ projectId }: PathSelectorProps) {
                       }}
                     >
                       <input
+                        // eslint-disable-next-line jsx-a11y/no-autofocus -- pole zamiany nazwy pojawia się po kliknięciu "edytuj" — bezpośredni skutek akcji użytkownika.
                         autoFocus
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
@@ -297,6 +298,7 @@ export function PathSelector({ projectId }: PathSelectorProps) {
                 }}
               >
                 <input
+                  // eslint-disable-next-line jsx-a11y/no-autofocus -- pole tworzenia ścieżki pojawia się po kliknięciu "nowa ścieżka".
                   autoFocus
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}

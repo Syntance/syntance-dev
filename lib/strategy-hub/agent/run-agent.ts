@@ -10,7 +10,7 @@ import {
   segments,
   uvp,
 } from "@/db/schema";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { getProjectAlerts } from "@/lib/strategy-hub/alerts";
 
 export const AGENT_MODES = ["audit", "research", "improve", "monitor"] as const;
@@ -200,12 +200,4 @@ async function researchMode(projectId: string): Promise<ProposalDraft[]> {
     console.error("agent research mode failed", err);
     return [];
   }
-}
-
-export async function countPendingProposals(projectId: string): Promise<number> {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(aiProposals)
-    .where(and(eq(aiProposals.projectId, projectId), eq(aiProposals.status, "pending")));
-  return row?.count ?? 0;
 }

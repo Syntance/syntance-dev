@@ -297,8 +297,9 @@ export function PageSectionEditor({
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-muted-foreground">CTA — tekst</label>
+                    <label htmlFor="section-cta-text" className="text-[11px] font-medium text-muted-foreground">CTA — tekst</label>
                     <Input
+                      id="section-cta-text"
                       value={selected.ctaText ?? ""}
                       onChange={(e) => saveField(selected.id, "ctaText", e.target.value)}
                       placeholder="np. Zamów teraz"
@@ -306,8 +307,9 @@ export function PageSectionEditor({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-muted-foreground">CTA — URL</label>
+                    <label htmlFor="section-cta-url" className="text-[11px] font-medium text-muted-foreground">CTA — URL</label>
                     <Input
+                      id="section-cta-url"
                       value={selected.ctaUrl ?? ""}
                       onChange={(e) => saveField(selected.id, "ctaUrl", e.target.value)}
                       placeholder="/koszyk"

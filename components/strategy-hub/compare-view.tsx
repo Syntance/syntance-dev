@@ -48,6 +48,9 @@ export function CompareView({
           <X className="size-4" />
         </Button>
       </div>
+      {/* Kontener śledzi przeciąganie rozpoczęte na separatorze (poniżej) — sam nie jest
+          celem interakcji i nie potrzebuje odpowiednika klawiaturowego: ten ma separator. */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div
         ref={containerRef}
         className="relative flex flex-1 min-h-0 overflow-hidden"
@@ -68,6 +71,10 @@ export function CompareView({
           <p className="text-xs font-medium text-muted-foreground mb-2">{leftLabel}</p>
           {left}
         </div>
+        {/* Separator jest już operowalny klawiaturą (onKeyDown niżej, wzorzec ARIA APG
+            "separator jako slider"); `role="separator"` po prostu nie jest na domyślnej
+            liście ról interaktywnych reguły — stąd blokowe wyłączenie dla tego elementu. */}
+        {/* eslint-disable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */}
         <div
           role="separator"
           aria-orientation="vertical"
@@ -85,6 +92,7 @@ export function CompareView({
         >
           <GripVertical className="size-3 text-muted-foreground" />
         </div>
+        {/* eslint-enable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */}
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <p className="text-xs font-medium text-muted-foreground mb-2">{rightLabel}</p>
           {right}

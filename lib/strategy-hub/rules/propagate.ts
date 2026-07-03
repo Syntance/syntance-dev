@@ -13,7 +13,7 @@ import { downstreamOf } from "./state";
  */
 
 /** Klucz encji (rejestr/route) → klucz modułu mapy makro. */
-export const ENTITY_TO_MODULE: Record<string, string> = {
+const ENTITY_TO_MODULE: Record<string, string> = {
   segments: "segmenty",
   objections: "fundament",
   competitors: "fundament",
@@ -34,7 +34,7 @@ export const ENTITY_TO_MODULE: Record<string, string> = {
 };
 
 /** Moduł mapy → tabele encji z kolumną `review_flag` należące do niego. */
-export const MODULE_REVIEW_TABLES: Record<string, string[]> = {
+const MODULE_REVIEW_TABLES: Record<string, string[]> = {
   fundament: ["objections"],
   segmenty: ["segments"],
   lejek: ["funnelElements"],

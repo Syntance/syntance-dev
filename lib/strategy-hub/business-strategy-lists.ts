@@ -26,7 +26,7 @@ export const WEIGHT_OPTIONS: {
 ];
 
 /** Mapuje legacy wagi 1–5 na nowy system 1–3. */
-export function normalizeWeight(raw: number): StrategyListWeight {
+function normalizeWeight(raw: number): StrategyListWeight {
   if (raw >= 4) return 3;
   if (raw === 3) return 2;
   if (raw === 2) return 2;
@@ -183,45 +183,6 @@ export function listItemsPreview(
     return `${preview}… (+${items.length - maxItems})`;
   }
   return preview;
-}
-
-/** @deprecated Użyj parseStrategyListItems */
-export function parseListItems(content: string | null | undefined): string[] {
-  return parseStrategyListItems(content).map((item) => item.text);
-}
-
-/** @deprecated Użyj serializeStrategyListItems */
-export function serializeListItems(items: string[]): string {
-  return serializeStrategyListItems(
-    items.map((text) => createStrategyListItem(text))
-  );
-}
-
-export function weightBorderClass(weight: StrategyListWeight): string {
-  const map: Record<StrategyListWeight, string> = {
-    1: "border-l-emerald-500",
-    2: "border-l-amber-500",
-    3: "border-l-destructive",
-  };
-  return map[weight];
-}
-
-export function weightBgClass(weight: StrategyListWeight): string {
-  const map: Record<StrategyListWeight, string> = {
-    1: "bg-emerald-500/8",
-    2: "bg-amber-500/10",
-    3: "bg-destructive/8",
-  };
-  return map[weight];
-}
-
-export function weightBadgeClass(weight: StrategyListWeight): string {
-  const map: Record<StrategyListWeight, string> = {
-    1: "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-    2: "border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-400",
-    3: "border-destructive/40 bg-destructive/15 text-destructive",
-  };
-  return map[weight];
 }
 
 export function weightPickerActiveClass(weight: StrategyListWeight): string {

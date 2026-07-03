@@ -263,9 +263,9 @@ export function ObjectionsEditor({ projectId, initial, onItemsChange }: Props) {
             {/* Chipy */}
             <div className="flex flex-wrap items-end gap-3">
               <div className="min-w-[200px] flex-1">
-                <label className="mb-1 block text-[11px] font-medium text-muted-foreground">
+                <span className="mb-1 block text-[11px] font-medium text-muted-foreground">
                   Segment
-                </label>
+                </span>
                 <RelationPicker
                   projectId={projectId}
                   entityType="segment"
@@ -278,10 +278,11 @@ export function ObjectionsEditor({ projectId, initial, onItemsChange }: Props) {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-muted-foreground">
+                <label htmlFor="objection-stage" className="mb-1 block text-[11px] font-medium text-muted-foreground">
                   Etap lejka
                 </label>
                 <select
+                  id="objection-stage"
                   value={selected.stage ?? ""}
                   onChange={(e) =>
                     saveField(selected.id, "stage", e.target.value || null, 0)
@@ -297,10 +298,11 @@ export function ObjectionsEditor({ projectId, initial, onItemsChange }: Props) {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-[11px] font-medium text-muted-foreground">
+                <label htmlFor="objection-status" className="mb-1 block text-[11px] font-medium text-muted-foreground">
                   Status
                 </label>
                 <select
+                  id="objection-status"
                   value={selected.status ?? "active"}
                   onChange={(e) => saveField(selected.id, "status", e.target.value, 0)}
                   className="h-9 rounded-md border border-border bg-background px-2 text-sm"

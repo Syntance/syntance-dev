@@ -129,7 +129,7 @@ function readField(
   return undefined;
 }
 
-export function evaluateCriterion(
+function evaluateCriterion(
   criterion: HealthCriterion,
   ctx: CriterionContext
 ): number {

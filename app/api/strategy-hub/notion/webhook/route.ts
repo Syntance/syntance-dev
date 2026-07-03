@@ -25,13 +25,20 @@ export async function POST(req: NextRequest) {
   }
 
   if (parsed.verification_token) {
+    // Musi działać nawet bez sekretu — to jednorazowy handshake do zarejestrowania
+    // webhooka w Notion, zanim NOTION_WEBHOOK_SECRET w ogóle istnieje.
     console.log("[notion-webhook] verification_token:", parsed.verification_token);
     return NextResponse.json({ ok: true });
   }
 
-  // 2) HMAC verification (jeśli skonfigurowany)
+  // 2) HMAC verification — fail-closed na produkcji (spójnie z cron i MCP).
   const secret = process.env.NOTION_WEBHOOK_SECRET;
-  if (secret) {
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      console.warn("[notion-webhook] NOTION_WEBHOOK_SECRET brak na produkcji — odrzucam.");
+      return NextResponse.json({ error: "webhook not configured" }, { status: 401 });
+    }
+  } else {
     const signature = req.headers.get("x-notion-signature") ?? "";
     const expected =
       "sha256=" +

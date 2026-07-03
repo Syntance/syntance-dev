@@ -6,5 +6,5 @@ interface Props {
 
 export default async function ProjectSettingsPage({ params }: Props) {
   const { id } = await params;
-  redirect(`/strategy-hub/projects/${id}/project-settings/sync`);
+  redirect(`/strategy-hub/projects/${id}/project-settings/general`);
 }

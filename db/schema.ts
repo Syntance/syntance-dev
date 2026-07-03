@@ -114,13 +114,25 @@ export const strategyPaths = pgTable(
 
 // ─── Strategia biznesowa (LEGACY — do usunięcia po migracji w PR 1.5) ───────
 
+/**
+ * @deprecated Zastąpione encjami relacyjnymi (`businessProblems`, `uvp`,
+ * `competitors`, `objections` — patrz niżej). Kolumny `*Md` zostają w schemacie
+ * dla kompatybilności wstecz (stare eksporty/API), ale edytor Strategy Hub
+ * i silnik health-score/mapy czytają wyłącznie z encji (Faza F, plan naprawy
+ * 07). Migracja danych: `scripts/migrate-business-strategy.ts`. Drop kolumn —
+ * osobna migracja w przyszłości, po potwierdzeniu braku konsumentów.
+ */
 export const businessStrategy = pgTable("business_strategy", {
   projectId: uuid("project_id")
     .primaryKey()
     .references(() => projects.id, { onDelete: "cascade" }),
+  /** @deprecated Użyj `businessProblems`. */
   goalsMd: text("goals_md"),
+  /** @deprecated Użyj `uvp`. */
   uvpMd: text("uvp_md"),
+  /** @deprecated Użyj `competitors`. */
   competitorsMd: text("competitors_md"),
+  /** @deprecated Użyj `objections`. */
   objectionsMd: text("objections_md"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   updatedBy: uuid("updated_by"),

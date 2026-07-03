@@ -49,3 +49,6 @@ next-env.d.ts
 
 /app/generated/prisma
 .env*.local
+
+# graphify (generated code-graph cache, regenerate with `graphify update .`)
+/graphify-out/

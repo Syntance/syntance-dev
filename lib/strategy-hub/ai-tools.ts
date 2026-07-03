@@ -33,7 +33,7 @@ import {
 
 // ─── Read project ─────────────────────────────────────────────────────────────
 
-export const readProjectTool = (projectId: string) =>
+const readProjectTool = (projectId: string) =>
   tool({
     description:
       "Czyta pełne dane projektu z bazy: informacje podstawowe, strategię biznesową (cele, UVP, konkurencja, obiekcje), segmenty, KPI, user flows, strony, frazy SEO.",
@@ -160,7 +160,7 @@ export const readProjectTool = (projectId: string) =>
 
 // ─── Update business strategy ─────────────────────────────────────────────────
 
-export const updateBusinessStrategyTool = (projectId: string) =>
+const updateBusinessStrategyTool = (projectId: string) =>
   tool({
     description:
       "Aktualizuje sekcję strategii biznesowej projektu. Dla goals, uvp i objections: lista obiektów [{text, note?, weight: 1|2|3}]. Dla competitors: string markdown.",
@@ -225,7 +225,7 @@ export const updateBusinessStrategyTool = (projectId: string) =>
 
 // ─── Upsert segment ───────────────────────────────────────────────────────────
 
-export const upsertSegmentTool = (projectId: string) =>
+const upsertSegmentTool = (projectId: string) =>
   tool({
     description: "Tworzy lub aktualizuje segment docelowy. Podaj id aby zaktualizować istniejący.",
     parameters: z.object({
@@ -251,7 +251,7 @@ export const upsertSegmentTool = (projectId: string) =>
 
 // ─── Upsert KPI ───────────────────────────────────────────────────────────────
 
-export const upsertKpiTool = (projectId: string) =>
+const upsertKpiTool = (projectId: string) =>
   tool({
     description: "Tworzy lub aktualizuje KPI projektu.",
     parameters: z.object({
@@ -276,7 +276,7 @@ export const upsertKpiTool = (projectId: string) =>
 
 // ─── Web search (Tavily) ──────────────────────────────────────────────────────
 
-export const webSearchTool = tool({
+const webSearchTool = tool({
   description:
     "Przeszukuje internet w celu uzyskania aktualnych informacji. Użyj do znalezienia danych o rynku, konkurencji, trendach.",
   parameters: z.object({
@@ -338,7 +338,7 @@ export const webSearchTool = tool({
 
 // ─── Read Notion ──────────────────────────────────────────────────────────────
 
-export const readNotionTool = tool({
+const readNotionTool = tool({
   description:
     "Przeszukuje i czyta strony z Notion workspace. Użyj do pobrania notatek, briefów, dokumentów projektowych.",
   parameters: z.object({
@@ -437,7 +437,7 @@ function extractNotionText(blocks: unknown[]): string {
 
 // ─── Decisions / campaigns / offers ───────────────────────────────────────────
 
-export const listStrategicDecisionsTool = (projectId: string) =>
+const listStrategicDecisionsTool = (projectId: string) =>
   tool({
     description: "Lista decyzji strategicznych projektu z uzasadnieniem.",
     parameters: z.object({}),
@@ -460,7 +460,7 @@ export const listStrategicDecisionsTool = (projectId: string) =>
     },
   });
 
-export const listCampaignsTool = (projectId: string) =>
+const listCampaignsTool = (projectId: string) =>
   tool({
     description: "Lista kampanii marketingowych projektu.",
     parameters: z.object({}),
@@ -481,7 +481,7 @@ export const listCampaignsTool = (projectId: string) =>
     },
   });
 
-export const listGeoAndOffersTool = (projectId: string) =>
+const listGeoAndOffersTool = (projectId: string) =>
   tool({
     description: "Assety GEO/AEO oraz oferty produktowe projektu.",
     parameters: z.object({}),
@@ -546,7 +546,7 @@ export async function suggestSegmentsContext(projectId: string) {
   };
 }
 
-export const suggestSegmentsTool = (projectId: string) =>
+const suggestSegmentsTool = (projectId: string) =>
   tool({
     description:
       "Zbiera kontekst (branża, problemy biznesowe, UVP, konkurencja, istniejące segmenty) aby zaproponować 1–3 nowe segmenty klientów z personą, JTBD i priorytetem. Wywołaj gdy użytkownik prosi o pomysły na segmenty.",
@@ -607,7 +607,7 @@ export async function suggestFunnelContext(projectId: string, segmentId?: string
   };
 }
 
-export const suggestFunnelTool = (projectId: string) =>
+const suggestFunnelTool = (projectId: string) =>
   tool({
     description:
       "Zbiera kontekst lejka (segmenty, etapy zakupu i istniejące elementy) aby zaproponować brakujące elementy lejka per faza (TOFU/MOFU/BOFU/retencja). Wywołaj gdy użytkownik prosi o propozycję lejka lub pyta czego brakuje w lejku.",
@@ -665,7 +665,7 @@ export async function suggestChannelPlanContext(
   };
 }
 
-export const suggestChannelPlanTool = (projectId: string) =>
+const suggestChannelPlanTool = (projectId: string) =>
   tool({
     description:
       "Zbiera segmenty, kanały i istniejący plan działań aby zaproponować brakujące pozycje w matrycy kanał × segment × etap. Wywołaj gdy użytkownik prosi o plan kanałów lub pyta gdzie promować dany segment.",
@@ -705,7 +705,7 @@ export async function suggestObjectionsContext(projectId: string, segmentId?: st
   };
 }
 
-export const suggestObjectionsTool = (projectId: string) =>
+const suggestObjectionsTool = (projectId: string) =>
   tool({
     description:
       "Zbiera segment, jego problem oraz istniejące obiekcje i słabości konkurencji aby zaproponować nowe obiekcje z odpowiedzią i dowodem. Wywołaj gdy użytkownik prosi o obiekcje dla segmentu.",
@@ -778,7 +778,7 @@ export async function analyzeStrategyContext(projectId: string) {
   };
 }
 
-export const analyzeStrategyTool = (projectId: string) =>
+const analyzeStrategyTool = (projectId: string) =>
   tool({
     description:
       "Audytuje spójność strategii: zbiera przekrój danych ze wszystkich modułów (segmenty, lejek, kanały, KPI, strony, oferty) aby wykryć luki, sprzeczności i brakujące powiązania. Wywołaj gdy użytkownik pyta czy strategia jest spójna lub prosi o audyt.",
@@ -828,7 +828,7 @@ export async function compareCompetitorsContext(projectId: string, competitorId?
   };
 }
 
-export const compareCompetitorsTool = (projectId: string) =>
+const compareCompetitorsTool = (projectId: string) =>
   tool({
     description:
       "Porównuje naszą markę z konkurencją: pozycjonowanie na quadrancie + mocne/słabe strony konkurentów. Wywołaj gdy użytkownik prosi o porównanie z konkurencją.",
@@ -884,7 +884,7 @@ export async function generatePageSpecContext(projectId: string, pageId: string)
   };
 }
 
-export const generatePageSpecTool = (projectId: string) =>
+const generatePageSpecTool = (projectId: string) =>
   tool({
     description:
       "Zbiera rolę podstrony w lejku, UVP, obiekcje i wytyczne copy aby zaproponować sekcje strony z copy. Wywołaj gdy użytkownik prosi o spec sekcji dla podstrony.",

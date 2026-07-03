@@ -27,9 +27,9 @@ import {
  * żeby pokazać podgląd przed zapisem. Zapis jest addytywny (nie kasuje istniejących).
  */
 
-export type RelationKind = "campaign" | "channel" | "kpi";
+type RelationKind = "campaign" | "channel" | "kpi";
 
-export interface SuggestedTarget {
+interface SuggestedTarget {
   kind: RelationKind;
   targetId: string;
   targetLabel: string;

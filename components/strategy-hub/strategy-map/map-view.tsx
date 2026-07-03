@@ -32,7 +32,6 @@ import type {
   StrategyEdge,
   StrategyNodeKey,
   MapSubcategory,
-  NodeStatus,
 } from "@/lib/strategy-hub/strategy-map-types";
 
 const UUID_RE =
@@ -113,17 +112,11 @@ export function MapView({
   const canvasW = MARGIN_X * 2 + (ordered.length - 1) * STEP_X + NODE_W;
   const canvasH = 464;
 
-  // Status mapy zależności — które węzły są zablokowane (upstream pusty, tylko editor).
-  const lockedKeys = useMemo(() => {
-    if (mode === "client") return new Set<StrategyNodeKey>();
-    const statusByKey = new Map(nodes.map((n) => [n.key, n.status]));
-    const locked = new Set<StrategyNodeKey>();
-    for (const e of edges) {
-      const up = statusByKey.get(e.from);
-      if (up === "empty") locked.add(e.to);
-    }
-    return locked;
-  }, [nodes, edges, mode]);
+  // Etykiety węzłów — do komunikatu blokady „Najpierw uzupełnij: X".
+  const labelByKey = useMemo(
+    () => new Map(nodes.map((n) => [n.key, n.label])),
+    [nodes]
+  );
 
   const scrollToNode = useCallback(
     (key: StrategyNodeKey) => {
@@ -226,6 +219,10 @@ export function MapView({
         ref={scrollRef}
         className="overflow-x-auto overflow-y-hidden rounded-2xl border border-border bg-[radial-gradient(circle_at_1px_1px,var(--border)_1px,transparent_0)] bg-size-[24px_24px]"
       >
+        {/* Kliknięcie tła zamyka rozwinięty węzeł/kartę — myszowy skrót; klawiatura ma
+            ten sam efekt przez globalny listener Escape (patrz useEffect wyżej), więc
+            nie robimy z całego kanwasu jednego wielkiego, mylącego przystanku Tab. */}
+        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
         <div
           className="relative"
           style={{ width: canvasW, height: canvasH }}
@@ -286,7 +283,15 @@ export function MapView({
           {ordered.map(({ node, cx }) => {
             const isExpanded = currentKey === node.key;
             const dimmed = currentKey != null && !isExpanded;
-            const locked = lockedKeys.has(node.key);
+            // Blokada liczona na serwerze (maszyna stanów); klient nie widzi locków.
+            const locked = mode !== "client" && node.locked;
+            const lockHint = !locked
+              ? undefined
+              : node.blockedBy.length > 0
+                ? `Najpierw uzupełnij: ${node.blockedBy
+                    .map((k) => labelByKey.get(k as StrategyNodeKey) ?? k)
+                    .join(", ")}`
+                : "Najpierw uzupełnij poprzedni moduł";
             return (
               <div key={node.key}>
                 <L1Node
@@ -295,6 +300,7 @@ export function MapView({
                   expanded={isExpanded}
                   dimmed={dimmed}
                   locked={locked}
+                  lockHint={lockHint}
                   mode={mode}
                   reduce={!!reduce}
                   onClick={() => !locked && toggleNode(node.key)}
@@ -370,6 +376,7 @@ function L1Node({
   expanded,
   dimmed,
   locked,
+  lockHint,
   mode,
   reduce,
   onClick,
@@ -380,6 +387,7 @@ function L1Node({
   expanded: boolean;
   dimmed: boolean;
   locked: boolean;
+  lockHint?: string;
   mode: "editor" | "client";
   reduce: boolean;
   onClick: () => void;
@@ -405,7 +413,7 @@ function L1Node({
           expanded ? "border-brand/60 ring-2 ring-brand/20" : "border-border hover:border-brand/40",
           locked && "cursor-not-allowed opacity-50"
         )}
-        title={locked ? "Najpierw uzupełnij poprzedni moduł" : undefined}
+        title={locked ? lockHint : undefined}
         style={{ height: NODE_H }}
       >
         <div className="flex w-full items-center gap-2">
@@ -423,7 +431,11 @@ function L1Node({
           <div
             className={cn(
               "h-full rounded-full",
-              node.score >= 80 ? "bg-success" : node.score > 0 ? "bg-amber-400" : "bg-red-400/60"
+              node.status === "ready"
+                ? "bg-success"
+                : node.status === "empty"
+                  ? "bg-red-400/60"
+                  : "bg-amber-400"
             )}
             style={{ width: `${node.score}%` }}
           />
@@ -605,6 +617,7 @@ function QuickCreateRow({
   return (
     <div className="mt-2 space-y-1.5 rounded-lg border border-border bg-muted/30 p-2">
       <input
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- pole pojawia się po kliknięciu "Dodaj" (quick-create).
         autoFocus
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -776,5 +789,3 @@ function L3Card({
     </motion.div>
   );
 }
-
-export type { NodeStatus };

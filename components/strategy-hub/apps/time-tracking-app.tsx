@@ -639,10 +639,11 @@ export function TimeTrackingApp() {
                 className="min-w-[200px]"
               />
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">
+                <label htmlFor="rate-dev" className="text-xs text-muted-foreground">
                   Development · PLN / h
                 </label>
                 <Input
+                  id="rate-dev"
                   type="number"
                   min={0}
                   step={0.01}
@@ -653,10 +654,11 @@ export function TimeTrackingApp() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">
+                <label htmlFor="rate-maintenance" className="text-xs text-muted-foreground">
                   Utrzymanie · PLN / h
                 </label>
                 <Input
+                  id="rate-maintenance"
                   type="number"
                   min={0}
                   step={0.01}

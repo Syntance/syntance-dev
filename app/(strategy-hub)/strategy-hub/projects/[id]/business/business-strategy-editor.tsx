@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useTransition, useRef, useCallback, useEffect } from "react";
-import dynamic from "next/dynamic";
-import { ListItemsEditor } from "@/components/strategy-hub/list-items-editor";
 import {
   EntityCalloutList,
   type CalloutItem,
@@ -36,30 +34,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-
-const TiptapEditor = dynamic(
-  () =>
-    import("@/components/strategy-hub/tiptap-editor").then((mod) => ({
-      default: mod.TiptapEditor,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex min-h-[200px] items-center justify-center gap-2 border-t border-border text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        Ładowanie edytora…
-      </div>
-    ),
-  }
-);
-
-interface Strategy {
-  projectId: string;
-  goalsMd: string | null;
-  uvpMd: string | null;
-  competitorsMd: string | null;
-  objectionsMd: string | null;
-}
 
 interface ProblemRow {
   id: string;
@@ -101,7 +75,6 @@ interface PositioningRow {
 interface Props {
   projectId: string;
   projectName: string;
-  strategy: Strategy;
   problems: ProblemRow[];
   objections: ObjectionRow[];
   uvp: UvpRow;
@@ -124,15 +97,7 @@ type SectionConfig = {
   color: string;
   iconBg: string;
   activeBar: string;
-  editor:
-    | "list"
-    | "markdown"
-    | "entity-callouts"
-    | "uvp"
-    | "positioning"
-    | "competitors-list";
-  /** Klucz w `strategy` dla edytorów markdown/list — opcjonalny dla nowych typów. */
-  legacyKey?: keyof Strategy;
+  editor: "entity-callouts" | "uvp" | "positioning" | "competitors-list";
   placeholder: string;
   emptyHint?: string;
   accent?: "violet" | "amber" | "rose";
@@ -246,11 +211,7 @@ interface SectionState {
   competitors: CompetitorRow[];
 }
 
-function sectionIsFilled(
-  section: SectionConfig,
-  strategy: Strategy,
-  state: SectionState
-): boolean {
+function sectionIsFilled(section: SectionConfig, state: SectionState): boolean {
   if (section.editor === "entity-callouts") {
     return section.key === "problems"
       ? state.problems.length > 0
@@ -265,19 +226,10 @@ function sectionIsFilled(
   if (section.editor === "positioning") {
     return state.positioning.ourX !== null || state.positioning.statementMd.trim().length > 0;
   }
-  if (section.editor === "competitors-list") {
-    return state.competitors.length > 0;
-  }
-  const content = section.legacyKey ? strategy[section.legacyKey] : null;
-  if (section.editor === "list") return parseStrategyListItems(content).length > 0;
-  return (content?.length ?? 0) > 0;
+  return state.competitors.length > 0;
 }
 
-function sectionPreview(
-  section: SectionConfig,
-  strategy: Strategy,
-  state: SectionState
-): string {
+function sectionPreview(section: SectionConfig, state: SectionState): string {
   if (section.editor === "entity-callouts") {
     const items = section.key === "problems" ? state.problems : state.objections;
     return items[0]?.text.slice(0, 55) ?? "";
@@ -294,14 +246,7 @@ function sectionPreview(
       ? `${state.positioning.competitorsOnQuadrant.length} konkurentów`
       : "";
   }
-  if (section.editor === "competitors-list") {
-    return state.competitors[0]?.name ?? "";
-  }
-  const content = section.legacyKey ? strategy[section.legacyKey] : null;
-  if (section.editor === "list") return listItemsPreview(content, 1);
-  if (!content) return "";
-  const stripped = content.replace(/#+\s/g, "").trim();
-  return stripped.length > 55 ? `${stripped.substring(0, 55)}…` : stripped;
+  return state.competitors[0]?.name ?? "";
 }
 
 function parseCompetitorsOnQuadrant(raw: unknown): CompetitorMarker[] {
@@ -327,14 +272,12 @@ function parseCompetitorsOnQuadrant(raw: unknown): CompetitorMarker[] {
 export function BusinessStrategyEditor({
   projectId,
   projectName,
-  strategy,
   problems,
   objections,
   uvp,
   positioning,
   competitors,
 }: Props) {
-  const [localStrategy, setLocalStrategy] = useState(strategy);
   const [problemItems, setProblemItems] = useState<CalloutItem[]>(
     problems.map(problemToCallout)
   );
@@ -375,6 +318,24 @@ export function BusinessStrategyEditor({
     document.body.style.userSelect = "none";
   }, [navWidth]);
 
+  /** Klawiaturowy odpowiednik przeciągania myszą (WCAG 2.1.1 — operowalność klawiaturą). */
+  const onNavDragKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 32 : 16;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      setNavWidth((w) => Math.max(NAV_MIN, w - step));
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      setNavWidth((w) => Math.min(NAV_MAX, w + step));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setNavWidth(NAV_MIN);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      setNavWidth(NAV_MAX);
+    }
+  }, []);
+
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!draggingNav.current) return;
@@ -397,15 +358,6 @@ export function BusinessStrategyEditor({
   }, []);
 
   const activeSection = SECTIONS.find((s) => s.key === activeKey)!;
-
-  const handleSave = async (key: keyof Strategy, markdown: string) => {
-    await fetch(`/api/strategy-hub/projects/${projectId}/business`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [key]: markdown }),
-    });
-    setLocalStrategy((prev) => ({ ...prev, [key]: markdown }));
-  };
 
   // ── DB-backed CRUD: problems ─────────────────────────────────────
   const problemsApi = `/api/strategy-hub/projects/${projectId}/problems`;
@@ -584,7 +536,7 @@ export function BusinessStrategyEditor({
     competitors: competitorItems,
   };
   const filledCount = SECTIONS.filter((s) =>
-    sectionIsFilled(s, localStrategy, sectionState)
+    sectionIsFilled(s, sectionState)
   ).length;
 
   return (
@@ -597,8 +549,8 @@ export function BusinessStrategyEditor({
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             {projectName} ·{" "}
-            <span className={filledCount === 4 ? "text-success" : "text-muted-foreground"}>
-              {filledCount}/4 uzupełnione
+            <span className={filledCount === SECTIONS.length ? "text-success" : "text-muted-foreground"}>
+              {filledCount}/{SECTIONS.length} uzupełnione
             </span>
           </p>
         </div>
@@ -648,8 +600,8 @@ export function BusinessStrategyEditor({
         >
           {SECTIONS.map((section) => {
             const isActive = activeKey === section.key;
-            const isFilled = sectionIsFilled(section, localStrategy, sectionState);
-            const preview = sectionPreview(section, localStrategy, sectionState);
+            const isFilled = sectionIsFilled(section, sectionState);
+            const preview = sectionPreview(section, sectionState);
             const Icon = section.icon;
 
             return (
@@ -706,14 +658,24 @@ export function BusinessStrategyEditor({
         </nav>
 
         {/* ── Drag handle ──────────────────────────── */}
+        {/* Separator jest operowalny klawiaturą (onKeyDown, wzorzec ARIA APG "separator
+            jako slider"); `role="separator"` nie jest na domyślnej liście ról interaktywnych. */}
+        {/* eslint-disable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */}
         <div
           onMouseDown={onNavDragStart}
+          onKeyDown={onNavDragKeyDown}
           className="w-1 shrink-0 relative cursor-col-resize group"
           role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={navWidth}
+          aria-valuemin={NAV_MIN}
+          aria-valuemax={NAV_MAX}
           aria-label="Przeciągnij aby zmienić szerokość menu"
           title="Przeciągnij aby zmienić szerokość menu"
+          tabIndex={0}
         >
           <div className="absolute inset-y-0 -left-0.5 -right-0.5 group-hover:bg-brand/30 group-active:bg-brand/50 transition-colors" />
+          {/* eslint-enable jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions */}
         </div>
 
         {/* ── Prawy panel ──────────────────────────────── */}
@@ -778,38 +740,14 @@ export function BusinessStrategyEditor({
                 statementMd={positioningData.statementMd}
                 onSave={savePositioning}
               />
-            ) : activeSection.editor === "competitors-list" ? (
+            ) : (
               <CompetitorsEditor
                 items={competitorItems}
                 onAdd={addCompetitor}
                 onUpdate={updateCompetitor}
                 onRemove={removeCompetitor}
               />
-            ) : activeSection.editor === "list" && activeSection.legacyKey ? (
-              <ListItemsEditor
-                initialContent={localStrategy[activeSection.legacyKey]}
-                placeholder={activeSection.placeholder}
-                emptyHint={activeSection.emptyHint}
-                accent={activeSection.accent}
-                onSave={(md) =>
-                  activeSection.legacyKey
-                    ? handleSave(activeSection.legacyKey, md)
-                    : Promise.resolve()
-                }
-                className="rounded-none border-0 h-full"
-              />
-            ) : activeSection.editor === "markdown" && activeSection.legacyKey ? (
-              <TiptapEditor
-                initialContent={localStrategy[activeSection.legacyKey] ?? ""}
-                placeholder={activeSection.placeholder}
-                onSave={(md) =>
-                  activeSection.legacyKey
-                    ? handleSave(activeSection.legacyKey, md)
-                    : Promise.resolve()
-                }
-                className="rounded-none border-0"
-              />
-            ) : null}
+            )}
           </div>
         </div>
       </div>

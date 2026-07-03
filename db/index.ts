@@ -6,5 +6,3 @@ import { getDatabaseUrl } from "@/lib/strategy-hub/db-url";
 const client = postgres(getDatabaseUrl(), { prepare: false });
 
 export const db = drizzle(client, { schema });
-
-export type Database = typeof db;

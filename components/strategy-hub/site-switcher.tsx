@@ -7,7 +7,7 @@ import { OptionCombobox, type ComboOption } from "@/components/strategy-hub/opti
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export interface SiteOption {
+interface SiteOption {
   id: string;
   name: string;
   domain: string | null;
@@ -120,6 +120,7 @@ export function SiteSwitcher({ projectId, sites, activeSiteId }: SiteSwitcherPro
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Nazwa (np. Landing PL)"
               aria-label="Nazwa strony"
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- formularz pojawia się po kliknięciu "nowa strona".
               autoFocus
             />
             <Input

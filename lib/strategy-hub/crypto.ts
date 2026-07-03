@@ -1,10 +1,5 @@
 import "server-only";
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes,
-  scryptSync,
-} from "node:crypto";
+import { createCipheriv, randomBytes, scryptSync } from "node:crypto";
 
 /**
  * Szyfrowanie sekretów dostępowych (project_credentials).
@@ -41,23 +36,3 @@ export function encryptSecret(plaintext: string): string {
   return Buffer.concat([salt, iv, tag, encrypted]).toString("base64");
 }
 
-export function decryptSecret(payload: string): string {
-  const masterKey = getMasterKey();
-  const buf = Buffer.from(payload, "base64");
-  const salt = buf.subarray(0, 16);
-  const iv = buf.subarray(16, 28);
-  const tag = buf.subarray(28, 44);
-  const ciphertext = buf.subarray(44);
-  const derivedKey = scryptSync(masterKey, salt, 32);
-  const decipher = createDecipheriv(ALGO, derivedKey, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([
-    decipher.update(ciphertext),
-    decipher.final(),
-  ]).toString("utf8");
-}
-
-export function isSecretConfigured(): boolean {
-  const key = process.env.STRATEGY_HUB_SECRET_KEY;
-  return Boolean(key && key.length >= 16);
-}

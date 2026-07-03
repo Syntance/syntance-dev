@@ -23,13 +23,13 @@ import {
 } from "@/db/schema";
 import { and, count, desc, eq, isNull, inArray } from "drizzle-orm";
 
-export interface CanvasColor {
+interface CanvasColor {
   name?: string;
   value: string;
   role?: string;
 }
 
-export interface CanvasSegment {
+interface CanvasSegment {
   id: string;
   name: string;
   personaName: string | null;
@@ -38,7 +38,7 @@ export interface CanvasSegment {
   status: string | null;
 }
 
-export interface CanvasKpi {
+interface CanvasKpi {
   id: string;
   name: string;
   target: string | null;
@@ -46,7 +46,7 @@ export interface CanvasKpi {
   unit: string | null;
 }
 
-export interface CanvasCompetitor {
+interface CanvasCompetitor {
   label: string;
   x: number;
   y: number;

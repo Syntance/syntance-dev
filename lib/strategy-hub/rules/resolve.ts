@@ -14,7 +14,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * Głęboki merge: obiekty łączone rekursywnie, tablice i skalary nadpisywane
  * przez wyższy scope. Operuje na `unknown` — wynik waliduje `RulesConfigSchema`.
  */
-export function deepMerge(base: unknown, override: unknown): unknown {
+function deepMerge(base: unknown, override: unknown): unknown {
   if (override === undefined) return base;
   if (isPlainObject(base) && isPlainObject(override)) {
     const out: Record<string, unknown> = { ...base };
