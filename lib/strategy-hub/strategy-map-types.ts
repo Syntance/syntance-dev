@@ -3,6 +3,8 @@
  * Nie importuje DB — bezpieczne do użycia po stronie klienta.
  */
 
+import { ENTITY_TYPE_META } from "@/lib/strategy-hub/entities/entity-types";
+
 /**
  * `review` — moduł był ✅, ale wymagany upstream zmienił się po tym fakcie
  * (propagacja „do przeglądu" ze spec). Renderowany jako pulsujący 🟡, tylko editor.
@@ -126,33 +128,33 @@ export interface StrategyMapData {
 
 /** Kolory typów encji grafu wpływu (limit ~8 — więcej = chaos). */
 export const ENTITY_COLORS: Record<InfluenceEntityType, string> = {
-  stage: "#60a5fa", // 🔵 etap zakupu
-  problem: "#fb923c", // 🟠 problem / ambicja
-  objection: "#f87171", // 🔴 obiekcja
-  goal: "#c084fc", // 🟣 cel / JTBD / emocja
-  element: "#34d399", // 🟢 element lejka (oś)
-  flow: "#38bdf8", // 🔷 user flow
-  seo: "#facc15", // 🟡 SEO keyword
-  page: "#475569", // ⚫ podstrona
-  channel: "#a16207", // 🟤 kanał
-  kpi: "#f472b6", // 📊 KPI (akcent)
-  campaign: "#a78bfa", // 🟪 kampania
-  geo: "#22d3ee", // 🤖 GEO/AEO
+  stage: ENTITY_TYPE_META.stage.color,
+  problem: ENTITY_TYPE_META.problem.color,
+  objection: ENTITY_TYPE_META.objection.color,
+  goal: ENTITY_TYPE_META.flow.color,
+  element: ENTITY_TYPE_META.element.color,
+  flow: ENTITY_TYPE_META.flow.color,
+  seo: ENTITY_TYPE_META.seo_keyword.color,
+  page: ENTITY_TYPE_META.page.color,
+  channel: ENTITY_TYPE_META.channel.color,
+  kpi: ENTITY_TYPE_META.kpi.color,
+  campaign: ENTITY_TYPE_META.campaign.color,
+  geo: ENTITY_TYPE_META.geo.color,
 };
 
 export const ENTITY_LABELS: Record<InfluenceEntityType, string> = {
-  stage: "Etap zakupu",
-  problem: "Problem / ambicja",
-  objection: "Obiekcja",
+  stage: ENTITY_TYPE_META.stage.label,
+  problem: ENTITY_TYPE_META.problem.label,
+  objection: ENTITY_TYPE_META.objection.label,
   goal: "Cel / JTBD / emocja",
-  element: "Element lejka",
-  flow: "User flow",
-  seo: "SEO keyword",
-  page: "Podstrona",
-  channel: "Kanał",
-  kpi: "KPI",
-  campaign: "Kampania",
-  geo: "GEO / AEO",
+  element: ENTITY_TYPE_META.element.label,
+  flow: ENTITY_TYPE_META.flow.label,
+  seo: ENTITY_TYPE_META.seo_keyword.label,
+  page: ENTITY_TYPE_META.page.label,
+  channel: ENTITY_TYPE_META.channel.label,
+  kpi: ENTITY_TYPE_META.kpi.label,
+  campaign: ENTITY_TYPE_META.campaign.label,
+  geo: ENTITY_TYPE_META.geo.label,
 };
 
 /** Kolory faz lejka (dla trybu „po fazie"). */

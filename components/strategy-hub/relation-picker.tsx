@@ -182,7 +182,6 @@ export function RelationPicker({
     if (!open) return;
     const missing = selectedIds.filter((id) => !optionCache.has(id));
     if (missing.length === 0) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- ładowanie etykiet dla pre-selected ID przy pierwszym otwarciu
     fetchOptions("");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 

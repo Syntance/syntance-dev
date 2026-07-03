@@ -23,6 +23,17 @@ export async function PATCH(
   if (!parsed.success)
     return badRequest("Invalid input", parsed.error.flatten());
 
+  const patchData = parsed.data as Record<string, unknown>;
+  const beforeRow = list.get
+    ? await list.get(id, itemId)
+    : (await list.list(id)).find((row) => row.id === itemId);
+  const before =
+    beforeRow && typeof beforeRow === "object"
+      ? Object.fromEntries(
+          Object.keys(patchData).map((key) => [key, beforeRow[key]])
+        )
+      : undefined;
+
   const item = await list.update(id, itemId, parsed.data);
   if (!item) return notFound(list.label);
 
@@ -30,7 +41,8 @@ export async function PATCH(
     projectId: id,
     entityType: entityTypeFor(entity),
     entityId: itemId,
-    patch: parsed.data as Record<string, unknown>,
+    patch: patchData,
+    before,
   });
 
   // Propagacja „do przeglądu" (spec): encja właśnie zapisana = przejrzana;
@@ -54,5 +66,13 @@ export async function DELETE(
 
   const ok = await list.softDelete(id, itemId);
   if (!ok) return notFound(list.label);
+
+  await trackChange({
+    projectId: id,
+    entityType: entityTypeFor(entity),
+    entityId: itemId,
+    patch: { __deleted: true },
+  });
+
   return NextResponse.json({ ok: true });
 }

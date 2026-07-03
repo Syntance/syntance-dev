@@ -1,17 +1,20 @@
 import "server-only";
+import { randomUUID } from "crypto";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { db } from "@/db";
 import {
   aiProposals,
-  objections,
   competitors,
+  objections,
   segments,
   uvp,
 } from "@/db/schema";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { getProjectAlerts } from "@/lib/strategy-hub/alerts";
+import { getListEntity } from "@/lib/strategy-hub/entities/registry";
+import { trackChange, entityTypeFor } from "@/lib/strategy-hub/track-change";
 
 export const AGENT_MODES = ["audit", "research", "improve", "monitor"] as const;
 export type AgentMode = (typeof AGENT_MODES)[number];
@@ -25,41 +28,114 @@ interface ProposalDraft {
 }
 
 /**
- * Agent AI — 4 tryby (Faza 10, M3). TWARDA zasada „zero direct write": każdy
- * tryb tworzy wpisy `ai_proposals` (status pending); żaden nie modyfikuje
- * encji strategicznych bezpośrednio. Zastosowanie propozycji → accept-proposal.ts.
+ * Agent AI — zmiany stosowane od razu (status applied) z batchId do undo.
  */
 export async function runAgentMode(
   projectId: string,
-  mode: AgentMode
-): Promise<{ created: number }> {
+  mode: AgentMode,
+  opts?: { batchId?: string }
+): Promise<{ created: number; batchId: string }> {
+  const batchId = opts?.batchId ?? randomUUID();
   const drafts = await (mode === "audit"
     ? auditMode(projectId)
     : mode === "monitor"
-    ? monitorMode(projectId)
-    : mode === "improve"
-    ? improveMode(projectId)
-    : researchMode(projectId));
+      ? monitorMode(projectId)
+      : mode === "improve"
+        ? improveMode(projectId)
+        : researchMode(projectId));
 
-  if (drafts.length === 0) return { created: 0 };
+  if (drafts.length === 0) return { created: 0, batchId };
 
-  await db.insert(aiProposals).values(
-    drafts.map((d) => ({
+  let applied = 0;
+
+  for (const draft of drafts) {
+    const ok = await applyDraft(projectId, draft, batchId);
+    if (ok) applied += 1;
+
+    await db.insert(aiProposals).values({
       projectId,
       mode,
-      entityType: d.entityType,
-      entityId: d.entityId,
-      diff: d.diff,
-      rationaleMd: d.rationaleMd,
-      sources: d.sources ?? null,
-      status: "pending" as const,
-    }))
-  );
+      entityType: draft.entityType,
+      entityId: draft.entityId,
+      diff: draft.diff,
+      rationaleMd: draft.rationaleMd,
+      sources: draft.sources ?? null,
+      status: "applied",
+      batchId,
+    });
+  }
 
-  return { created: drafts.length };
+  return { created: applied, batchId };
 }
 
-// ── Audyt: braki w obiekcjach (bez odpowiedzi/dowodu) ─────────────────────────
+async function applyDraft(
+  projectId: string,
+  draft: ProposalDraft,
+  batchId: string
+): Promise<boolean> {
+  if (!draft.entityType) return true;
+
+  const def = getListEntity(draft.entityType);
+  if (!def) return false;
+
+  if (draft.diff && draft.entityId) {
+    const patch: Record<string, unknown> = {};
+    const before: Record<string, unknown> = {};
+    for (const [field, { before: b, after }] of Object.entries(draft.diff)) {
+      patch[field] = after;
+      before[field] = b;
+    }
+    const parsed = def.patchSchema.safeParse(patch);
+    if (!parsed.success) return false;
+    const updated = await def.update(projectId, draft.entityId, parsed.data);
+    if (!updated) return false;
+    await trackChange({
+      projectId,
+      entityType: entityTypeFor(draft.entityType),
+      entityId: draft.entityId,
+      patch,
+      before,
+      source: "ai",
+      batchId,
+    });
+    return true;
+  }
+
+  if (draft.diff && !draft.entityId) {
+    const patch: Record<string, unknown> = {};
+    for (const [field, { after }] of Object.entries(draft.diff)) {
+      patch[field] = after;
+    }
+    const parsed = def.createSchema.safeParse(patch);
+    if (!parsed.success) return false;
+    const row = await def.create(projectId, parsed.data);
+    const itemId = typeof row?.id === "string" ? row.id : null;
+    if (!itemId) return false;
+    await trackChange({
+      projectId,
+      entityType: entityTypeFor(draft.entityType),
+      entityId: itemId,
+      patch: { __created: true, ...patch },
+      source: "ai",
+      batchId,
+    });
+    return true;
+  }
+
+  if (draft.entityId && !draft.diff) {
+    await trackChange({
+      projectId,
+      entityType: entityTypeFor(draft.entityType),
+      entityId: draft.entityId,
+      patch: { reviewFlag: true },
+      source: "ai",
+      batchId,
+    });
+    return true;
+  }
+
+  return true;
+}
 
 async function auditMode(projectId: string): Promise<ProposalDraft[]> {
   const rows = await db
@@ -79,13 +155,9 @@ async function auditMode(projectId: string): Promise<ProposalDraft[]> {
     entityType: "objections",
     entityId: o.id,
     diff: null,
-    rationaleMd: `Obiekcja „${o.objectionMd.slice(0, 80)}" nie ma ${
-      !o.responseMd ? "odpowiedzi" : "dowodu (proof)"
-    }. Zaakceptuj, aby oznaczyć do przeglądu.`,
+    rationaleMd: `Obiekcja „${o.objectionMd.slice(0, 80)}" wymaga uzupełnienia — oznaczono do przeglądu.`,
   }));
 }
-
-// ── Monitor: alerty z progów reguł (KPI/domena/wizyty) ────────────────────────
 
 async function monitorMode(projectId: string): Promise<ProposalDraft[]> {
   const alerts = await getProjectAlerts(projectId);
@@ -99,8 +171,6 @@ async function monitorMode(projectId: string): Promise<ProposalDraft[]> {
     };
   });
 }
-
-// ── Improve: dopisanie odpowiedzi na obiekcję bez responseMd (LLM) ────────────
 
 async function improveMode(projectId: string): Promise<ProposalDraft[]> {
   const [objection] = await db
@@ -124,7 +194,7 @@ async function improveMode(projectId: string): Promise<ProposalDraft[]> {
     const { object } = await generateObject<{ response: string }>({
       model: anthropic("claude-haiku-4-5"),
       schema: z.object({ response: z.string().max(600) }),
-      prompt: `Jesteś strategiem sprzedaży B2C/B2B. Napisz krótką (2-4 zdania), konkretną odpowiedź handlową na obiekcję klienta, po polsku.\n\nObiekcja: "${objection.objectionMd}"\n${uvpRow?.coreUvpMd ? `Kontekst UVP firmy: ${uvpRow.coreUvpMd}` : ""}\n\nOdpowiedz tylko treścią odpowiedzi, bez wstępu.`,
+      prompt: `Napisz krótką odpowiedź handlową (2-4 zdania, PL) na obiekcję: "${objection.objectionMd}". ${uvpRow?.coreUvpMd ? `UVP: ${uvpRow.coreUvpMd}` : ""}`,
     });
 
     return [
@@ -132,7 +202,7 @@ async function improveMode(projectId: string): Promise<ProposalDraft[]> {
         entityType: "objections",
         entityId: objection.id,
         diff: { responseMd: { before: null, after: object.response } },
-        rationaleMd: `Propozycja odpowiedzi AI na obiekcję bez odpowiedzi.`,
+        rationaleMd: "AI dopisało odpowiedź na obiekcję.",
       },
     ];
   } catch (err) {
@@ -140,8 +210,6 @@ async function improveMode(projectId: string): Promise<ProposalDraft[]> {
     return [];
   }
 }
-
-// ── Research: nowy potencjalny konkurent (LLM, kontekst segmentów) ───────────
 
 async function researchMode(projectId: string): Promise<ProposalDraft[]> {
   if (!process.env.ANTHROPIC_API_KEY) return [];
@@ -152,7 +220,7 @@ async function researchMode(projectId: string): Promise<ProposalDraft[]> {
       .from(competitors)
       .where(and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))),
     db
-      .select({ name: segments.name, jtbdMd: segments.jtbdMd })
+      .select({ name: segments.name })
       .from(segments)
       .where(and(eq(segments.projectId, projectId), isNull(segments.deletedAt)))
       .limit(3),
@@ -161,14 +229,12 @@ async function researchMode(projectId: string): Promise<ProposalDraft[]> {
   if (segmentRows.length === 0) return [];
 
   try {
-    interface CompetitorDraft {
+    const { object } = await generateObject<{
       name: string;
       type: "direct" | "indirect" | "none";
       strengthsMd: string;
       weaknessesMd: string;
-    }
-
-    const { object } = await generateObject<CompetitorDraft>({
+    }>({
       model: anthropic("claude-haiku-4-5"),
       schema: z.object({
         name: z.string(),
@@ -176,11 +242,7 @@ async function researchMode(projectId: string): Promise<ProposalDraft[]> {
         strengthsMd: z.string().max(300),
         weaknessesMd: z.string().max(300),
       }),
-      prompt: `Zaproponuj JEDNEGO realnego lub archetypowego konkurenta dla firmy działającej w segmentach: ${segmentRows
-        .map((s) => s.name)
-        .join(", ")}. Już znani konkurenci (nie powtarzaj): ${
-        existingCompetitors.map((c) => c.name).join(", ") || "brak"
-      }. Podaj krótkie mocne i słabe strony.`,
+      prompt: `Zaproponuj konkurenta dla segmentów: ${segmentRows.map((s) => s.name).join(", ")}. Nie powtarzaj: ${existingCompetitors.map((c) => c.name).join(", ") || "brak"}.`,
     });
 
     return [
@@ -193,7 +255,7 @@ async function researchMode(projectId: string): Promise<ProposalDraft[]> {
           strengthsMd: { before: null, after: object.strengthsMd },
           weaknessesMd: { before: null, after: object.weaknessesMd },
         },
-        rationaleMd: `Propozycja nowego konkurenta na podstawie analizy segmentów.`,
+        rationaleMd: "AI dodało propozycję konkurenta z researchu segmentów.",
       },
     ];
   } catch (err) {

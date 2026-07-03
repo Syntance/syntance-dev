@@ -5,15 +5,14 @@ import {
   segments,
   purchaseStages,
   funnelElements,
-  funnelElementChannels,
   channels,
 } from "@/db/schema";
 import { eq, and, isNull, inArray } from "drizzle-orm";
+import { listRelations } from "@/lib/strategy-hub/relations/store";
 
 /**
  * Dane dla Funnel Flow Builder (spec: „Płótno z 4 kolumnami TOFU/MOFU/BOFU/
  * Retencja per segment, etapy i elementy jako nody, drag = zmiana stage_id").
- * Jedno wywołanie zamiast N zapytań rozproszonych po komponencie klienckim.
  */
 export async function GET(
   _req: NextRequest,
@@ -67,16 +66,18 @@ export async function GET(
         )
     : [];
 
-  const elementIds = elementRows.map((e) => e.id);
-  const elementChannelRows = elementIds.length
-    ? await db
-        .select({
-          funnelElementId: funnelElementChannels.funnelElementId,
-          channelId: funnelElementChannels.channelId,
-        })
-        .from(funnelElementChannels)
-        .where(inArray(funnelElementChannels.funnelElementId, elementIds))
-    : [];
+  const relations = await listRelations(projectId);
+  const elementChannelRows = relations
+    .filter(
+      (r) =>
+        r.sourceType === "element" &&
+        r.targetType === "channel" &&
+        r.relationType === "publikowany_w"
+    )
+    .map((r) => ({
+      funnelElementId: r.sourceId,
+      channelId: r.targetId,
+    }));
 
   const channelRows = await db
     .select({ id: channels.id, name: channels.name, icon: channels.icon })

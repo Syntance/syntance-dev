@@ -11,6 +11,7 @@ import { ModelSelector, type ChatModelId } from "./model-selector";
 import { MessageBubble } from "./message-bubble";
 import { Badge } from "@/components/ui/badge";
 import type { Message } from "@ai-sdk/react";
+import { useMapFocusFromChat } from "./use-map-focus-from-chat";
 
 const SUGGESTION_PROMPTS = [
   "Przeczytaj dane projektu i powiedz co warto poprawić w strategii",
@@ -55,6 +56,8 @@ export function ChatPanel({ projectId, projectName, seed }: ChatPanelProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useMapFocusFromChat(messages);
 
   const lastSeedNonce = useRef<number>(0);
   useEffect(() => {
@@ -208,7 +211,7 @@ export function ChatPanel({ projectId, projectName, seed }: ChatPanelProps) {
         )}
 
         {messages.map((msg: Message) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} projectId={projectId} />
         ))}
 
         {isLoading && messages[messages.length - 1]?.role === "user" && (

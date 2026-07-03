@@ -7,6 +7,14 @@
     {
       "path": "/api/strategy-hub/notion/cron",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/strategy-hub/embeddings/cron",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/strategy-hub/agent/cron",
+      "schedule": "0 5 * * *"
     }
   ]
 }

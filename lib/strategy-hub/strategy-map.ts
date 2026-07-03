@@ -8,14 +8,9 @@ import {
   segments,
   purchaseStages,
   funnelElements,
-  funnelElementChannels,
-  funnelElementKpis,
-  funnelElementCampaigns,
-  funnelElementGeo,
   campaigns,
   geoAssets,
   userFlows,
-  userFlowPages,
   channels,
   salesPitches,
   salesScripts,
@@ -51,6 +46,7 @@ import { computeModuleScore, type CriterionContext } from "./rules/evaluate";
 import { resolveRules } from "./rules/resolve";
 import { resolveModuleStatuses, type ModuleStatus } from "./rules/state";
 import { projectModuleHref } from "./area-routes";
+import { listRelations } from "./relations/store";
 import type { Correlation, RulesConfig } from "./rules/types";
 
 function mapNodeScore(rules: RulesConfig, key: string, ctx: CriterionContext): number {
@@ -118,7 +114,6 @@ export async function getStrategyMapData(
     stageRows,
     elementRows,
     flowRows,
-    flowPageRows,
     channelRows,
     pitchRows,
     scriptRows,
@@ -128,10 +123,6 @@ export async function getStrategyMapData(
     navRows,
     seoRows,
     kpiRows,
-    elChannelRows,
-    elKpiRows,
-    elCampaignRows,
-    elGeoRows,
     elEventRows,
     campaignRows,
     geoAssetRows,
@@ -198,7 +189,6 @@ export async function getStrategyMapData(
       .select()
       .from(userFlows)
       .where(and(eq(userFlows.projectId, projectId), isNull(userFlows.deletedAt))),
-    db.select().from(userFlowPages),
     db
       .select()
       .from(channels)
@@ -241,10 +231,6 @@ export async function getStrategyMapData(
       .select()
       .from(kpis)
       .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt))),
-    db.select().from(funnelElementChannels),
-    db.select().from(funnelElementKpis),
-    db.select().from(funnelElementCampaigns),
-    db.select().from(funnelElementGeo),
     db.select().from(funnelElementEvents),
     db
       .select({ id: campaigns.id, name: campaigns.name })
@@ -622,6 +608,48 @@ export async function getStrategyMapData(
 
   const presentationOrder: StrategyNodeKey[] =
     rules.presentationOrder.filter(isStrategyNodeKey);
+
+  const semanticRelations = await listRelations(projectId);
+  const elChannelRows = semanticRelations
+    .filter(
+      (r) =>
+        r.sourceType === "element" &&
+        r.targetType === "channel" &&
+        r.relationType === "publikowany_w"
+    )
+    .map((r) => ({ funnelElementId: r.sourceId, channelId: r.targetId }));
+  const elKpiRows = semanticRelations
+    .filter(
+      (r) =>
+        r.sourceType === "element" &&
+        r.targetType === "kpi" &&
+        r.relationType === "mierzony_przez"
+    )
+    .map((r) => ({ funnelElementId: r.sourceId, kpiId: r.targetId }));
+  const elCampaignRows = semanticRelations
+    .filter(
+      (r) =>
+        r.sourceType === "element" &&
+        r.targetType === "campaign" &&
+        r.relationType === "promowany_przez"
+    )
+    .map((r) => ({ funnelElementId: r.sourceId, campaignId: r.targetId }));
+  const elGeoRows = semanticRelations
+    .filter(
+      (r) =>
+        r.sourceType === "element" &&
+        r.targetType === "geo" &&
+        r.relationType === "wspierany_przez"
+    )
+    .map((r) => ({ funnelElementId: r.sourceId, geoAssetId: r.targetId }));
+  const flowPageRows = semanticRelations
+    .filter(
+      (r) =>
+        r.sourceType === "flow" &&
+        r.targetType === "page" &&
+        r.relationType === "prowadzi_przez"
+    )
+    .map((r) => ({ userFlowId: r.sourceId, pageId: r.targetId }));
 
   const influence = buildInfluenceGraph(
     {

@@ -1,11 +1,14 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 import { requireStrategyHubAccess } from "@/lib/strategy-hub/context";
 import { buildChatTools } from "@/lib/strategy-hub/ai-tools";
+import { buildWriteTools } from "@/lib/strategy-hub/ai-tools-write";
+import { buildGraphTools } from "@/lib/strategy-hub/ai-tools-graph";
 
 export const maxDuration = 60;
 
@@ -19,42 +22,51 @@ const bodySchema = z.object({
   projectId: z.string().uuid(),
   messages: z.array(z.any()).min(1),
   model: z.enum(MODELS).default("claude-sonnet-4-5"),
-  tools: z.object({
-    webSearch: z.boolean().default(false),
-    notionRead: z.boolean().default(false),
-  }).default({ webSearch: false, notionRead: false }),
+  tools: z
+    .object({
+      webSearch: z.boolean().default(false),
+      notionRead: z.boolean().default(false),
+    })
+    .default({ webSearch: false, notionRead: false }),
   aiRules: z.string().max(2000).optional().default(""),
 });
 
 export async function POST(req: Request) {
-  try {
-    const session = await requireStrategyHubAccess();
-    if (!session) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-  } catch {
+  const access = await requireStrategyHubAccess().catch(() => null);
+  if (!access) {
     return new Response("Unauthorized", { status: 401 });
   }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json(
-      { error: "ANTHROPIC_API_KEY nie jest ustawiony. Dodaj go do zmiennych środowiskowych." },
+      {
+        error:
+          "ANTHROPIC_API_KEY nie jest ustawiony. Dodaj go do zmiennych środowiskowych.",
+      },
       { status: 500 }
     );
   }
 
   let body: z.infer<typeof bodySchema>;
   try {
-    const raw = await req.json();
-    body = bodySchema.parse(raw);
+    body = bodySchema.parse(await req.json());
   } catch {
     return Response.json({ error: "Nieprawidłowe dane" }, { status: 400 });
   }
 
   const { projectId, messages, model, tools, aiRules } = body;
+  const batchId = randomUUID();
+  const userId =
+    access.type === "admin"
+      ? access.session.adminId
+      : access.session.userId;
 
   const rows = await db
-    .select({ name: projects.name, description: projects.description, clientName: projects.clientName })
+    .select({
+      name: projects.name,
+      description: projects.description,
+      clientName: projects.clientName,
+    })
     .from(projects)
     .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
     .limit(1);
@@ -68,32 +80,28 @@ export async function POST(req: Request) {
 ${project.clientName ? `Klient: ${project.clientName}.` : ""}
 ${project.description ? `Opis: ${project.description}.` : ""}
 
-Twoje zadania:
-- Pomagasz tworzyć i rozwijać strategię biznesową, marketingową i stronę internetową projektu.
-- Możesz **czytać dane projektu** (narzędzie: read_project) i **edytować strategię** (update_business_strategy, upsert_segment, upsert_kpi).
-- Możesz **proponować i analizować**: suggest_segments (nowe segmenty), suggest_funnel (brakujące elementy lejka), analyze_strategy (audyt spójności i luk), compare_competitors (porównanie z konkurencją). Użyj tych narzędzi gdy użytkownik prosi o pomysły, audyt lub porównanie.
-- Gdy użytkownik pyta o dane projektu, użyj read_project zanim zaczniesz odpowiadać.
-- Gdy użytkownik chce coś zmienić w strategii, ZAWSZE najpierw przeczytaj aktualne dane, potem zaproponuj zmiany i — jeśli użytkownik potwierdzi — wykonaj update.
-${tools.webSearch ? "- Możesz przeszukiwać internet (web_search) po aktualne dane o rynku, konkurencji, trendach." : ""}
-${tools.notionRead ? "- Możesz czytać strony z Notion workspace (read_notion)." : ""}
+Masz pełne uprawnienia edycji strategii (create_entity, update_entity, delete_entity, relacje).
+Zmiany wykonuj od razu gdy intencja jest jasna; przy >5 encjach najpierw plan.
+Każda zmiana jest odwracalna (undo). Po zmianach podsumuj co i dlaczego.
+Nawigując po strategii używaj get_neighbors i find_path; gdy omawiasz konkretny element, wywołaj focus_map_node, żeby pokazać go na mapie.
+${tools.webSearch ? "Masz web_search." : ""}${tools.notionRead ? " Masz read_notion." : ""}
 
-Zasady:
-- Odpowiadaj po **polsku** (chyba że użytkownik pisze po angielsku).
-- Bądź konkretny i zadaj pytania, jeśli brakuje Ci kontekstu.
-- Przy propozycji zmian pokaż różnicę przed/po.
-- Nie zmieniaj danych bez potwierdzenia od użytkownika — chyba że sam poprosi o natychmiastowe zapisanie.
-- Formatuj odpowiedzi w markdown: używaj # dla nagłówków, **bold** dla ważnych pojęć, - dla list.${aiRules?.trim() ? `\n\n## Dodatkowe zasady od użytkownika\n${aiRules.trim()}` : ""}`;
-
-  const chatTools = buildChatTools(projectId, tools);
+Odpowiadaj po polsku. Markdown. batchId: ${batchId}${aiRules?.trim() ? `\n\n## Zasady użytkownika\n${aiRules.trim()}` : ""}`;
 
   const result = streamText({
     model: anthropic(model),
     system: systemPrompt,
     messages,
-    tools: chatTools,
+    tools: {
+      ...buildChatTools(projectId, tools),
+      ...buildGraphTools(projectId),
+      ...buildWriteTools(projectId, { batchId, source: "ai", userId }),
+    },
     maxSteps: 15,
     temperature: 0.7,
   });
 
-  return result.toDataStreamResponse();
+  return result.toDataStreamResponse({
+    headers: { "X-Hub-Batch-Id": batchId },
+  });
 }

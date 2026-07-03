@@ -26,7 +26,6 @@ function ProjectMetaLoader({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     if (!projectId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset przy zmianie/braku projectId z URL
       setProject(null);
       return;
     }

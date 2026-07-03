@@ -7,10 +7,10 @@ import {
   funnelElements,
   purchaseStages,
   channels,
-  funnelElementChannels,
 } from "@/db/schema";
-import { eq, isNull, and, asc, inArray } from "drizzle-orm";
+import { eq, isNull, and, asc } from "drizzle-orm";
 import { getProjectById } from "@/lib/strategy-hub/context";
+import { listRelations } from "@/lib/strategy-hub/relations/store";
 import { MarketingDashboard } from "../../marketing/marketing-dashboard";
 import { AutoRelationsPanel } from "@/components/strategy-hub/auto-relations-panel";
 
@@ -68,20 +68,20 @@ export default async function ChannelsPage({ params }: Props) {
     ]);
 
   const elementIds = funnelElementList.map((e) => e.id);
-  const elementChannelRows =
-    elementIds.length > 0
-      ? await db
-          .select()
-          .from(funnelElementChannels)
-          .where(inArray(funnelElementChannels.funnelElementId, elementIds))
-      : [];
-
+  const allRelations = await listRelations(id);
   const channelsByElement: Record<string, string[]> = {};
-  elementChannelRows.forEach((r) => {
-    if (!channelsByElement[r.funnelElementId])
-      channelsByElement[r.funnelElementId] = [];
-    channelsByElement[r.funnelElementId].push(r.channelId);
-  });
+  for (const r of allRelations) {
+    if (
+      r.sourceType === "element" &&
+      elementIds.includes(r.sourceId) &&
+      r.relationType === "publikowany_w" &&
+      r.targetType === "channel"
+    ) {
+      const list = channelsByElement[r.sourceId] ?? [];
+      list.push(r.targetId);
+      channelsByElement[r.sourceId] = list;
+    }
+  }
 
   const funnelElementsWithChannels = funnelElementList.map((e) => ({
     ...e,

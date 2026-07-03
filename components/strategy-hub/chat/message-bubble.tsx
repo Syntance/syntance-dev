@@ -9,9 +9,10 @@ import type { Message } from "@ai-sdk/react";
 
 interface MessageBubbleProps {
   message: Message;
+  projectId: string;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, projectId }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
 
@@ -80,6 +81,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                     args={p.args}
                     result={p.result}
                     state={(p.state ?? "result") as "call" | "result" | "partial-call"}
+                    projectId={projectId}
                   />
                 );
               }

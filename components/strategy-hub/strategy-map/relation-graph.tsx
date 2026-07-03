@@ -24,21 +24,11 @@ import type {
   GraphNode,
   RelationGraphData,
 } from "@/lib/strategy-hub/relation-graph";
+import { ENTITY_TYPE_META } from "@/lib/strategy-hub/entities/entity-types";
 
-const TYPE_LABEL: Record<GraphEntityType, string> = {
-  segment: "Segment",
-  stage: "Etap zakupu",
-  element: "Element lejka",
-  channel: "Kanał",
-  kpi: "KPI",
-  page: "Podstrona",
-  campaign: "Kampania",
-  geo: "GEO/AEO",
-  offer: "Oferta",
-  flow: "User flow",
-  competitor: "Konkurent",
-  objection: "Obiekcja",
-};
+function typeLabel(type: GraphEntityType): string {
+  return ENTITY_TYPE_META[type]?.label ?? type;
+}
 
 const COLUMN_ORDER: GraphEntityType[] = [
   "segment",
@@ -230,7 +220,7 @@ function RelationGraphInner({ projectId, data }: RelationGraphProps) {
                 style={{ borderColor: `${color}88`, background: `${color}14` }}
               >
                 <span className="size-1.5 rounded-full" style={{ background: color }} />
-                {TYPE_LABEL[t]}
+                {typeLabel(t)}
               </button>
             );
           })}
@@ -279,7 +269,7 @@ function RelationGraphInner({ projectId, data }: RelationGraphProps) {
                   className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
                   style={{ background: `${selected.color}22`, color: selected.color }}
                 >
-                  {TYPE_LABEL[selected.type]}
+                  {typeLabel(selected.type)}
                 </span>
                 <h4 className="mt-1 truncate text-sm font-semibold">{selected.label}</h4>
                 {selected.meta && (

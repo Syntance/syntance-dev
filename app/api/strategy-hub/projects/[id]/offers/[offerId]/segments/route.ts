@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { eq, and, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { offers, offerSegments, segments } from "@/db/schema";
-import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import { offers, segments } from "@/db/schema";
+import { requireProjectAccess, badRequest, notFound } from "@/lib/strategy-hub/api-helpers";
+import {
+  listRelations,
+  createRelation,
+  softDeleteRelation,
+} from "@/lib/strategy-hub/relations/store";
 
 const putSchema = z.object({
   segmentIds: z.array(z.string().uuid()),
@@ -27,12 +32,15 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const rows = await db
-    .select({ segmentId: offerSegments.segmentId })
-    .from(offerSegments)
-    .where(eq(offerSegments.offerId, offerId));
+  const relations = await listRelations(projectId, {
+    entity: { type: "offer", id: offerId },
+  });
 
-  return NextResponse.json({ segmentIds: rows.map((r) => r.segmentId) });
+  const segmentIds = relations
+    .filter((r) => r.relationType === "skierowana_do" && r.targetType === "segment")
+    .map((r) => r.targetId);
+
+  return NextResponse.json({ segmentIds });
 }
 
 export async function PUT(
@@ -55,10 +63,9 @@ export async function PUT(
     .limit(1);
 
   if (!offer) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return notFound("Offer");
   }
 
-  // Walidacja segmentów należących do projektu
   if (parsed.data.segmentIds.length > 0) {
     const valid = await db
       .select({ id: segments.id })
@@ -74,14 +81,37 @@ export async function PUT(
     }
   }
 
-  await db.transaction(async (tx) => {
-    await tx.delete(offerSegments).where(eq(offerSegments.offerId, offerId));
-    if (parsed.data.segmentIds.length > 0) {
-      await tx.insert(offerSegments).values(
-        parsed.data.segmentIds.map((segmentId) => ({ offerId, segmentId }))
+  const existing = await listRelations(projectId, {
+    entity: { type: "offer", id: offerId },
+  });
+  const current = existing.filter(
+    (r) =>
+      r.sourceType === "offer" &&
+      r.sourceId === offerId &&
+      r.relationType === "skierowana_do"
+  );
+
+  const desired = new Set(parsed.data.segmentIds);
+  for (const rel of current) {
+    if (!desired.has(rel.targetId)) {
+      await softDeleteRelation(projectId, rel.id, { userId: null });
+    }
+  }
+
+  const currentTargets = new Set(current.map((r) => r.targetId));
+  for (const segmentId of parsed.data.segmentIds) {
+    if (!currentTargets.has(segmentId)) {
+      await createRelation(
+        projectId,
+        {
+          source: { type: "offer", id: offerId },
+          target: { type: "segment", id: segmentId },
+          relationType: "skierowana_do",
+        },
+        { source: "human", userId: null }
       );
     }
-  });
+  }
 
   return NextResponse.json({ ok: true });
 }

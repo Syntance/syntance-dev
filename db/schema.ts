@@ -11,6 +11,7 @@ import {
   index,
   primaryKey,
   uniqueIndex,
+  vector,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
@@ -399,45 +400,6 @@ export const funnelElements = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("funnel_elements_stage_idx").on(t.stageId)]
-);
-
-export const funnelElementChannels = pgTable(
-  "funnel_element_channels",
-  {
-    funnelElementId: uuid("funnel_element_id")
-      .notNull()
-      .references(() => funnelElements.id, { onDelete: "cascade" }),
-    channelId: uuid("channel_id")
-      .notNull()
-      .references(() => channels.id, { onDelete: "cascade" }),
-  },
-  (t) => [primaryKey({ columns: [t.funnelElementId, t.channelId] })]
-);
-
-export const funnelElementKpis = pgTable(
-  "funnel_element_kpis",
-  {
-    funnelElementId: uuid("funnel_element_id")
-      .notNull()
-      .references(() => funnelElements.id, { onDelete: "cascade" }),
-    kpiId: uuid("kpi_id")
-      .notNull()
-      .references(() => kpis.id, { onDelete: "cascade" }),
-  },
-  (t) => [primaryKey({ columns: [t.funnelElementId, t.kpiId] })]
-);
-
-export const userFlowPages = pgTable(
-  "user_flow_pages",
-  {
-    userFlowId: uuid("user_flow_id")
-      .notNull()
-      .references(() => userFlows.id, { onDelete: "cascade" }),
-    pageId: uuid("page_id")
-      .notNull()
-      .references(() => pages.id, { onDelete: "cascade" }),
-  },
-  (t) => [primaryKey({ columns: [t.userFlowId, t.pageId] })]
 );
 
 export const userFlows = pgTable(
@@ -1214,9 +1176,15 @@ export const changeHistory = pgTable(
     newValue: text("new_value"),
     source: varchar("source", { length: 20 }).notNull().default("hub"),
     userId: uuid("user_id"),
+    batchId: uuid("batch_id"),
+    beforeJson: jsonb("before_json"),
+    undoneAt: timestamp("undone_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("change_history_project_idx").on(t.projectId)]
+  (t) => [
+    index("change_history_project_idx").on(t.projectId),
+    index("change_history_batch_idx").on(t.projectId, t.batchId),
+  ]
 );
 
 // ─── Raporty klienta (Faza 16, M2 — trend health score + historia digestów) ──
@@ -1430,60 +1398,26 @@ export const purchaseStagesRelations = relations(
   })
 );
 
-export const funnelElementsRelations = relations(
-  funnelElements,
-  ({ one, many }) => ({
-    stage: one(purchaseStages, {
-      fields: [funnelElements.stageId],
-      references: [purchaseStages.id],
-    }),
-    segment: one(segments, {
-      fields: [funnelElements.segmentId],
-      references: [segments.id],
-    }),
-    channels: many(funnelElementChannels),
-    kpis: many(funnelElementKpis),
-  })
-);
+export const funnelElementsRelations = relations(funnelElements, ({ one }) => ({
+  stage: one(purchaseStages, {
+    fields: [funnelElements.stageId],
+    references: [purchaseStages.id],
+  }),
+  segment: one(segments, {
+    fields: [funnelElements.segmentId],
+    references: [segments.id],
+  }),
+}));
 
 export const channelsRelations = relations(channels, ({ one, many }) => ({
   project: one(projects, {
     fields: [channels.projectId],
     references: [projects.id],
   }),
-  funnelElements: many(funnelElementChannels),
   activityPlan: many(channelActivityPlan),
 }));
 
-export const funnelElementChannelsRelations = relations(
-  funnelElementChannels,
-  ({ one }) => ({
-    funnelElement: one(funnelElements, {
-      fields: [funnelElementChannels.funnelElementId],
-      references: [funnelElements.id],
-    }),
-    channel: one(channels, {
-      fields: [funnelElementChannels.channelId],
-      references: [channels.id],
-    }),
-  })
-);
-
-export const funnelElementKpisRelations = relations(
-  funnelElementKpis,
-  ({ one }) => ({
-    funnelElement: one(funnelElements, {
-      fields: [funnelElementKpis.funnelElementId],
-      references: [funnelElements.id],
-    }),
-    kpi: one(kpis, {
-      fields: [funnelElementKpis.kpiId],
-      references: [kpis.id],
-    }),
-  })
-);
-
-export const userFlowsRelations = relations(userFlows, ({ one, many }) => ({
+export const userFlowsRelations = relations(userFlows, ({ one }) => ({
   project: one(projects, {
     fields: [userFlows.projectId],
     references: [projects.id],
@@ -1491,18 +1425,6 @@ export const userFlowsRelations = relations(userFlows, ({ one, many }) => ({
   segment: one(segments, {
     fields: [userFlows.segmentId],
     references: [segments.id],
-  }),
-  pages: many(userFlowPages),
-}));
-
-export const userFlowPagesRelations = relations(userFlowPages, ({ one }) => ({
-  userFlow: one(userFlows, {
-    fields: [userFlowPages.userFlowId],
-    references: [userFlows.id],
-  }),
-  page: one(pages, {
-    fields: [userFlowPages.pageId],
-    references: [pages.id],
   }),
 }));
 
@@ -1527,7 +1449,6 @@ export const pagesRelations = relations(pages, ({ one, many }) => ({
     references: [sites.id],
   }),
   sections: many(pageSections),
-  userFlows: many(userFlowPages),
 }));
 
 export const pageSectionsRelations = relations(pageSections, ({ one }) => ({
@@ -1809,6 +1730,58 @@ export const decisionLinks = pgTable(
   (t) => [index("decision_links_decision_idx").on(t.decisionId)]
 );
 
+/** Uniwersalny graf relacji semantycznych (Strategy Hub — Mózg strategii). */
+export const entityRelations = pgTable(
+  "entity_relations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    pathId: uuid("path_id").references(() => strategyPaths.id, {
+      onDelete: "set null",
+    }),
+    sourceType: varchar("source_type", { length: 50 }).notNull(),
+    sourceId: uuid("source_id").notNull(),
+    targetType: varchar("target_type", { length: 50 }).notNull(),
+    targetId: uuid("target_id").notNull(),
+    relationType: varchar("relation_type", { length: 50 }).notNull(),
+    strength: real("strength"),
+    rationaleMd: text("rationale_md"),
+    source: varchar("source", { length: 10 }).notNull().default("human"),
+    confidence: real("confidence"),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [
+    index("entity_relations_project_idx").on(t.projectId),
+    index("entity_relations_source_idx").on(t.sourceType, t.sourceId),
+    index("entity_relations_target_idx").on(t.targetType, t.targetId),
+  ]
+);
+
+/** Embeddingi semantyczne encji (Voyage AI + pgvector). */
+export const entityEmbeddings = pgTable(
+  "entity_embeddings",
+  {
+    entityType: varchar("entity_type", { length: 50 }).notNull(),
+    entityId: uuid("entity_id").notNull(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    contentHash: varchar("content_hash", { length: 64 }).notNull(),
+    embedding: vector("embedding", { dimensions: 1024 }).notNull(),
+    model: varchar("model", { length: 50 }).notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.entityType, t.entityId] }),
+    index("entity_embeddings_project_idx").on(t.projectId),
+  ]
+);
+
 // ─── Strategy Hub 2.0 — kampanie, GEO, oferty ──────────────────────────────
 
 export const campaigns = pgTable(
@@ -1841,21 +1814,6 @@ export const campaigns = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("campaigns_project_idx").on(t.projectId)]
-);
-
-export const funnelElementCampaigns = pgTable(
-  "funnel_element_campaigns",
-  {
-    funnelElementId: uuid("funnel_element_id")
-      .notNull()
-      .references(() => funnelElements.id, { onDelete: "cascade" }),
-    campaignId: uuid("campaign_id")
-      .notNull()
-      .references(() => campaigns.id, { onDelete: "cascade" }),
-  },
-  (t) => [
-    primaryKey({ columns: [t.funnelElementId, t.campaignId] }),
-  ]
 );
 
 export const geoAssets = pgTable(
@@ -1896,19 +1854,6 @@ export const geoQueries = pgTable(
   (t) => [index("geo_queries_project_idx").on(t.projectId)]
 );
 
-export const funnelElementGeo = pgTable(
-  "funnel_element_geo",
-  {
-    funnelElementId: uuid("funnel_element_id")
-      .notNull()
-      .references(() => funnelElements.id, { onDelete: "cascade" }),
-    geoAssetId: uuid("geo_asset_id")
-      .notNull()
-      .references(() => geoAssets.id, { onDelete: "cascade" }),
-  },
-  (t) => [primaryKey({ columns: [t.funnelElementId, t.geoAssetId] })]
-);
-
 export const offers = pgTable(
   "offers",
   {
@@ -1925,19 +1870,6 @@ export const offers = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("offers_project_idx").on(t.projectId)]
-);
-
-export const offerSegments = pgTable(
-  "offer_segments",
-  {
-    offerId: uuid("offer_id")
-      .notNull()
-      .references(() => offers.id, { onDelete: "cascade" }),
-    segmentId: uuid("segment_id")
-      .notNull()
-      .references(() => segments.id, { onDelete: "cascade" }),
-  },
-  (t) => [primaryKey({ columns: [t.offerId, t.segmentId] })]
 );
 
 // ─── Strategy Hub 2.0 — komentarze per encja ───────────────────────────────
@@ -2000,8 +1932,9 @@ export const aiProposals = pgTable(
     rationaleMd: text("rationale_md"),
     /** [{title, url}] — źródła z trybu research */
     sources: jsonb("sources"),
-    /** 'pending' | 'accepted' | 'rejected' | 'expired' */
+    /** 'pending' | 'accepted' | 'rejected' | 'expired' | 'applied' */
     status: varchar("status", { length: 20 }).notNull().default("pending"),
+    batchId: uuid("batch_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     resolvedAt: timestamp("resolved_at"),
     resolvedBy: uuid("resolved_by"),

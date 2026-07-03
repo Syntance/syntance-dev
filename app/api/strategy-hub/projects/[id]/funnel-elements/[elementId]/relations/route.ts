@@ -3,10 +3,6 @@ import { requireProjectAccess } from "@/lib/strategy-hub/api-helpers";
 import { db } from "@/db";
 import {
   funnelElements,
-  funnelElementChannels,
-  funnelElementKpis,
-  funnelElementCampaigns,
-  funnelElementGeo,
   funnelElementEvents,
   purchaseStages,
   segments,
@@ -14,6 +10,11 @@ import {
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { isConversionEvent } from "@/packages/analytics-events/src";
+import {
+  listRelations,
+  createRelation,
+  softDeleteRelation,
+} from "@/lib/strategy-hub/relations/store";
 
 const schema = z.object({
   channelIds: z.array(z.string().uuid()).optional(),
@@ -23,7 +24,13 @@ const schema = z.object({
   eventKeys: z.array(z.string().max(100)).optional(),
 });
 
-// GET current relations for an element
+const RELATION_MAP = {
+  channelIds: { targetType: "channel" as const, relationType: "publikowany_w" },
+  kpiIds: { targetType: "kpi" as const, relationType: "mierzony_przez" },
+  campaignIds: { targetType: "campaign" as const, relationType: "promowany_przez" },
+  geoAssetIds: { targetType: "geo" as const, relationType: "wspierany_przez" },
+};
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; elementId: string }> }
@@ -32,39 +39,84 @@ export async function GET(
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
 
-  const [channelRows, kpiRows, campaignRows, geoRows, eventRows] = await Promise.all([
-    db
-      .select({ channelId: funnelElementChannels.channelId })
-      .from(funnelElementChannels)
-      .where(eq(funnelElementChannels.funnelElementId, elementId)),
-    db
-      .select({ kpiId: funnelElementKpis.kpiId })
-      .from(funnelElementKpis)
-      .where(eq(funnelElementKpis.funnelElementId, elementId)),
-    db
-      .select({ campaignId: funnelElementCampaigns.campaignId })
-      .from(funnelElementCampaigns)
-      .where(eq(funnelElementCampaigns.funnelElementId, elementId)),
-    db
-      .select({ geoAssetId: funnelElementGeo.geoAssetId })
-      .from(funnelElementGeo)
-      .where(eq(funnelElementGeo.funnelElementId, elementId)),
-    db
-      .select({ eventKey: funnelElementEvents.eventKey })
-      .from(funnelElementEvents)
-      .where(eq(funnelElementEvents.funnelElementId, elementId)),
-  ]);
+  const relations = await listRelations(id, {
+    entity: { type: "element", id: elementId },
+  });
+
+  const channelIds = relations
+    .filter((r) => r.relationType === "publikowany_w" && r.targetType === "channel")
+    .map((r) => r.targetId);
+  const kpiIds = relations
+    .filter((r) => r.relationType === "mierzony_przez" && r.targetType === "kpi")
+    .map((r) => r.targetId);
+  const campaignIds = relations
+    .filter(
+      (r) => r.relationType === "promowany_przez" && r.targetType === "campaign"
+    )
+    .map((r) => r.targetId);
+  const geoAssetIds = relations
+    .filter((r) => r.relationType === "wspierany_przez" && r.targetType === "geo")
+    .map((r) => r.targetId);
+
+  const eventRows = await db
+    .select({ eventKey: funnelElementEvents.eventKey })
+    .from(funnelElementEvents)
+    .where(eq(funnelElementEvents.funnelElementId, elementId));
 
   return NextResponse.json({
-    channelIds: channelRows.map((r) => r.channelId),
-    kpiIds: kpiRows.map((r) => r.kpiId),
-    campaignIds: campaignRows.map((r) => r.campaignId),
-    geoAssetIds: geoRows.map((r) => r.geoAssetId),
+    channelIds,
+    kpiIds,
+    campaignIds,
+    geoAssetIds,
     eventKeys: eventRows.map((r) => r.eventKey),
   });
 }
 
-// PUT replaces all relations atomically
+async function syncRelationGroup(
+  projectId: string,
+  elementId: string,
+  relationType: string,
+  targetType: "channel" | "kpi" | "campaign" | "geo",
+  targetIds: string[] | undefined
+): Promise<void> {
+  if (targetIds === undefined) return;
+
+  const existing = await listRelations(projectId, {
+    entity: { type: "element", id: elementId },
+  });
+
+  const current = existing.filter(
+    (r) =>
+      r.sourceType === "element" &&
+      r.sourceId === elementId &&
+      r.relationType === relationType &&
+      r.targetType === targetType
+  );
+
+  const desired = new Set(targetIds);
+  const currentTargets = new Map(current.map((r) => [r.targetId, r.id]));
+
+  for (const rel of current) {
+    if (!desired.has(rel.targetId)) {
+      await softDeleteRelation(projectId, rel.id, { userId: null });
+    }
+  }
+
+  for (const targetId of targetIds) {
+    if (!currentTargets.has(targetId)) {
+      await createRelation(
+        projectId,
+        {
+          source: { type: "element", id: elementId },
+          target: { type: targetType, id: targetId },
+          relationType,
+        },
+        { source: "human", userId: null }
+      );
+    }
+  }
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; elementId: string }> }
@@ -73,24 +125,18 @@ export async function PUT(
   const auth = await requireProjectAccess(projectId);
   if (!auth.ok) return auth.response;
 
-  const body = await req.json();
+  const body: unknown = await req.json();
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  // Verify element belongs to project
   const [element] = await db
     .select({ id: funnelElements.id })
     .from(funnelElements)
     .innerJoin(purchaseStages, eq(funnelElements.stageId, purchaseStages.id))
     .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
-    .where(
-      and(
-        eq(funnelElements.id, elementId),
-        eq(segments.projectId, projectId)
-      )
-    )
+    .where(and(eq(funnelElements.id, elementId), eq(segments.projectId, projectId)))
     .limit(1);
 
   if (!element) {
@@ -99,58 +145,37 @@ export async function PUT(
 
   const { channelIds, kpiIds, campaignIds, geoAssetIds, eventKeys } = parsed.data;
 
-  await db.transaction(async (tx) => {
-    if (channelIds !== undefined) {
-      await tx
-        .delete(funnelElementChannels)
-        .where(eq(funnelElementChannels.funnelElementId, elementId));
-      if (channelIds.length > 0) {
-        await tx.insert(funnelElementChannels).values(
-          channelIds.map((channelId) => ({ funnelElementId: elementId, channelId }))
-        );
-      }
-    }
+  await syncRelationGroup(
+    projectId,
+    elementId,
+    RELATION_MAP.channelIds.relationType,
+    RELATION_MAP.channelIds.targetType,
+    channelIds
+  );
+  await syncRelationGroup(
+    projectId,
+    elementId,
+    RELATION_MAP.kpiIds.relationType,
+    RELATION_MAP.kpiIds.targetType,
+    kpiIds
+  );
+  await syncRelationGroup(
+    projectId,
+    elementId,
+    RELATION_MAP.campaignIds.relationType,
+    RELATION_MAP.campaignIds.targetType,
+    campaignIds
+  );
+  await syncRelationGroup(
+    projectId,
+    elementId,
+    RELATION_MAP.geoAssetIds.relationType,
+    RELATION_MAP.geoAssetIds.targetType,
+    geoAssetIds
+  );
 
-    if (kpiIds !== undefined) {
-      await tx
-        .delete(funnelElementKpis)
-        .where(eq(funnelElementKpis.funnelElementId, elementId));
-      if (kpiIds.length > 0) {
-        await tx.insert(funnelElementKpis).values(
-          kpiIds.map((kpiId) => ({ funnelElementId: elementId, kpiId }))
-        );
-      }
-    }
-
-    if (campaignIds !== undefined) {
-      await tx
-        .delete(funnelElementCampaigns)
-        .where(eq(funnelElementCampaigns.funnelElementId, elementId));
-      if (campaignIds.length > 0) {
-        await tx.insert(funnelElementCampaigns).values(
-          campaignIds.map((campaignId) => ({
-            funnelElementId: elementId,
-            campaignId,
-          }))
-        );
-      }
-    }
-
-    if (geoAssetIds !== undefined) {
-      await tx
-        .delete(funnelElementGeo)
-        .where(eq(funnelElementGeo.funnelElementId, elementId));
-      if (geoAssetIds.length > 0) {
-        await tx.insert(funnelElementGeo).values(
-          geoAssetIds.map((geoAssetId) => ({
-            funnelElementId: elementId,
-            geoAssetId,
-          }))
-        );
-      }
-    }
-
-    if (eventKeys !== undefined) {
+  if (eventKeys !== undefined) {
+    await db.transaction(async (tx) => {
       await tx
         .delete(funnelElementEvents)
         .where(eq(funnelElementEvents.funnelElementId, elementId));
@@ -163,8 +188,8 @@ export async function PUT(
           }))
         );
       }
-    }
-  });
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

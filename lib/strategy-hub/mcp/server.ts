@@ -16,16 +16,17 @@ import {
   seoKeywords,
   channels,
   funnelElements,
-  funnelElementChannels,
+  purchaseStages,
   buyerJourneyStages,
   aiProposals,
 } from "@/db/schema";
 import { eq, isNull, and, asc, desc, inArray } from "drizzle-orm";
 import { EVENT_REGISTRY } from "@/packages/analytics-events/src";
 import { AGENT_MODES, runAgentMode } from "@/lib/strategy-hub/agent/run-agent";
-import { acceptProposal, rejectProposal } from "@/lib/strategy-hub/agent/accept-proposal";
+import { undoBatch } from "@/lib/strategy-hub/undo";
 import { computeProjectHealth } from "@/lib/strategy-hub/health-score";
 import { getProjectAlerts } from "@/lib/strategy-hub/alerts";
+import { createRelation, listRelations } from "@/lib/strategy-hub/relations/store";
 import {
   suggestSegmentsContext,
   suggestFunnelContext,
@@ -811,19 +812,24 @@ export function createStrategyHubMcpServer() {
     },
     async ({ funnelElementId, channelId }) =>
       safeRun(async () => {
-        const existing = await db
-          .select()
-          .from(funnelElementChannels)
-          .where(
-            and(
-              eq(funnelElementChannels.funnelElementId, funnelElementId),
-              eq(funnelElementChannels.channelId, channelId)
-            )
-          )
+        const [row] = await db
+          .select({ projectId: segments.projectId })
+          .from(funnelElements)
+          .innerJoin(purchaseStages, eq(funnelElements.stageId, purchaseStages.id))
+          .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
+          .where(eq(funnelElements.id, funnelElementId))
           .limit(1);
-        if (existing.length === 0) {
-          await db.insert(funnelElementChannels).values({ funnelElementId, channelId });
-        }
+        if (!row) throw new Error("Funnel element not found");
+
+        await createRelation(
+          row.projectId,
+          {
+            source: { type: "element", id: funnelElementId },
+            target: { type: "channel", id: channelId },
+            relationType: "publikowany_w",
+          },
+          { source: "human", userId: null }
+        );
         return { ok: true };
       })
   );
@@ -883,11 +889,17 @@ export function createStrategyHubMcpServer() {
             .limit(1);
           if (!element) throw new Error("Funnel element not found");
 
-          const linked = await db
-            .select({ channelId: funnelElementChannels.channelId })
-            .from(funnelElementChannels)
-            .where(eq(funnelElementChannels.funnelElementId, entityId));
-          const linkedIds = new Set(linked.map((l) => l.channelId));
+          const linked = await listRelations(projectId, {
+            entity: { type: "element", id: entityId },
+          });
+          const linkedIds = new Set(
+            linked
+              .filter(
+                (r) =>
+                  r.relationType === "publikowany_w" && r.targetType === "channel"
+              )
+              .map((l) => l.targetId)
+          );
 
           const siblings = await db
             .select({ id: funnelElements.id })
@@ -901,12 +913,16 @@ export function createStrategyHubMcpServer() {
           const siblingIds = siblings.map((s) => s.id).filter((id) => id !== entityId);
           if (siblingIds.length === 0) return { suggestions: [] };
 
-          const usedChannels = await db
-            .select({ channelId: funnelElementChannels.channelId })
-            .from(funnelElementChannels)
-            .where(inArray(funnelElementChannels.funnelElementId, siblingIds));
+          const siblingRelations = await listRelations(projectId);
+          const usedChannels = siblingRelations.filter(
+            (r) =>
+              r.sourceType === "element" &&
+              siblingIds.includes(r.sourceId) &&
+              r.relationType === "publikowany_w" &&
+              r.targetType === "channel"
+          );
           const candidateIds = Array.from(
-            new Set(usedChannels.map((u) => u.channelId).filter((id) => !linkedIds.has(id)))
+            new Set(usedChannels.map((u) => u.targetId).filter((id) => !linkedIds.has(id)))
           );
           if (candidateIds.length === 0) return { suggestions: [] };
 
@@ -981,28 +997,17 @@ export function createStrategyHubMcpServer() {
   );
 
   server.registerTool(
-    "accept_ai_proposal",
+    "undo_batch",
     {
       description:
-        "Akceptuje propozycję agenta AI — jedyna droga, którą zmiana wygenerowana przez AI trafia do encji strategicznej (source='ai' + wpis w change_history).",
+        "Cofa batch zmian AI (undo) po batchId z change_history lub ai_proposals.",
       inputSchema: z.object({
         projectId: z.string().uuid(),
-        proposalId: z.string().uuid(),
+        batchId: z.string().uuid(),
       }),
     },
-    async ({ projectId, proposalId }) => safeRun(() => acceptProposal(projectId, proposalId))
-  );
-
-  server.registerTool(
-    "reject_ai_proposal",
-    {
-      description: "Odrzuca propozycję agenta AI bez żadnego zapisu do encji strategicznej.",
-      inputSchema: z.object({
-        projectId: z.string().uuid(),
-        proposalId: z.string().uuid(),
-      }),
-    },
-    async ({ projectId, proposalId }) => safeRun(() => rejectProposal(projectId, proposalId))
+    async ({ projectId, batchId }) =>
+      safeRun(() => undoBatch(projectId, batchId, null))
   );
 
   server.registerTool(

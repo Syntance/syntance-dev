@@ -10,6 +10,7 @@ import {
   getListEntity,
   getSingletonEntity,
 } from "@/lib/strategy-hub/entities/registry";
+import { trackChange, entityTypeFor } from "@/lib/strategy-hub/track-change";
 import {
   filterRecordsForClient,
   getProjectVisibility,
@@ -82,6 +83,17 @@ export async function POST(
     return badRequest("Invalid input", parsed.error.flatten());
 
   const item = await list.create(id, parsed.data);
+
+  const itemId = typeof item?.id === "string" ? item.id : null;
+  if (itemId) {
+    await trackChange({
+      projectId: id,
+      entityType: entityTypeFor(entity),
+      entityId: itemId,
+      patch: { __created: true, ...(parsed.data as Record<string, unknown>) },
+    });
+  }
+
   return NextResponse.json({ item }, { status: 201 });
 }
 

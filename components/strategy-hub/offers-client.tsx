@@ -61,7 +61,6 @@ export function OffersClient({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- celowy fetch listy ofert
     void loadOffers();
   }, [loadOffers, reloadKey]);
 
@@ -78,7 +77,6 @@ export function OffersClient({ projectId }: { projectId: string }) {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- celowy fetch segmentów oferty
     if (selectedId) void loadSegments(selectedId);
     else setSegmentIds([]);
   }, [selectedId, loadSegments]);

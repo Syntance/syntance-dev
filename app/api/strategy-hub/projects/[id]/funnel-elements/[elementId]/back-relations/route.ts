@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireProjectAccess } from "@/lib/strategy-hub/api-helpers";
 import { db } from "@/db";
-import { userFlows, userFlowPages, pages } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { userFlows, pages } from "@/db/schema";
+import { eq, inArray } from "drizzle-orm";
+import { listRelations } from "@/lib/strategy-hub/relations/store";
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; elementId: string }> }
 ) {
-  const { id, elementId } = await params;
-  const auth = await requireProjectAccess(id);
+  const { id: projectId, elementId } = await params;
+  const auth = await requireProjectAccess(projectId);
   if (!auth.ok) return auth.response;
 
   const relatedUserFlows = await db
@@ -17,21 +18,27 @@ export async function GET(
     .from(userFlows)
     .where(eq(userFlows.entryElementId, elementId));
 
-  // Pages that have user flows pointing through this element (via user_flow_pages)
-  // Simple: pages referenced by the user flows above
   const flowIds = relatedUserFlows.map((f) => f.id);
   let relatedPages: { id: string; name: string }[] = [];
+
   if (flowIds.length > 0) {
-    const pageRows = await db
-      .selectDistinct({ id: pages.id, name: pages.name })
-      .from(userFlowPages)
-      .innerJoin(pages, eq(userFlowPages.pageId, pages.id))
-      .where(
-        flowIds.length === 1
-          ? eq(userFlowPages.userFlowId, flowIds[0])
-          : eq(userFlowPages.userFlowId, flowIds[0]) // simple for now
-      );
-    relatedPages = pageRows;
+    const relations = await listRelations(projectId);
+    const pageIds = relations
+      .filter(
+        (r) =>
+          r.relationType === "prowadzi_przez" &&
+          r.sourceType === "flow" &&
+          r.targetType === "page" &&
+          flowIds.includes(r.sourceId)
+      )
+      .map((r) => r.targetId);
+
+    if (pageIds.length > 0) {
+      relatedPages = await db
+        .select({ id: pages.id, name: pages.name })
+        .from(pages)
+        .where(inArray(pages.id, pageIds));
+    }
   }
 
   return NextResponse.json({ userFlows: relatedUserFlows, pages: relatedPages });

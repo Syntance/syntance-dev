@@ -1,8 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Globe, BookOpen, Database, Edit3, Plus } from "lucide-react";
+import { ChevronDown, Globe, BookOpen, Database, Edit3, Plus, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  hasMapFocusListener,
+  mapFocusHref,
+} from "@/lib/strategy-hub/map-focus-bus";
+import { parseFocusArgs } from "./use-map-focus-from-chat";
 
 const TOOL_META: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
   read_project: {
@@ -35,6 +40,26 @@ const TOOL_META: Record<string, { label: string; icon: React.ComponentType<{ cla
     icon: BookOpen,
     color: "text-orange-400",
   },
+  focus_map_node: {
+    label: "Pokazuje na mapie",
+    icon: MapPin,
+    color: "text-brand",
+  },
+  get_neighbors: {
+    label: "Sąsiedzi w grafie",
+    icon: Database,
+    color: "text-sky-400",
+  },
+  find_path: {
+    label: "Ścieżka w grafie",
+    icon: Database,
+    color: "text-sky-400",
+  },
+  semantic_search: {
+    label: "Wyszukiwanie semantyczne",
+    icon: Database,
+    color: "text-sky-400",
+  },
 };
 
 interface ToolCallCardProps {
@@ -42,15 +67,24 @@ interface ToolCallCardProps {
   args?: Record<string, unknown>;
   result?: unknown;
   state: "call" | "result" | "partial-call";
+  projectId?: string;
 }
 
-export function ToolCallCard({ toolName, args, result, state }: ToolCallCardProps) {
+export function ToolCallCard({ toolName, args, result, state, projectId }: ToolCallCardProps) {
   const [open, setOpen] = useState(false);
   const meta = TOOL_META[toolName] ?? { label: toolName, icon: Database, color: "text-muted-foreground" };
   const Icon = meta.icon;
 
   const isLoading = state === "call" || state === "partial-call";
   const hasResult = state === "result" && result != null;
+
+  const focusDetail =
+    toolName === "focus_map_node" ? parseFocusArgs(args) : null;
+  const showMapLink =
+    focusDetail &&
+    projectId &&
+    !hasMapFocusListener() &&
+    state === "result";
 
   return (
     <div className="my-1.5 rounded-lg border border-border/60 bg-muted/30 overflow-hidden">
@@ -98,6 +132,19 @@ export function ToolCallCard({ toolName, args, result, state }: ToolCallCardProp
                 {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
               </pre>
             </div>
+          )}
+          {showMapLink && focusDetail && (
+            <a
+              href={mapFocusHref(
+                projectId,
+                focusDetail.entityType,
+                focusDetail.entityId
+              )}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded"
+            >
+              <MapPin className="size-3" />
+              Pokaż na mapie
+            </a>
           )}
         </div>
       )}

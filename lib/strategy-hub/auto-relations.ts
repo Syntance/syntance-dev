@@ -9,10 +9,8 @@ import {
   channelActivityPlan,
   kpis,
   campaigns,
-  funnelElementChannels,
-  funnelElementKpis,
-  funnelElementCampaigns,
 } from "@/db/schema";
+import { listRelations, createRelation } from "@/lib/strategy-hub/relations/store";
 
 /**
  * Silnik automatycznego wnioskowania relacji lejka.
@@ -88,6 +86,15 @@ async function loadElements(projectId: string): Promise<ElementCtx[]> {
   }));
 }
 
+function relationSetKey(
+  elementId: string,
+  targetType: string,
+  targetId: string,
+  relationType: string
+): string {
+  return `${elementId}:${targetType}:${targetId}:${relationType}`;
+}
+
 /** Buduje sugestie relacji dla wszystkich elementów lejka projektu. */
 export async function suggestFunnelRelations(
   projectId: string
@@ -95,71 +102,45 @@ export async function suggestFunnelRelations(
   const elements = await loadElements(projectId);
   if (elements.length === 0) return [];
 
-  const elementIds = elements.map((e) => e.id);
+  const elementIds = new Set(elements.map((e) => e.id));
 
-  const [
-    campaignRows,
-    activityRows,
-    kpiRows,
-    existingCampaigns,
-    existingChannels,
-    existingKpis,
-  ] = await Promise.all([
-    db
-      .select({
-        id: campaigns.id,
-        name: campaigns.name,
-        segmentId: campaigns.segmentId,
-        stage: campaigns.stage,
-      })
-      .from(campaigns)
-      .where(and(eq(campaigns.projectId, projectId), isNull(campaigns.deletedAt))),
-    db
-      .select({
-        channelId: channelActivityPlan.channelId,
-        channelName: channels.name,
-        segmentId: channelActivityPlan.segmentId,
-        stage: channelActivityPlan.stage,
-      })
-      .from(channelActivityPlan)
-      .innerJoin(channels, eq(channelActivityPlan.channelId, channels.id))
-      .where(
-        and(eq(channels.projectId, projectId), isNull(channelActivityPlan.deletedAt))
-      ),
-    db
-      .select({ id: kpis.id, name: kpis.name, segmentId: kpis.segmentId })
-      .from(kpis)
-      .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt))),
-    db
-      .select({
-        elementId: funnelElementCampaigns.funnelElementId,
-        campaignId: funnelElementCampaigns.campaignId,
-      })
-      .from(funnelElementCampaigns)
-      .where(inArray(funnelElementCampaigns.funnelElementId, elementIds)),
-    db
-      .select({
-        elementId: funnelElementChannels.funnelElementId,
-        channelId: funnelElementChannels.channelId,
-      })
-      .from(funnelElementChannels)
-      .where(inArray(funnelElementChannels.funnelElementId, elementIds)),
-    db
-      .select({
-        elementId: funnelElementKpis.funnelElementId,
-        kpiId: funnelElementKpis.kpiId,
-      })
-      .from(funnelElementKpis)
-      .where(inArray(funnelElementKpis.funnelElementId, elementIds)),
-  ]);
+  const [campaignRows, activityRows, kpiRows, existingRelations] =
+    await Promise.all([
+      db
+        .select({
+          id: campaigns.id,
+          name: campaigns.name,
+          segmentId: campaigns.segmentId,
+          stage: campaigns.stage,
+        })
+        .from(campaigns)
+        .where(and(eq(campaigns.projectId, projectId), isNull(campaigns.deletedAt))),
+      db
+        .select({
+          channelId: channelActivityPlan.channelId,
+          channelName: channels.name,
+          segmentId: channelActivityPlan.segmentId,
+          stage: channelActivityPlan.stage,
+        })
+        .from(channelActivityPlan)
+        .innerJoin(channels, eq(channelActivityPlan.channelId, channels.id))
+        .where(
+          and(eq(channels.projectId, projectId), isNull(channelActivityPlan.deletedAt))
+        ),
+      db
+        .select({ id: kpis.id, name: kpis.name, segmentId: kpis.segmentId })
+        .from(kpis)
+        .where(and(eq(kpis.projectId, projectId), isNull(kpis.deletedAt))),
+      listRelations(projectId),
+    ]);
 
-  const hasCampaign = new Set(
-    existingCampaigns.map((r) => `${r.elementId}:${r.campaignId}`)
-  );
-  const hasChannel = new Set(
-    existingChannels.map((r) => `${r.elementId}:${r.channelId}`)
-  );
-  const hasKpi = new Set(existingKpis.map((r) => `${r.elementId}:${r.kpiId}`));
+  const hasRelation = new Set<string>();
+  for (const rel of existingRelations) {
+    if (rel.sourceType !== "element" || !elementIds.has(rel.sourceId)) continue;
+    hasRelation.add(
+      relationSetKey(rel.sourceId, rel.targetType, rel.targetId, rel.relationType)
+    );
+  }
 
   const normalizedCampaigns = campaignRows.map((c) => ({
     ...c,
@@ -175,12 +156,15 @@ export async function suggestFunnelRelations(
   for (const el of elements) {
     const targets: SuggestedTarget[] = [];
 
-    // element → kampania: ten sam segment (lub kampania globalna) + ten sam etap
     for (const c of normalizedCampaigns) {
       const segMatch = !c.segmentId || c.segmentId === el.segmentId;
       const phaseMatch = !c.phase || !el.phase || c.phase === el.phase;
       if (segMatch && phaseMatch && (c.segmentId || c.phase)) {
-        if (!hasCampaign.has(`${el.id}:${c.id}`)) {
+        if (
+          !hasRelation.has(
+            relationSetKey(el.id, "campaign", c.id, "promowany_przez")
+          )
+        ) {
           targets.push({
             kind: "campaign",
             targetId: c.id,
@@ -193,14 +177,15 @@ export async function suggestFunnelRelations(
       }
     }
 
-    // element → kanał: kanał ma aktywność w tym segmencie + etapie
     const seenChannel = new Set<string>();
     for (const a of normalizedActivities) {
       const segMatch = !a.segmentId || a.segmentId === el.segmentId;
       const phaseMatch = !a.phase || !el.phase || a.phase === el.phase;
       if (segMatch && phaseMatch) {
         if (
-          !hasChannel.has(`${el.id}:${a.channelId}`) &&
+          !hasRelation.has(
+            relationSetKey(el.id, "channel", a.channelId, "publikowany_w")
+          ) &&
           !seenChannel.has(a.channelId)
         ) {
           seenChannel.add(a.channelId);
@@ -216,10 +201,11 @@ export async function suggestFunnelRelations(
       }
     }
 
-    // element → KPI: KPI przypisany do segmentu elementu
     for (const k of kpiRows) {
       if (k.segmentId && k.segmentId === el.segmentId) {
-        if (!hasKpi.has(`${el.id}:${k.id}`)) {
+        if (
+          !hasRelation.has(relationSetKey(el.id, "kpi", k.id, "mierzony_przez"))
+        ) {
           targets.push({
             kind: "kpi",
             targetId: k.id,
@@ -250,6 +236,15 @@ export interface ApplyRelation {
   targetId: string;
 }
 
+const KIND_TO_RELATION: Record<
+  RelationKind,
+  { targetType: "campaign" | "channel" | "kpi"; relationType: string }
+> = {
+  campaign: { targetType: "campaign", relationType: "promowany_przez" },
+  channel: { targetType: "channel", relationType: "publikowany_w" },
+  kpi: { targetType: "kpi", relationType: "mierzony_przez" },
+};
+
 /** Addytywnie zapisuje wybrane relacje (insert brakujących, bez kasowania). */
 export async function applyFunnelRelations(
   projectId: string,
@@ -257,7 +252,6 @@ export async function applyFunnelRelations(
 ): Promise<{ inserted: number }> {
   if (relations.length === 0) return { inserted: 0 };
 
-  // Walidacja: elementy należą do projektu
   const validElements = await db
     .select({ id: funnelElements.id })
     .from(funnelElements)
@@ -274,58 +268,22 @@ export async function applyFunnelRelations(
     );
   const validElementIds = new Set(validElements.map((e) => e.id));
 
-  const campaignsToInsert = relations.filter(
-    (r) => r.kind === "campaign" && validElementIds.has(r.elementId)
-  );
-  const channelsToInsert = relations.filter(
-    (r) => r.kind === "channel" && validElementIds.has(r.elementId)
-  );
-  const kpisToInsert = relations.filter(
-    (r) => r.kind === "kpi" && validElementIds.has(r.elementId)
-  );
-
   let inserted = 0;
-  await db.transaction(async (tx) => {
-    if (campaignsToInsert.length > 0) {
-      const res = await tx
-        .insert(funnelElementCampaigns)
-        .values(
-          campaignsToInsert.map((r) => ({
-            funnelElementId: r.elementId,
-            campaignId: r.targetId,
-          }))
-        )
-        .onConflictDoNothing()
-        .returning({ id: funnelElementCampaigns.campaignId });
-      inserted += res.length;
-    }
-    if (channelsToInsert.length > 0) {
-      const res = await tx
-        .insert(funnelElementChannels)
-        .values(
-          channelsToInsert.map((r) => ({
-            funnelElementId: r.elementId,
-            channelId: r.targetId,
-          }))
-        )
-        .onConflictDoNothing()
-        .returning({ id: funnelElementChannels.channelId });
-      inserted += res.length;
-    }
-    if (kpisToInsert.length > 0) {
-      const res = await tx
-        .insert(funnelElementKpis)
-        .values(
-          kpisToInsert.map((r) => ({
-            funnelElementId: r.elementId,
-            kpiId: r.targetId,
-          }))
-        )
-        .onConflictDoNothing()
-        .returning({ id: funnelElementKpis.kpiId });
-      inserted += res.length;
-    }
-  });
+  for (const r of relations) {
+    if (!validElementIds.has(r.elementId)) continue;
+    const mapping = KIND_TO_RELATION[r.kind];
+    const row = await createRelation(
+      projectId,
+      {
+        source: { type: "element", id: r.elementId },
+        target: { type: mapping.targetType, id: r.targetId },
+        relationType: mapping.relationType,
+        rationaleMd: "Sugestia auto-relacji (segment + faza)",
+      },
+      { source: "ai", confidence: 0.85 }
+    );
+    if (row) inserted += 1;
+  }
 
   return { inserted };
 }

@@ -10,7 +10,7 @@ import { OnboardingWizard } from "@/components/strategy-hub/onboarding-wizard";
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ path?: string }>;
+  searchParams: Promise<{ path?: string; view?: string; focus?: string }>;
 }
 
 export async function generateMetadata({ params }: Props) {
@@ -26,7 +26,13 @@ export async function generateMetadata({ params }: Props) {
 export default async function ProjectMapPage({ params, searchParams }: Props) {
   await requireStrategyHubAccess();
   const { id } = await params;
-  const { path } = await searchParams;
+  const { path, view, focus } = await searchParams;
+
+  const validViews = ["list", "map", "influence", "constellation", "pipeline"] as const;
+  type MapView = (typeof validViews)[number];
+  const initialView = validViews.includes(view as MapView)
+    ? (view as MapView)
+    : undefined;
 
   const rows = await db
     .select({ id: projects.id, name: projects.name })
@@ -54,7 +60,14 @@ export default async function ProjectMapPage({ params, searchParams }: Props) {
 
       <OnboardingWizard projectId={id} />
 
-      <StrategyMap projectId={id} data={data} mode="editor" activePathId={path ?? null} />
+      <StrategyMap
+        projectId={id}
+        data={data}
+        mode="editor"
+        activePathId={path ?? null}
+        initialView={initialView}
+        initialFocus={focus}
+      />
     </div>
   );
 }

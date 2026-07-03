@@ -60,7 +60,6 @@ export function ExportPanel({ projectId }: Props) {
   }, [base]);
 
   React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount, unavoidable
     void loadJobs();
   }, [loadJobs]);
 

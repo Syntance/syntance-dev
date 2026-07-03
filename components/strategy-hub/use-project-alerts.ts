@@ -21,7 +21,6 @@ export function useProjectAlerts(
   const [alerts, setAlerts] = React.useState<ProjectAlert[]>([]);
 
   React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset przy zmianie/braku projectId
     setAlerts([]);
     if (!projectId) {
       return;

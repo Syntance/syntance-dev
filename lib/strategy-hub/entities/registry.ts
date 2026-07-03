@@ -55,6 +55,7 @@ function pathFilter<T extends { pathId: unknown }>(
   );
 }
 import { encryptSecret } from "@/lib/strategy-hub/crypto";
+import { makeGet, makeRestore } from "@/lib/strategy-hub/entity-db-helpers";
 
 /**
  * Centralny rejestr encji Strategy Hub.
@@ -86,6 +87,10 @@ export interface ListEntityDef<TCreate = unknown, TPatch = unknown> {
   create(projectId: string, data: TCreate): Promise<Row>;
   update(projectId: string, itemId: string, data: TPatch): Promise<Row | undefined>;
   softDelete(projectId: string, itemId: string): Promise<boolean>;
+  /** Bieżący wiersz (aktywny) — do before/undo. */
+  get?(projectId: string, itemId: string): Promise<Row | undefined>;
+  /** Przywraca soft-deleted wiersz. */
+  restore?(projectId: string, itemId: string): Promise<boolean>;
 }
 
 export interface SingletonEntityDef<TPatch = unknown> {
@@ -455,6 +460,8 @@ const listEntities: Record<string, ListEntityDef> = {
         )
         .returning({ id: projectQuestions.id })
         .then((r) => r.length > 0),
+    get: makeGet(projectQuestions),
+    restore: makeRestore(projectQuestions),
   }),
 
   glossary: listDef({
@@ -494,6 +501,8 @@ const listEntities: Record<string, ListEntityDef> = {
         )
         .returning({ id: projectGlossary.id })
         .then((r) => r.length > 0),
+    get: makeGet(projectGlossary),
+    restore: makeRestore(projectGlossary),
   }),
 
   credentials: listDef({
@@ -567,6 +576,8 @@ const listEntities: Record<string, ListEntityDef> = {
         )
         .returning({ id: projectCredentials.id })
         .then((r) => r.length > 0),
+    get: makeGet(projectCredentials),
+    restore: makeRestore(projectCredentials),
   }),
 
   materials: listDef({
@@ -606,6 +617,8 @@ const listEntities: Record<string, ListEntityDef> = {
         )
         .returning({ id: projectMaterials.id })
         .then((r) => r.length > 0),
+    get: makeGet(projectMaterials),
+    restore: makeRestore(projectMaterials),
   }),
 
   notes: listDef({
@@ -639,6 +652,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(projectNotes.id, itemId), eq(projectNotes.projectId, pid)))
         .returning({ id: projectNotes.id })
         .then((r) => r.length > 0),
+    get: makeGet(projectNotes),
+    restore: makeRestore(projectNotes),
   }),
 
   tasks: listDef({
@@ -672,6 +687,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(projectTasks.id, itemId), eq(projectTasks.projectId, pid)))
         .returning({ id: projectTasks.id })
         .then((r) => r.length > 0),
+    get: makeGet(projectTasks),
+    restore: makeRestore(projectTasks),
   }),
 
   segments: listDef({
@@ -714,6 +731,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(segments.id, itemId), eq(segments.projectId, pid)))
         .returning({ id: segments.id })
         .then((r) => r.length > 0),
+    get: makeGet(segments),
+    restore: makeRestore(segments),
   }),
 
   channels: listDef({
@@ -750,6 +769,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(channels.id, itemId), eq(channels.projectId, pid)))
         .returning({ id: channels.id })
         .then((r) => r.length > 0),
+    get: makeGet(channels),
+    restore: makeRestore(channels),
   }),
 
   // Plan aktywności jest scoped po channelId, ale wystawiamy go project-wide
@@ -804,6 +825,25 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(eq(channelActivityPlan.id, itemId))
         .returning({ id: channelActivityPlan.id })
         .then((r) => r.length > 0),
+    get: (_pid, itemId) =>
+      db
+        .select()
+        .from(channelActivityPlan)
+        .where(
+          and(
+            eq(channelActivityPlan.id, itemId),
+            isNull(channelActivityPlan.deletedAt)
+          )
+        )
+        .limit(1)
+        .then((r) => r[0]),
+    restore: (_pid, itemId) =>
+      db
+        .update(channelActivityPlan)
+        .set({ deletedAt: null })
+        .where(eq(channelActivityPlan.id, itemId))
+        .returning({ id: channelActivityPlan.id })
+        .then((r) => r.length > 0),
   }),
 
   "sales-pitches": listDef({
@@ -846,6 +886,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(salesPitches.id, itemId), eq(salesPitches.projectId, pid)))
         .returning({ id: salesPitches.id })
         .then((r) => r.length > 0),
+    get: makeGet(salesPitches),
+    restore: makeRestore(salesPitches),
   }),
 
   "sales-scripts": listDef({
@@ -888,6 +930,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(salesScripts.id, itemId), eq(salesScripts.projectId, pid)))
         .returning({ id: salesScripts.id })
         .then((r) => r.length > 0),
+    get: makeGet(salesScripts),
+    restore: makeRestore(salesScripts),
   }),
 
   "lead-magnets": listDef({
@@ -930,6 +974,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(leadMagnets.id, itemId), eq(leadMagnets.projectId, pid)))
         .returning({ id: leadMagnets.id })
         .then((r) => r.length > 0),
+    get: makeGet(leadMagnets),
+    restore: makeRestore(leadMagnets),
   }),
 
   "nav-items": listDef({
@@ -967,6 +1013,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(navItems.id, itemId), eq(navItems.projectId, pid)))
         .returning({ id: navItems.id })
         .then((r) => r.length > 0),
+    get: makeGet(navItems),
+    restore: makeRestore(navItems),
   }),
 
   "site-maintenance-costs": listDef({
@@ -1015,6 +1063,8 @@ const listEntities: Record<string, ListEntityDef> = {
         )
         .returning({ id: siteMaintenanceCosts.id })
         .then((r) => r.length > 0),
+    get: makeGet(siteMaintenanceCosts),
+    restore: makeRestore(siteMaintenanceCosts),
   }),
 
   "site-audits": listDef({
@@ -1052,6 +1102,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(siteAudits.id, itemId), eq(siteAudits.projectId, pid)))
         .returning({ id: siteAudits.id })
         .then((r) => r.length > 0),
+    get: makeGet(siteAudits),
+    restore: makeRestore(siteAudits),
   }),
 
   sites: listDef({
@@ -1085,6 +1137,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(sites.id, itemId), eq(sites.projectId, pid)))
         .returning({ id: sites.id })
         .then((r) => r.length > 0),
+    get: makeGet(sites),
+    restore: makeRestore(sites),
   }),
 
   pages: listDef({
@@ -1120,6 +1174,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(pages.id, itemId), eq(pages.projectId, pid)))
         .returning({ id: pages.id })
         .then((r) => r.length > 0),
+    get: makeGet(pages),
+    restore: makeRestore(pages),
   }),
 
   "seo-keywords": listDef({
@@ -1157,6 +1213,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(seoKeywords.id, itemId), eq(seoKeywords.projectId, pid)))
         .returning({ id: seoKeywords.id })
         .then((r) => r.length > 0),
+    get: makeGet(seoKeywords),
+    restore: makeRestore(seoKeywords),
   }),
 
   kpis: listDef({
@@ -1193,6 +1251,8 @@ const listEntities: Record<string, ListEntityDef> = {
         .where(and(eq(kpis.id, itemId), eq(kpis.projectId, pid)))
         .returning({ id: kpis.id })
         .then((r) => r.length > 0),
+    get: makeGet(kpis),
+    restore: makeRestore(kpis),
   }),
 };
 

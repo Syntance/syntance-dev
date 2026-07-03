@@ -95,7 +95,6 @@ export function DecisionsEditor({ projectId, mode = "editor" }: Props) {
   }, [projectId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- celowy fetch listy decyzji
     void loadDecisions();
   }, [loadDecisions, reloadKey]);
 
@@ -118,7 +117,6 @@ export function DecisionsEditor({ projectId, mode = "editor" }: Props) {
   );
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- celowy fetch powiązań decyzji
     if (selectedId) void loadLinks(selectedId);
     else setLinks([]);
   }, [selectedId, loadLinks]);

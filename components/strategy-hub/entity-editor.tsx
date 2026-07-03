@@ -100,7 +100,6 @@ export function FunnelElementEditor({
 
   // Reset when initial changes (open new element)
   React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset formularza przy zmianie edytowanego elementu
     setData({
       name: "",
       format: "Post",

@@ -5,36 +5,26 @@ import {
   segments,
   purchaseStages,
   funnelElements,
-  funnelElementChannels,
-  funnelElementKpis,
-  funnelElementCampaigns,
-  funnelElementGeo,
   channels,
   kpis,
   pages,
   campaigns,
   geoAssets,
   offers,
-  offerSegments,
   userFlows,
   competitors,
   objections,
 } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
+import {
+  entityColor,
+  entityHref,
+  relationLabel,
+  type EntityTypeKey,
+} from "@/lib/strategy-hub/entities/entity-types";
+import { listProjectRelationsByType } from "@/lib/strategy-hub/relations/store";
 
-export type GraphEntityType =
-  | "segment"
-  | "stage"
-  | "element"
-  | "channel"
-  | "kpi"
-  | "page"
-  | "campaign"
-  | "geo"
-  | "offer"
-  | "flow"
-  | "competitor"
-  | "objection";
+export type GraphEntityType = EntityTypeKey;
 
 export interface GraphNode {
   id: string;
@@ -55,33 +45,25 @@ interface GraphEdge {
 export interface RelationGraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
-  /** Pozycje zapisane przez użytkownika (projects.graph_layout), keyed by node id. */
   savedLayout: Record<string, { x: number; y: number }> | null;
 }
-
-const COLOR: Record<GraphEntityType, string> = {
-  segment: "#38bdf8",
-  stage: "#60a5fa",
-  element: "#34d399",
-  channel: "#a16207",
-  kpi: "#f472b6",
-  page: "#475569",
-  campaign: "#a78bfa",
-  geo: "#22d3ee",
-  offer: "#fb923c",
-  flow: "#c084fc",
-  competitor: "#ef4444",
-  objection: "#f87171",
-};
 
 function nid(type: GraphEntityType, id: string): string {
   return `${type}-${id}`;
 }
 
+const SEMANTIC_RELATION_TYPES = [
+  "publikowany_w",
+  "mierzony_przez",
+  "promowany_przez",
+  "wspierany_przez",
+  "prowadzi_przez",
+  "skierowana_do",
+] as const;
+
 /**
- * Buduje pełny graf relacji projektu (Faza 3, M1) — WSZYSTKIE encje projektu
- * jako węzły + krawędzie relacji. Zasilany przez `<RelationGraph />` (React Flow,
- * Cmd+K „Graf relacji projektu"). Layout zapisany w `projects.graph_layout`.
+ * Buduje pełny graf relacji projektu — węzły z tabel typowanych,
+ * krawędzie FK + semantyczne z `entity_relations`.
  */
 export async function getRelationGraphData(
   projectId: string
@@ -97,14 +79,10 @@ export async function getRelationGraphData(
     campaignRows,
     geoRows,
     offerRows,
-    offerSegmentRows,
     flowRows,
     competitorRows,
     objectionRows,
-    elChannelRows,
-    elKpiRows,
-    elCampaignRows,
-    elGeoRows,
+    semanticRelations,
   ] = await Promise.all([
     db
       .select({ graphLayout: projects.graphLayout })
@@ -161,7 +139,6 @@ export async function getRelationGraphData(
       .select()
       .from(offers)
       .where(and(eq(offers.projectId, projectId), isNull(offers.deletedAt))),
-    db.select().from(offerSegments),
     db
       .select()
       .from(userFlows)
@@ -174,13 +151,18 @@ export async function getRelationGraphData(
       .select()
       .from(objections)
       .where(and(eq(objections.projectId, projectId), isNull(objections.deletedAt))),
-    db.select().from(funnelElementChannels),
-    db.select().from(funnelElementKpis),
-    db.select().from(funnelElementCampaigns),
-    db.select().from(funnelElementGeo),
+    listProjectRelationsByType(projectId, [...SEMANTIC_RELATION_TYPES]),
   ]);
 
   const elementIds = new Set(elementRows.map((e) => e.id));
+  const channelIds = new Set(channelRows.map((c) => c.id));
+  const kpiIds = new Set(kpiRows.map((k) => k.id));
+  const campaignIds = new Set(campaignRows.map((c) => c.id));
+  const geoIds = new Set(geoRows.map((g) => g.id));
+  const offerIds = new Set(offerRows.map((o) => o.id));
+  const flowIds = new Set(flowRows.map((f) => f.id));
+  const pageIds = new Set(pageRows.map((p) => p.id));
+
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   let edgeSeq = 0;
@@ -194,8 +176,8 @@ export async function getRelationGraphData(
       type: "segment",
       label: s.name,
       meta: s.code ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/market/segments`,
-      color: COLOR.segment,
+      href: entityHref(projectId, "segment"),
+      color: entityColor("segment"),
     });
   }
   for (const st of stageRows) {
@@ -204,8 +186,8 @@ export async function getRelationGraphData(
       type: "stage",
       label: st.name,
       meta: st.phase ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/execution/funnel`,
-      color: COLOR.stage,
+      href: entityHref(projectId, "stage"),
+      color: entityColor("stage"),
     });
     if (st.segmentId) addEdge(nid("segment", st.segmentId), nid("stage", st.id));
   }
@@ -215,8 +197,8 @@ export async function getRelationGraphData(
       type: "element",
       label: el.name,
       meta: el.format ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/execution/funnel`,
-      color: COLOR.element,
+      href: entityHref(projectId, "element"),
+      color: entityColor("element"),
     });
     addEdge(nid("stage", el.stageId), nid("element", el.id));
     if (el.segmentId) addEdge(nid("segment", el.segmentId), nid("element", el.id));
@@ -227,8 +209,8 @@ export async function getRelationGraphData(
       type: "channel",
       label: c.name,
       meta: c.type ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/execution/channels`,
-      color: COLOR.channel,
+      href: entityHref(projectId, "channel"),
+      color: entityColor("channel"),
     });
   }
   for (const k of kpiRows) {
@@ -237,8 +219,8 @@ export async function getRelationGraphData(
       type: "kpi",
       label: k.name,
       meta: k.category ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/measurement/kpi`,
-      color: COLOR.kpi,
+      href: entityHref(projectId, "kpi"),
+      color: entityColor("kpi"),
     });
     if (k.segmentId) addEdge(nid("segment", k.segmentId), nid("kpi", k.id));
   }
@@ -248,8 +230,8 @@ export async function getRelationGraphData(
       type: "page",
       label: p.name,
       meta: p.urlPath ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/execution/sites`,
-      color: COLOR.page,
+      href: entityHref(projectId, "page"),
+      color: entityColor("page"),
     });
   }
   for (const c of campaignRows) {
@@ -258,8 +240,8 @@ export async function getRelationGraphData(
       type: "campaign",
       label: c.name,
       meta: c.stage ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/execution/campaigns`,
-      color: COLOR.campaign,
+      href: entityHref(projectId, "campaign"),
+      color: entityColor("campaign"),
     });
     if (c.segmentId) addEdge(nid("segment", c.segmentId), nid("campaign", c.id), "targetuje");
     if (c.landingPageId)
@@ -271,8 +253,8 @@ export async function getRelationGraphData(
       type: "geo",
       label: g.type,
       meta: g.status ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/execution/geo`,
-      color: COLOR.geo,
+      href: entityHref(projectId, "geo"),
+      color: entityColor("geo"),
     });
     if (g.pageId) addEdge(nid("page", g.pageId), nid("geo", g.id), "cytowalny przez");
   }
@@ -282,13 +264,9 @@ export async function getRelationGraphData(
       type: "offer",
       label: o.name,
       meta: o.type ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/execution/offers`,
-      color: COLOR.offer,
+      href: entityHref(projectId, "offer"),
+      color: entityColor("offer"),
     });
-  }
-  for (const os of offerSegmentRows) {
-    if (offerRows.some((o) => o.id === os.offerId))
-      addEdge(nid("offer", os.offerId), nid("segment", os.segmentId), "dla segmentu");
   }
   for (const f of flowRows) {
     nodes.push({
@@ -296,8 +274,8 @@ export async function getRelationGraphData(
       type: "flow",
       label: f.name,
       meta: f.type ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/execution/funnel`,
-      color: COLOR.flow,
+      href: entityHref(projectId, "flow"),
+      color: entityColor("flow"),
     });
     if (f.segmentId) addEdge(nid("segment", f.segmentId), nid("flow", f.id));
     if (f.entryElementId && elementIds.has(f.entryElementId))
@@ -309,8 +287,8 @@ export async function getRelationGraphData(
       type: "competitor",
       label: c.name,
       meta: c.type,
-      href: `/strategy-hub/projects/${projectId}/foundation/business`,
-      color: COLOR.competitor,
+      href: entityHref(projectId, "competitor"),
+      color: entityColor("competitor"),
     });
     if (c.segmentId) addEdge(nid("competitor", c.id), nid("segment", c.segmentId));
   }
@@ -320,37 +298,45 @@ export async function getRelationGraphData(
       type: "objection",
       label: o.objectionMd.slice(0, 60),
       meta: o.stage ?? undefined,
-      href: `/strategy-hub/projects/${projectId}/foundation/business`,
-      color: COLOR.objection,
+      href: entityHref(projectId, "objection"),
+      color: entityColor("objection"),
     });
     if (o.segmentId) addEdge(nid("segment", o.segmentId), nid("objection", o.id));
   }
 
   const elementNodeIds = new Set(elementRows.map((e) => nid("element", e.id)));
-  for (const ec of elChannelRows) {
-    const from = nid("element", ec.funnelElementId);
-    if (elementNodeIds.has(from))
-      addEdge(from, nid("channel", ec.channelId), "publikowany w");
-  }
-  for (const ek of elKpiRows) {
-    const from = nid("element", ek.funnelElementId);
-    if (elementNodeIds.has(from)) addEdge(from, nid("kpi", ek.kpiId), "mierzony przez");
-  }
-  for (const ec of elCampaignRows) {
-    const from = nid("element", ec.funnelElementId);
-    if (elementNodeIds.has(from))
-      addEdge(from, nid("campaign", ec.campaignId), "promowany przez");
-  }
-  for (const eg of elGeoRows) {
-    const from = nid("element", eg.funnelElementId);
-    if (elementNodeIds.has(from))
-      addEdge(from, nid("geo", eg.geoAssetId), "cytowalny w AI przez");
+
+  for (const rel of semanticRelations) {
+    const from = nid(rel.sourceType, rel.sourceId);
+    const to = nid(rel.targetType, rel.targetId);
+    const label = relationLabel(rel.relationType);
+
+    if (rel.relationType === "publikowany_w") {
+      if (elementNodeIds.has(from) && channelIds.has(rel.targetId))
+        addEdge(from, to, label);
+    } else if (rel.relationType === "mierzony_przez") {
+      if (elementNodeIds.has(from) && kpiIds.has(rel.targetId))
+        addEdge(from, to, label);
+    } else if (rel.relationType === "promowany_przez") {
+      if (elementNodeIds.has(from) && campaignIds.has(rel.targetId))
+        addEdge(from, to, label);
+    } else if (rel.relationType === "wspierany_przez") {
+      if (elementNodeIds.has(from) && geoIds.has(rel.targetId))
+        addEdge(from, to, label);
+    } else if (rel.relationType === "skierowana_do") {
+      if (offerIds.has(rel.sourceId))
+        addEdge(from, to, label);
+    } else if (rel.relationType === "prowadzi_przez") {
+      if (flowIds.has(rel.sourceId) && pageIds.has(rel.targetId))
+        addEdge(from, to, label);
+    }
   }
 
-  const layout = projectRow[0]?.graphLayout as
-    | Record<string, { x: number; y: number }>
-    | null
-    | undefined;
+  const rawLayout = projectRow[0]?.graphLayout;
+  let savedLayout: Record<string, { x: number; y: number }> | null = null;
+  if (rawLayout && typeof rawLayout === "object" && !Array.isArray(rawLayout)) {
+    savedLayout = rawLayout as Record<string, { x: number; y: number }>;
+  }
 
-  return { nodes, edges, savedLayout: layout ?? null };
+  return { nodes, edges, savedLayout };
 }
