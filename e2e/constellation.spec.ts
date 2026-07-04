@@ -39,8 +39,14 @@ async function openFirstProject(page: import("@playwright/test").Page) {
 }
 
 async function openFirstProjectConstellation(page: import("@playwright/test").Page) {
-  await openFirstProject(page);
-  await page.getByRole("tab", { name: "Konstelacja" }).click();
+  const res = await page.request.get("/api/strategy-hub/projects");
+  expect(res.ok()).toBeTruthy();
+  const body = (await res.json()) as { projects: Array<{ id: string }> };
+  expect(body.projects.length).toBeGreaterThan(0);
+  await page.goto(
+    `/strategy-hub/projects/${body.projects[0].id}/constellation`,
+    { waitUntil: "domcontentloaded" }
+  );
   await expect(page.getByRole("img", { name: "Widok konstelacji strategii" })).toBeVisible({
     timeout: 15_000,
   });
@@ -85,7 +91,9 @@ test.describe("Konstelacja Strategy Hub", () => {
     const slug = await loginAsClient(page);
     test.skip(!slug, "Brak projektu klienta w seedzie");
 
-    await page.goto(`/projects/${slug}/strategy/map`, { waitUntil: "domcontentloaded" });
+    await page.goto(`/projects/${slug}/strategy/constellation`, {
+      waitUntil: "domcontentloaded",
+    });
     await expect(page.getByRole("img", { name: "Widok konstelacji strategii" })).toBeVisible({
       timeout: 25_000,
     });

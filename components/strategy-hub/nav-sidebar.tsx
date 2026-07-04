@@ -14,6 +14,7 @@ import {
   Gauge,
   LayoutDashboard,
   Map as MapIcon,
+  Orbit,
   LogOut,
   Clock,
   Puzzle,
@@ -76,6 +77,11 @@ const projectViewItems = (projectId: string) => [
     href: `/strategy-hub/projects/${projectId}`,
     icon: MapIcon,
     exact: true,
+  },
+  {
+    label: "Konstelacja",
+    href: `/strategy-hub/projects/${projectId}/constellation`,
+    icon: Orbit,
   },
   {
     label: "Strategy Canvas",

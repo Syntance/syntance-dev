@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Loader2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -69,12 +69,14 @@ export function EntityPanel({
     [allNodes]
   );
 
-  useEffect(() => {
-    if (!open) {
-      setError(null);
-      setTargetId("");
-    }
-  }, [open]);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (!open && prevOpen) {
+    setPrevOpen(open);
+    setError(null);
+    setTargetId("");
+  } else if (open !== prevOpen) {
+    setPrevOpen(open);
+  }
 
   const addRelation = async () => {
     if (!entityType || !entityId || !targetId) return;

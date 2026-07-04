@@ -24,11 +24,14 @@ function ProjectMetaLoader({ children }: { children: React.ReactNode }) {
   const projectId = useProjectIdFromPath();
   const [project, setProject] = React.useState<ProjectMeta | null>(null);
 
+  const [prevProjectId, setPrevProjectId] = React.useState(projectId);
+  if (projectId !== prevProjectId) {
+    setPrevProjectId(projectId);
+    if (!projectId) setProject(null);
+  }
+
   React.useEffect(() => {
-    if (!projectId) {
-      setProject(null);
-      return;
-    }
+    if (!projectId) return;
 
     const ctrl = new AbortController();
     fetch(`/api/strategy-hub/projects/${projectId}`, { signal: ctrl.signal })

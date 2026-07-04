@@ -7,30 +7,38 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, useMotionTemplate } from "motion/react";
-import { Loader2 } from "lucide-react";
+import { ChevronRight, Info, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ConstellationData, ConstellationNode } from "@/lib/strategy-hub/constellation-types";
+import type {
+  ConstellationNode,
+  ConstellationScene,
+  SceneData,
+} from "@/lib/strategy-hub/constellation-types";
 import {
   CORE_NODE_ID,
   areaNodeId,
+  parseEntityNodeId,
 } from "@/lib/strategy-hub/constellation-types";
-import type { StrategyArea } from "@/lib/strategy-hub/entities/entity-types";
+import type { EntityTypeKey } from "@/lib/strategy-hub/entities/entity-types";
 import {
   mapFocusNodeId,
   onMapFocus,
   type MapFocusDetail,
 } from "@/lib/strategy-hub/map-focus-bus";
-import { computeRadialLayout } from "./radial-layout";
 import { useCamera } from "./use-camera";
 import { ConstellationNodeView, nodeRadius } from "./constellation-node";
 import { EntityPanel } from "./entity-panel";
-import { AreaNavigator } from "./area-navigator";
+import { CorePanel } from "./core-panel";
+import { computeSceneLayout, allSceneNodes } from "./scene-layout";
 
 interface ConstellationViewProps {
   projectId: string;
   mode: "editor" | "client";
-  initialFocus?: string;
+  basePath?: string;
+  initialScene?: SceneData;
+  fullscreen?: boolean;
 }
 
 function crossLinkPath(
@@ -46,51 +54,159 @@ function crossLinkPath(
   return `M ${x1} ${y1} Q ${cx} ${cy}, ${x2} ${y2}`;
 }
 
+function sceneToQuery(scene: ConstellationScene): string {
+  const params = new URLSearchParams();
+  if (scene.level === "organism") {
+    params.set("level", "organism");
+  } else if (scene.level === "area") {
+    params.set("level", "area");
+    params.set("area", scene.area);
+  } else {
+    params.set("level", "entity");
+    params.set("type", scene.ref.type);
+    params.set("id", scene.ref.id);
+  }
+  return params.toString();
+}
+
+function sceneQueryFromSearchParams(sp: URLSearchParams): string {
+  const focus = sp.get("focus");
+  if (focus) return `focus=${encodeURIComponent(focus)}`;
+
+  const parts: string[] = [];
+  const level = sp.get("level");
+  if (level) parts.push(`level=${level}`);
+  const area = sp.get("area");
+  if (area) parts.push(`area=${area}`);
+  const type = sp.get("type") ?? sp.get("entityType");
+  const id = sp.get("id") ?? sp.get("entityId");
+  if (type) parts.push(`type=${type}`);
+  if (id) parts.push(`id=${id}`);
+  return parts.join("&");
+}
+
+function buildSceneApiUrl(
+  projectId: string,
+  mode: "editor" | "client",
+  query: string
+): string {
+  const q = query ? `${query}&mode=${mode}` : `mode=${mode}`;
+  return `/api/strategy-hub/projects/${projectId}/constellation?${q}`;
+}
+
+function sceneLiveMessage(data: SceneData): string {
+  if (data.scene.level === "organism") {
+    return `Organizm strategii, ${data.members.length} elementów`;
+  }
+  if (data.scene.level === "area") {
+    return `Obszar ${data.center.label}, ${data.members.length} elementów, ${data.upstream.length} wpływających, ${data.downstream.length} wynikających`;
+  }
+  return `Element ${data.center.label}, ${data.upstream.length} wpływających, ${data.downstream.length} wynikających`;
+}
+
 export function ConstellationView({
   projectId,
   mode,
-  initialFocus,
+  basePath,
+  initialScene,
+  fullscreen = false,
 }: ConstellationViewProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [data, setData] = useState<ConstellationData | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  const pageBase =
+    basePath ?? `/strategy-hub/projects/${projectId}/constellation`;
+
+  const [data, setData] = useState<SceneData | null>(initialScene ?? null);
+  const [loading, setLoading] = useState(!initialScene);
   const [error, setError] = useState<string | null>(null);
-  const [focusedId, setFocusedId] = useState<string | null>(initialFocus ?? null);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [highlightedLinkIds, setHighlightedLinkIds] = useState<Set<string>>(
     () => new Set()
   );
   const [panelNode, setPanelNode] = useState<ConstellationNode | null>(null);
+  const [corePanelOpen, setCorePanelOpen] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
   const [viewport, setViewport] = useState({ w: 960, h: 560 });
+  const areaMembersRef = useRef<ConstellationNode[]>([]);
 
   const camera = useCamera();
   const svgTransform = useMotionTemplate`${camera.transform}`;
 
-  const load = useCallback(async () => {
+  const sceneQuery = sceneQueryFromSearchParams(searchParams);
+  const apiUrl = buildSceneApiUrl(projectId, mode, sceneQuery);
+
+  const fetchScene = useCallback(
+    (url: string) =>
+      fetch(url, { signal: AbortSignal.timeout(15_000) })
+        .then((res) => {
+          if (!res.ok) throw new Error("Nie udało się załadować sceny");
+          return res.json() as Promise<SceneData>;
+        }),
+    []
+  );
+
+  const [prevApiUrl, setPrevApiUrl] = useState(apiUrl);
+  if (apiUrl !== prevApiUrl) {
+    setPrevApiUrl(apiUrl);
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(
-        `/api/strategy-hub/projects/${projectId}/constellation?mode=${mode}`,
-        { signal: AbortSignal.timeout(15_000) }
-      );
-      if (!res.ok) {
-        setError("Nie udało się załadować konstelacji");
-        return;
-      }
-      const json = (await res.json()) as ConstellationData;
-      setData(json);
-    } catch {
-      setError("Błąd połączenia z serwerem");
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, mode]);
+  }
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void fetchScene(apiUrl)
+      .then((json) => {
+        if (cancelled) return;
+        setData(json);
+        setLiveMessage(sceneLiveMessage(json));
+        setPanelNode(null);
+        setCorePanelOpen(false);
+        if (json.scene.level === "entity") {
+          const areaCrumb = json.breadcrumb.find((b) => b.scene.level === "area");
+          if (areaCrumb?.scene.level === "area") {
+            const areaQ = sceneToQuery(areaCrumb.scene);
+            void fetchScene(buildSceneApiUrl(projectId, mode, areaQ)).then(
+              (areaData) => {
+                if (!cancelled) areaMembersRef.current = areaData.members;
+              }
+            );
+          }
+        } else if (json.scene.level === "area") {
+          areaMembersRef.current = json.members;
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError("Błąd połączenia z serwerem");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, fetchScene, mode, projectId]);
+
+  const navigateToScene = useCallback(
+    (scene: ConstellationScene) => {
+      const q = sceneToQuery(scene);
+      const href = q ? `${pageBase}?${q}` : pageBase;
+      router.push(href);
+    },
+    [pageBase, router]
+  );
+
+  const navigateToEntity = useCallback(
+    (entityType: string, entityId: string) => {
+      navigateToScene({
+        level: "entity",
+        ref: { type: entityType as EntityTypeKey, id: entityId },
+      });
+    },
+    [navigateToScene]
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -104,23 +220,25 @@ export function ConstellationView({
   }, []);
 
   useEffect(() => {
+    if (!data) return;
     camera.resetView(viewport.w, viewport.h);
-  }, [viewport.w, viewport.h, camera]);
+  }, [data?.scene, viewport.w, viewport.h, camera, data]);
 
   const layout = useMemo(() => {
     if (!data) return new Map<string, { x: number; y: number; angle: number }>();
-    return computeRadialLayout(
-      data.nodes.map((n) => ({ id: n.id, parentId: n.parentId })),
-      data.areasOrder,
-      0,
-      0
-    );
+    return computeSceneLayout(data);
   }, [data]);
 
   const nodeById = useMemo(() => {
     const map = new Map<string, ConstellationNode>();
-    for (const n of data?.nodes ?? []) map.set(n.id, n);
+    if (!data) return map;
+    for (const n of allSceneNodes(data)) map.set(n.id, n);
     return map;
+  }, [data]);
+
+  const allNodesFlat = useMemo((): ConstellationNode[] => {
+    if (!data) return [];
+    return allSceneNodes(data);
   }, [data]);
 
   const announceFocus = useCallback(
@@ -141,62 +259,130 @@ export function ConstellationView({
       if (zoom) {
         const node = nodeById.get(id);
         const targetScale =
-          node?.kind === "entity" ? 1.25 : node?.kind === "area" ? 0.95 : 0.75;
+          node?.kind === "entity"
+            ? data?.scene.level === "entity"
+              ? 1.15
+              : 1.25
+            : node?.kind === "area"
+              ? 1.05
+              : 0.85;
         camera.focusNode(pos, viewport.w, viewport.h, targetScale);
       }
     },
-    [layout, nodeById, announceFocus, camera, viewport]
+    [layout, nodeById, announceFocus, camera, viewport, data?.scene.level]
   );
 
+  const focusParam = searchParams.get("focus");
+  const [prevFocusParam, setPrevFocusParam] = useState(focusParam);
+  if (
+    focusParam &&
+    focusParam !== prevFocusParam &&
+    layout.has(focusParam)
+  ) {
+    setPrevFocusParam(focusParam);
+    setFocusedId(focusParam);
+    const node = nodeById.get(focusParam);
+    if (node) setLiveMessage(`Fokus: ${node.label}`);
+  }
+
   useEffect(() => {
-    if (initialFocus && layout.has(initialFocus)) {
-      focusNodeById(initialFocus);
-    }
-  }, [initialFocus, layout, focusNodeById]);
+    if (!focusParam || !layout.has(focusParam)) return;
+    const pos = layout.get(focusParam);
+    if (!pos) return;
+    const node = nodeById.get(focusParam);
+    const targetScale =
+      node?.kind === "entity"
+        ? data?.scene.level === "entity"
+          ? 1.15
+          : 1.25
+        : node?.kind === "area"
+          ? 1.05
+          : 0.85;
+    camera.focusNode(pos, viewport.w, viewport.h, targetScale);
+  }, [focusParam, layout, nodeById, camera, viewport, data?.scene.level]);
 
   useEffect(() => {
     const handleMapFocus = (detail: MapFocusDetail) => {
-      const nodeId = mapFocusNodeId(detail.entityType, detail.entityId);
-      if (!layout.has(nodeId)) return;
-
-      if (detail.mode === "focus") {
+      if (detail.mode === "focus" || detail.mode === "path") {
         setHighlightedLinkIds(new Set());
         setHighlightedId(null);
-        focusNodeById(nodeId);
+        navigateToEntity(detail.entityType, detail.entityId);
+        if (detail.mode === "path") {
+          setHighlightedLinkIds(new Set(detail.pathIds ?? []));
+        }
         return;
       }
 
+      const nodeId = mapFocusNodeId(detail.entityType, detail.entityId);
       if (detail.mode === "highlight") {
-        setHighlightedId(nodeId);
-        setFocusedId(nodeId);
-        announceFocus(nodeId);
-        return;
-      }
-
-      if (detail.mode === "path") {
-        setHighlightedId(nodeId);
-        setFocusedId(nodeId);
-        setHighlightedLinkIds(new Set(detail.pathIds ?? []));
-        focusNodeById(nodeId);
+        if (layout.has(nodeId)) {
+          setHighlightedId(nodeId);
+          setFocusedId(nodeId);
+          announceFocus(nodeId);
+        } else {
+          navigateToEntity(detail.entityType, detail.entityId);
+        }
       }
     };
 
     return onMapFocus(handleMapFocus);
-  }, [layout, focusNodeById, announceFocus]);
+  }, [layout, announceFocus, navigateToEntity]);
 
-  const entitiesInArea = useCallback(
-    (area: StrategyArea) =>
-      (data?.nodes ?? []).filter(
-        (n) => n.kind === "entity" && n.parentId === areaNodeId(area)
-      ),
-    [data]
+  const handleNodeActivate = useCallback(
+    (node: ConstellationNode) => {
+      if (!data) return;
+
+      if (node.kind === "core" && data.scene.level === "organism") {
+        setCorePanelOpen(true);
+        setPanelNode(null);
+        focusNodeById(node.id, false);
+        return;
+      }
+
+      if (node.kind === "area") {
+        const area = data.areasOrder.find((a) => areaNodeId(a) === node.id);
+        if (area) navigateToScene({ level: "area", area });
+        return;
+      }
+
+      if (node.kind === "entity") {
+        const parsed = parseEntityNodeId(node.id);
+        if (parsed) navigateToScene({ level: "entity", ref: parsed });
+      }
+    },
+    [data, focusNodeById, navigateToScene]
   );
+
+  const goUpScene = useCallback(() => {
+    if (!data) return;
+    if (data.scene.level === "entity") {
+      const areaCrumb = data.breadcrumb.find((b) => b.scene.level === "area");
+      if (areaCrumb?.scene.level === "area") {
+        navigateToScene(areaCrumb.scene);
+        return;
+      }
+    }
+    if (data.scene.level === "area" || data.scene.level === "entity") {
+      navigateToScene({ level: "organism" });
+    }
+  }, [data, navigateToScene]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!data) return;
 
     if (e.key === "Escape") {
-      setPanelNode(null);
+      if (panelNode) {
+        setPanelNode(null);
+        return;
+      }
+      if (corePanelOpen) {
+        setCorePanelOpen(false);
+        return;
+      }
+      if (data.scene.level !== "organism") {
+        goUpScene();
+        return;
+      }
       setFocusedId(null);
       camera.resetView(viewport.w, viewport.h);
       return;
@@ -205,53 +391,65 @@ export function ConstellationView({
     if (e.key === "Enter" && focusedId) {
       const node = nodeById.get(focusedId);
       if (node?.kind === "entity") setPanelNode(node);
+      if (node?.kind === "core") setCorePanelOpen(true);
       return;
     }
 
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
+      const delta = e.key === "ArrowRight" ? 1 : -1;
+
+      if (data.scene.level === "area") {
+        const idx = data.areasOrder.indexOf(data.scene.area);
+        const nextIdx = (idx + delta + data.areasOrder.length) % data.areasOrder.length;
+        const nextArea = data.areasOrder[nextIdx];
+        if (nextArea) navigateToScene({ level: "area", area: nextArea });
+        return;
+      }
+
+      if (data.scene.level === "entity") {
+        const members = areaMembersRef.current;
+        if (members.length === 0) return;
+        const curIdx = focusedId
+          ? members.findIndex((n) => n.id === focusedId)
+          : members.findIndex((n) => n.id === data.center.id);
+        const baseIdx = curIdx < 0 ? 0 : curIdx;
+        const nextIdx = (baseIdx + delta + members.length) % members.length;
+        const next = members[nextIdx];
+        if (next) {
+          const parsed = parseEntityNodeId(next.id);
+          if (parsed) navigateToScene({ level: "entity", ref: parsed });
+        }
+        return;
+      }
+
       const areaIds = data.areasOrder.map((a) => areaNodeId(a));
       const idx = focusedId?.startsWith("area:")
         ? areaIds.indexOf(focusedId)
         : -1;
-      const delta = e.key === "ArrowRight" ? 1 : -1;
       const nextIdx =
         idx < 0 ? 0 : (idx + delta + areaIds.length) % areaIds.length;
       focusNodeById(areaIds[nextIdx] ?? CORE_NODE_ID);
-      return;
-    }
-
-    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-      e.preventDefault();
-      const focused = focusedId ? nodeById.get(focusedId) : undefined;
-      let area: StrategyArea | undefined;
-      if (focused?.kind === "area") {
-        area = data.areasOrder.find((a) => areaNodeId(a) === focused.id);
-      } else if (focused?.parentId?.startsWith("area:")) {
-        area = data.areasOrder.find((a) => areaNodeId(a) === focused.parentId);
-      }
-      if (!area) return;
-      const ents = entitiesInArea(area);
-      if (ents.length === 0) return;
-      const curIdx =
-        focused?.kind === "entity"
-          ? ents.findIndex((n) => n.id === focused.id)
-          : -1;
-      const delta = e.key === "ArrowDown" ? 1 : -1;
-      const nextIdx =
-        curIdx < 0 ? 0 : (curIdx + delta + ents.length) % ents.length;
-      const nextId = ents[nextIdx]?.id ?? ents[0]?.id;
-      if (nextId) focusNodeById(nextId);
     }
   };
 
   const scale = camera.getScale();
-  const showEntityLabels = scale >= 0.9;
-  const showCrossLinks = scale >= 0.7;
+  const showEntityLabels =
+    data?.scene.level === "organism" ? scale >= 0.9 : scale >= 0.75;
+  const showCrossLinks = scale >= 0.65;
 
-  if (loading) {
+  const sideColumnHeader = data?.center.label ?? "";
+
+  if (loading && !data) {
     return (
-      <div className="flex h-[520px] items-center justify-center gap-2 rounded-2xl border border-border bg-[oklch(0.13_0.02_260)] text-sm text-muted-foreground">
+      <div
+        className={cn(
+          "flex items-center justify-center gap-2 text-sm text-muted-foreground",
+          fullscreen
+            ? "h-full min-h-[420px] bg-[oklch(0.13_0.02_260)]"
+            : "h-[520px] rounded-2xl border border-border bg-[oklch(0.13_0.02_260)]"
+        )}
+      >
         <Loader2 className="size-4 animate-spin" /> Ładowanie konstelacji…
       </div>
     );
@@ -259,7 +457,14 @@ export function ConstellationView({
 
   if (error || !data) {
     return (
-      <div className="flex h-[520px] items-center justify-center rounded-2xl border border-border bg-[oklch(0.13_0.02_260)] text-sm text-muted-foreground">
+      <div
+        className={cn(
+          "flex items-center justify-center text-sm text-muted-foreground",
+          fullscreen
+            ? "h-full min-h-[420px] bg-[oklch(0.13_0.02_260)]"
+            : "h-[520px] rounded-2xl border border-border bg-[oklch(0.13_0.02_260)]"
+        )}
+      >
         {error ?? "Brak danych"}
       </div>
     );
@@ -269,13 +474,73 @@ export function ConstellationView({
     <div
       ref={containerRef}
       className={cn(
-        "relative h-[min(72vh,640px)] min-h-[420px] overflow-hidden rounded-2xl border border-border",
-        "bg-[oklch(0.13_0.02_260)]"
+        "relative overflow-hidden bg-[oklch(0.13_0.02_260)]",
+        fullscreen
+          ? "h-full min-h-0 flex-1"
+          : "h-[min(72vh,640px)] min-h-[420px] rounded-2xl border border-border"
       )}
     >
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {liveMessage}
       </div>
+
+      {data.breadcrumb.length > 0 && (
+        <nav
+          aria-label="Ścieżka nawigacji konstelacji"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-1 px-4 py-3 text-xs"
+        >
+          <ol className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-full border border-border/60 bg-card/90 px-3 py-1.5 shadow-sm backdrop-blur">
+            {data.breadcrumb.map((crumb, i) => (
+              <li key={`${crumb.label}-${i}`} className="flex items-center gap-1">
+                {i > 0 && (
+                  <ChevronRight
+                    className="size-3 text-muted-foreground"
+                    aria-hidden
+                  />
+                )}
+                {i < data.breadcrumb.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => navigateToScene(crumb.scene)}
+                    className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded px-1"
+                  >
+                    {crumb.label}
+                  </button>
+                ) : (
+                  <span className="font-medium text-foreground">{crumb.label}</span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
+      {(data.scene.level === "area" || data.scene.level === "entity") && (
+        <>
+          <div
+            data-testid="scene-upstream"
+            className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 max-w-[140px]"
+          >
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Wpływa na: {sideColumnHeader}
+            </p>
+          </div>
+          <div
+            data-testid="scene-downstream"
+            className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 max-w-[140px] text-right"
+          >
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Wynika z tego
+            </p>
+          </div>
+        </>
+      )}
+
+      {loading && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[oklch(0.13_0.02_260)]/60">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
 
       <svg
         width={viewport.w}
@@ -283,7 +548,7 @@ export function ConstellationView({
         tabIndex={0}
         role="img"
         aria-label="Widok konstelacji strategii"
-        className="touch-none select-none outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+        className="touch-none size-full select-none outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
         onKeyDown={handleKeyDown}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
@@ -314,12 +579,12 @@ export function ConstellationView({
         </defs>
 
         <motion.g style={{ transform: svgTransform, transformOrigin: "0 0" }}>
-          {data.links
-            .filter((l) => l.kind === "tree")
-            .map((link) => {
-              const from = layout.get(link.sourceId);
-              const to = layout.get(link.targetId);
-              if (!from || !to) return null;
+          {data.links.map((link) => {
+            const from = layout.get(link.sourceId);
+            const to = layout.get(link.targetId);
+            if (!from || !to) return null;
+
+            if (link.kind === "tree") {
               return (
                 <line
                   key={link.id}
@@ -332,56 +597,64 @@ export function ConstellationView({
                   strokeOpacity={0.35}
                 />
               );
-            })}
+            }
 
-          {data.links
-            .filter((l) => l.kind === "cross")
-            .map((link) => {
-              const show =
-                showCrossLinks ||
-                focusedId === link.sourceId ||
-                focusedId === link.targetId ||
-                highlightedLinkIds.has(link.id);
-              if (!show) return null;
-              const from = layout.get(link.sourceId);
-              const to = layout.get(link.targetId);
-              if (!from || !to) return null;
-              const pathHighlighted = highlightedLinkIds.has(link.id);
-              return (
-                <path
-                  key={link.id}
-                  d={crossLinkPath(from.x, from.y, to.x, to.y)}
-                  fill="none"
-                  stroke={
-                    pathHighlighted
-                      ? "oklch(0.78 0.12 280)"
-                      : link.aiGenerated
-                        ? "#a78bfa"
-                        : "oklch(0.65 0.04 260)"
-                  }
-                  strokeWidth={pathHighlighted ? 2.5 : 1.2}
-                  strokeDasharray={link.aiGenerated ? "2 4" : "4 4"}
-                  strokeOpacity={pathHighlighted ? 0.95 : 0.55}
-                />
-              );
-            })}
+            const show =
+              showCrossLinks ||
+              focusedId === link.sourceId ||
+              focusedId === link.targetId ||
+              highlightedLinkIds.has(link.id);
+            if (!show) return null;
 
-          {data.nodes.map((node, index) => {
+            const pathHighlighted = highlightedLinkIds.has(link.id);
+            return (
+              <path
+                key={link.id}
+                d={crossLinkPath(from.x, from.y, to.x, to.y)}
+                fill="none"
+                stroke={
+                  pathHighlighted
+                    ? "oklch(0.78 0.12 280)"
+                    : link.aiGenerated
+                      ? "#a78bfa"
+                      : "oklch(0.65 0.04 260)"
+                }
+                strokeWidth={pathHighlighted ? 2.5 : 1.2}
+                strokeDasharray={link.aiGenerated ? "2 4" : "4 4"}
+                strokeOpacity={pathHighlighted ? 0.95 : 0.55}
+              />
+            );
+          })}
+
+          {allNodesFlat.map((node, index) => {
             const pos = layout.get(node.id);
             if (!pos) return null;
             const focused = focusedId === node.id;
             const highlighted = highlightedId === node.id;
+            const isSide =
+              data.upstream.some((n) => n.id === node.id) ||
+              data.downstream.some((n) => n.id === node.id);
+            const isCenter = node.id === data.center.id;
             const showLabel =
               node.kind === "area" ||
               focused ||
-              (node.kind === "entity" && showEntityLabels);
+              isCenter ||
+              (node.kind === "entity" && showEntityLabels && !isSide) ||
+              (isSide && focused);
+            const radius =
+              isCenter && data.scene.level === "entity"
+                ? nodeRadius("area")
+                : isSide
+                  ? nodeRadius("entity") * 0.85
+                  : nodeRadius(node.kind);
+
             return (
               <ConstellationNodeView
                 key={node.id}
                 node={node}
                 x={pos.x}
                 y={pos.y}
-                radius={nodeRadius(node.kind)}
+                radius={radius}
                 focused={focused || highlighted}
                 showLabel={showLabel}
                 mode={mode}
@@ -389,7 +662,7 @@ export function ConstellationView({
                 onFocus={() => setFocusedId(node.id)}
                 onClick={() => {
                   focusNodeById(node.id, false);
-                  if (node.kind === "entity") setPanelNode(node);
+                  handleNodeActivate(node);
                 }}
               />
             );
@@ -397,24 +670,46 @@ export function ConstellationView({
         </motion.g>
       </svg>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
-        <AreaNavigator
-          areasOrder={data.areasOrder}
-          focusedId={focusedId?.startsWith("area:") ? focusedId : null}
-          onSelectArea={(id) => focusNodeById(id)}
-        />
-      </div>
+      {focusedId &&
+        nodeById.get(focusedId)?.kind === "entity" &&
+        !panelNode && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                const node = nodeById.get(focusedId);
+                if (node) setPanelNode(node);
+              }}
+              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            >
+              <Info className="size-3.5" />
+              Szczegóły
+            </button>
+          </div>
+        )}
 
       {panelNode && (
         <EntityPanel
           projectId={projectId}
           node={panelNode}
           links={data.links}
-          allNodes={data.nodes}
+          allNodes={allNodesFlat}
           mode={mode}
           open
           onClose={() => setPanelNode(null)}
-          onRelationAdded={() => void load()}
+          onRelationAdded={() => {
+            void fetchScene(apiUrl).then(setData);
+          }}
+        />
+      )}
+
+      {corePanelOpen && data.singletons && (
+        <CorePanel
+          projectLabel={data.center.label}
+          health={data.health}
+          singletons={data.singletons}
+          open
+          onClose={() => setCorePanelOpen(false)}
         />
       )}
     </div>

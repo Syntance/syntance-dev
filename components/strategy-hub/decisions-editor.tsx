@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { EntityCrud, type FieldDef } from "@/components/strategy-hub/entity-crud";
 import {
   RelationPicker,
@@ -74,52 +74,50 @@ export function DecisionsEditor({ projectId, mode = "editor" }: Props) {
   const [linkType, setLinkType] = useState<EntityType>("segment");
   const [linkRole, setLinkRole] = useState<"cause" | "effect">("cause");
 
-  const loadDecisions = useCallback(async () => {
-    try {
-      const res = await fetch(
-        `/api/strategy-hub/projects/${projectId}/decisions`,
-        { signal: AbortSignal.timeout(8000) }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setDecisions(
-          (data.items ?? []).map((d: DecisionRow) => ({
-            id: d.id,
-            title: d.title,
-          }))
-        );
-      }
-    } catch {
-      // ignore
-    }
-  }, [projectId]);
+  useEffect(() => {
+    void fetch(
+      `/api/strategy-hub/projects/${projectId}/decisions`,
+      { signal: AbortSignal.timeout(8000) }
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { items?: DecisionRow[] } | null) => {
+        if (data) {
+          setDecisions(
+            (data.items ?? []).map((d) => ({
+              id: d.id,
+              title: d.title,
+            }))
+          );
+        }
+      })
+      .catch(() => null);
+  }, [projectId, reloadKey]);
+
+  const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
+  if (selectedId !== prevSelectedId) {
+    setPrevSelectedId(selectedId);
+    if (!selectedId) setLinks([]);
+  }
 
   useEffect(() => {
-    void loadDecisions();
-  }, [loadDecisions, reloadKey]);
-
-  const loadLinks = useCallback(
-    async (decisionId: string) => {
-      const res = await fetch(
-        `/api/strategy-hub/projects/${projectId}/decisions/${decisionId}/links`
-      );
-      if (!res.ok) return;
-      const data = (await res.json()) as { links: LinkRow[] };
-      setLinks(
-        (data.links ?? []).map((l) => ({
-          entityType: l.entityType,
-          entityId: l.entityId,
-          role: l.role as "cause" | "effect",
-        }))
-      );
-    },
-    [projectId]
-  );
-
-  useEffect(() => {
-    if (selectedId) void loadLinks(selectedId);
-    else setLinks([]);
-  }, [selectedId, loadLinks]);
+    if (!selectedId) return;
+    void fetch(
+      `/api/strategy-hub/projects/${projectId}/decisions/${selectedId}/links`
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { links?: LinkRow[] } | null) => {
+        if (data) {
+          setLinks(
+            (data.links ?? []).map((l) => ({
+              entityType: l.entityType,
+              entityId: l.entityId,
+              role: l.role as "cause" | "effect",
+            }))
+          );
+        }
+      })
+      .catch(() => null);
+  }, [selectedId, projectId]);
 
   async function saveLinks() {
     if (!selectedId) return;

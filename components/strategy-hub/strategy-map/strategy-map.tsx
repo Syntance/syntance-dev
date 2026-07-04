@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   List,
@@ -29,21 +30,6 @@ const InfluenceView = dynamic(
   }
 );
 
-const ConstellationView = dynamic(
-  () =>
-    import("@/components/strategy-hub/constellation/constellation-view").then(
-      (m) => m.ConstellationView
-    ),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-[520px] items-center justify-center gap-2 rounded-2xl border border-border text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Ładowanie konstelacji…
-      </div>
-    ),
-  }
-);
-
 const PipelineView = dynamic(
   () =>
     import("@/components/strategy-hub/pipeline/pipeline-view").then(
@@ -59,16 +45,17 @@ const PipelineView = dynamic(
   }
 );
 
-type View = "list" | "map" | "influence" | "constellation" | "pipeline";
+type View = "list" | "map" | "influence" | "pipeline";
 
 interface StrategyMapProps {
   projectId: string;
   data: StrategyMapData;
   mode: "editor" | "client";
+  /** Slug projektu w portalu klienta (wymagany gdy mode=client). */
+  portalSlug?: string;
   /** Aktywna ścieżka strategii (z ?path=) — null = wszystkie. */
   activePathId?: string | null;
   initialView?: View;
-  initialFocus?: string;
 }
 
 function resolveDefaultView(
@@ -81,9 +68,8 @@ function resolveDefaultView(
     if (v === "map") return "map";
     if (v === "list") return "list";
     if (v === "influence") return "influence";
-    return "constellation";
+    return "map";
   }
-  if (v === "constellation") return "constellation";
   if (v === "pipeline") return "pipeline";
   if (v === "map") return "map";
   if (v === "influence") return "influence";
@@ -94,13 +80,12 @@ export function StrategyMap({
   projectId,
   data,
   mode,
+  portalSlug,
   activePathId = null,
   initialView,
-  initialFocus,
 }: StrategyMapProps) {
   const searchParams = useSearchParams();
   const viewParam = searchParams.get("view") ?? initialView;
-  const focusParam = searchParams.get("focus") ?? initialFocus ?? undefined;
 
   const [view, setView] = useState<View>(() =>
     resolveDefaultView(mode, viewParam, initialView)
@@ -111,6 +96,11 @@ export function StrategyMap({
     setView("map");
     setPresentSignal((n) => n + 1);
   };
+
+  const constellationHref =
+    mode === "client" && portalSlug
+      ? `/projects/${portalSlug}/strategy/constellation`
+      : `/strategy-hub/projects/${projectId}/constellation`;
 
   const showViewSwitcher = view !== "influence";
 
@@ -136,12 +126,6 @@ export function StrategyMap({
                 icon={<MapIcon className="size-3.5" />}
                 label="Mapa"
               />
-              <ToggleBtn
-                active={view === "constellation"}
-                onClick={() => setView("constellation")}
-                icon={<Sparkles className="size-3.5" />}
-                label="Konstelacja"
-              />
               {mode === "editor" && (
                 <ToggleBtn
                   active={view === "pipeline"}
@@ -151,6 +135,13 @@ export function StrategyMap({
                 />
               )}
             </div>
+            <Link
+              href={constellationHref}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            >
+              <Sparkles className="size-3.5" />
+              Konstelacja
+            </Link>
             {mode === "editor" && (
               <TrackSwitcher projectId={projectId} activePathId={activePathId} />
             )}
@@ -182,14 +173,6 @@ export function StrategyMap({
           onOpenInfluence={() => setView("influence")}
         />
       </div>
-
-      {view === "constellation" && (
-        <ConstellationView
-          projectId={projectId}
-          mode={mode}
-          initialFocus={focusParam}
-        />
-      )}
 
       {view === "pipeline" && mode === "editor" && (
         <PipelineView projectId={projectId} mode={mode} />

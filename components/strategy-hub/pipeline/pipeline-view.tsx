@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { PipelineStageCard } from "./pipeline-stage";
 import type { PipelineData, PipelineStage } from "@/lib/strategy-hub/pipeline-types";
@@ -25,25 +25,22 @@ export function PipelineView({ projectId, mode }: PipelineViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/strategy-hub/projects/${projectId}/pipeline`,
-        { signal: AbortSignal.timeout(15_000) }
-      );
-      if (!res.ok) throw new Error("Nie udało się załadować pipeline");
-      const json: PipelineData = await res.json();
-      setData(json);
-      setActiveIdx(pickDefaultActive(json.stages));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Błąd ładowania");
-    }
-  }, [projectId]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    void fetch(`/api/strategy-hub/projects/${projectId}/pipeline`, {
+      signal: AbortSignal.timeout(15_000),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Nie udało się załadować pipeline");
+        return res.json() as Promise<PipelineData>;
+      })
+      .then((json) => {
+        setData(json);
+        setActiveIdx(pickDefaultActive(json.stages));
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : "Błąd ładowania");
+      });
+  }, [projectId]);
 
   if (error) {
     return (

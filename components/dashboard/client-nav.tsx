@@ -18,6 +18,7 @@ import {
   Map as MapIcon,
   Milestone,
   Megaphone,
+  Orbit,
   Palette,
   ShieldCheck,
 } from "lucide-react";
@@ -39,6 +40,12 @@ const navItems = (slug: string) => [
     href: `/projects/${slug}/strategy/map`,
     icon: MapIcon,
     label: "Mapa strategii",
+    badge: "Nowe",
+  },
+  {
+    href: `/projects/${slug}/strategy/constellation`,
+    icon: Orbit,
+    label: "Konstelacja",
     badge: "Nowe",
   },
   {

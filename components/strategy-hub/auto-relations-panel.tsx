@@ -52,32 +52,54 @@ export function AutoRelationsPanel({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [doneMsg, setDoneMsg] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setDoneMsg(null);
-    try {
-      const res = await fetch(
-        `/api/strategy-hub/projects/${projectId}/auto-relations`,
-        { signal: AbortSignal.timeout(15000) }
-      );
-      if (res.ok) {
-        const data = (await res.json()) as { suggestions: ElementSuggestion[] };
-        setSuggestions(data.suggestions ?? []);
-        // domyślnie zaznacz wszystkie
-        const all = new Set<string>();
-        for (const s of data.suggestions ?? []) {
-          for (const t of s.targets) all.add(keyOf(s.elementId, t));
-        }
-        setSelected(all);
-      }
-    } finally {
-      setLoading(false);
+  const applySuggestions = useCallback((data: ElementSuggestion[]) => {
+    setSuggestions(data);
+    const all = new Set<string>();
+    for (const s of data) {
+      for (const t of s.targets) all.add(keyOf(s.elementId, t));
     }
-  }, [projectId]);
+    setSelected(all);
+  }, []);
 
   useEffect(() => {
-    if (open) void load();
-  }, [open, load]);
+    if (!open) return;
+    let cancelled = false;
+    void fetch(`/api/strategy-hub/projects/${projectId}/auto-relations`, {
+      signal: AbortSignal.timeout(15000),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { suggestions?: ElementSuggestion[] } | null) => {
+        if (!cancelled && data) {
+          applySuggestions(data.suggestions ?? []);
+        }
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, projectId, applySuggestions]);
+
+  function openPanel() {
+    setDoneMsg(null);
+    setLoading(true);
+    setOpen(true);
+  }
+
+  function reloadSuggestions() {
+    setLoading(true);
+    void fetch(`/api/strategy-hub/projects/${projectId}/auto-relations`, {
+      signal: AbortSignal.timeout(15000),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { suggestions?: ElementSuggestion[] } | null) => {
+        if (data) applySuggestions(data.suggestions ?? []);
+      })
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }
 
   function toggle(elementId: string, t: SuggestedTarget) {
     const k = keyOf(elementId, t);
@@ -142,7 +164,7 @@ export function AutoRelationsPanel({
             size="sm"
             variant="outline"
             className="shrink-0"
-            onClick={() => setOpen(true)}
+            onClick={openPanel}
           >
             <Link2 className="size-3.5" /> Zaproponuj
           </Button>
@@ -152,7 +174,7 @@ export function AutoRelationsPanel({
             size="sm"
             variant="ghost"
             className="shrink-0"
-            onClick={() => void load()}
+            onClick={reloadSuggestions}
             disabled={loading}
           >
             {loading ? (

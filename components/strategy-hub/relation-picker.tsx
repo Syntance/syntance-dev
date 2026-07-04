@@ -177,13 +177,16 @@ export function RelationPicker({
     };
   }, [open, search, fetchOptions]);
 
-  // Load labels for pre-selected IDs on first open
+  // Load labels for pre-selected IDs on first open (setTimeout — poza ciałem efektu)
   React.useEffect(() => {
     if (!open) return;
     const missing = selectedIds.filter((id) => !optionCache.has(id));
     if (missing.length === 0) return;
-    fetchOptions("");
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    const t = setTimeout(() => {
+      void fetchOptions("");
+    }, 0);
+    return () => clearTimeout(t);
+  }, [open, selectedIds, optionCache, fetchOptions]);
 
   const resolveOption = React.useCallback(
     (id: string): RelationOption | undefined =>

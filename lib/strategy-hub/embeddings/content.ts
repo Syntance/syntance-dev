@@ -26,6 +26,12 @@ const TEXT_FIELDS: Partial<Record<EntityTypeKey, string[]>> = {
   objection: ["objectionMd", "responseMd", "stage"],
   problem: ["name", "descriptionMd", "ambitionMd"],
   seo_keyword: ["phrase", "intent"],
+  sales_pitch: ["title", "pitchMd", "context"],
+  sales_script: ["name", "scriptMd", "context"],
+  lead_magnet: ["name", "descriptionMd", "format"],
+  section: ["name", "purposeMd", "copyMd"],
+  geo_query: ["query", "intent", "stage"],
+  site: ["name", "domain", "type"],
 };
 
 function readField(row: Record<string, unknown>, key: string): string {

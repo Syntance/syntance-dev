@@ -74,7 +74,12 @@ export default async function ClientStrategyMapPage({ params }: Props) {
         </p>
       </div>
 
-      <StrategyMap projectId={loaded.projectId} data={loaded.data} mode="client" />
+      <StrategyMap
+        projectId={loaded.projectId}
+        data={loaded.data}
+        mode="client"
+        portalSlug={slug}
+      />
     </div>
   );
 }

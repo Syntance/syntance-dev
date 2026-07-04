@@ -20,8 +20,13 @@ export function useProjectAlerts(
 ): ProjectAlert[] {
   const [alerts, setAlerts] = React.useState<ProjectAlert[]>([]);
 
-  React.useEffect(() => {
+  const [prevProjectId, setPrevProjectId] = React.useState(projectId);
+  if (projectId !== prevProjectId) {
+    setPrevProjectId(projectId);
     setAlerts([]);
+  }
+
+  React.useEffect(() => {
     if (!projectId) {
       return;
     }

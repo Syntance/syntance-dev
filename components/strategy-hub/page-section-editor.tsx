@@ -70,23 +70,18 @@ export function PageSectionEditor({
   const [sendingDev, setSendingDev] = React.useState(false);
   const timers = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  const load = React.useCallback(async () => {
-    try {
-      const res = await fetch(base, { signal: AbortSignal.timeout(8000) });
-      const j = (await res.json()) as { items: PageSection[] };
-      const items = (j.items ?? []).sort((a, b) => a.orderIdx - b.orderIdx);
-      setSections(items);
-      setSelectedId((cur) => cur ?? items[0]?.id ?? null);
-    } catch {
-      /* ignore */
-    } finally {
-      setLoading(false);
-    }
-  }, [base]);
-
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    void fetch(base, { signal: AbortSignal.timeout(8000) })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((j: { items?: PageSection[] } | null) => {
+        if (!j) return;
+        const items = (j.items ?? []).sort((a, b) => a.orderIdx - b.orderIdx);
+        setSections(items);
+        setSelectedId((cur) => cur ?? items[0]?.id ?? null);
+      })
+      .catch(() => null)
+      .finally(() => setLoading(false));
+  }, [base]);
 
   const selected = sections.find((s) => s.id === selectedId) ?? null;
 

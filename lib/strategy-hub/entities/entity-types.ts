@@ -1,6 +1,10 @@
 /**
  * Client-safe katalog typów encji Strategy Hub.
  * BEZ `import "server-only"` — importują go komponenty klienckie i moduły serwerowe.
+ *
+ * Wykluczenia z grafu strategii (encje operacyjne, nie węzły konstelacji / canvas):
+ * questions, glossary, credentials, materials, notes, tasks, channel-activity-plan,
+ * site-maintenance-costs, site-audits, nav-items
  */
 
 export type EntityTypeKey =
@@ -12,13 +16,19 @@ export type EntityTypeKey =
   | "page"
   | "campaign"
   | "geo"
+  | "geo_query"
   | "offer"
   | "flow"
   | "competitor"
   | "objection"
   | "problem"
   | "decision"
-  | "seo_keyword";
+  | "seo_keyword"
+  | "sales_pitch"
+  | "sales_script"
+  | "lead_magnet"
+  | "section"
+  | "site";
 
 export type StrategyArea =
   | "fundament"
@@ -163,6 +173,54 @@ export const ENTITY_TYPE_META: Record<EntityTypeKey, EntityTypeMeta> = {
     registryKey: "seo-keywords",
     href: (projectId) => hubPath(projectId, "execution/sites"),
   },
+  sales_pitch: {
+    label: "Pitch sprzedażowy",
+    labelPlural: "Pitche sprzedażowe",
+    color: "#f97316",
+    area: "przekaz",
+    registryKey: "sales-pitches",
+    href: (projectId) => hubPath(projectId, "execution/copy"),
+  },
+  sales_script: {
+    label: "Skrypt sprzedażowy",
+    labelPlural: "Skrypty sprzedażowe",
+    color: "#ea580c",
+    area: "przekaz",
+    registryKey: "sales-scripts",
+    href: (projectId) => hubPath(projectId, "execution/copy"),
+  },
+  lead_magnet: {
+    label: "Lead magnet",
+    labelPlural: "Lead magnety",
+    color: "#fdba74",
+    area: "przekaz",
+    registryKey: "lead-magnets",
+    href: (projectId) => hubPath(projectId, "execution/copy"),
+  },
+  section: {
+    label: "Sekcja strony",
+    labelPlural: "Sekcje stron",
+    color: "#64748b",
+    area: "strona",
+    registryKey: null,
+    href: (projectId) => hubPath(projectId, "execution/sites"),
+  },
+  geo_query: {
+    label: "Zapytanie GEO",
+    labelPlural: "Zapytania GEO",
+    color: "#06b6d4",
+    area: "kanaly",
+    registryKey: "geo-queries",
+    href: (projectId) => hubPath(projectId, "execution/geo"),
+  },
+  site: {
+    label: "Serwis",
+    labelPlural: "Serwisy",
+    color: "#334155",
+    area: "strona",
+    registryKey: "sites",
+    href: (projectId) => hubPath(projectId, "execution/sites"),
+  },
 };
 
 export const RELATION_TYPES = {
@@ -205,4 +263,24 @@ export function entityColor(type: string): string {
 /** href encji w edytorze Hub. */
 export function entityHref(projectId: string, type: EntityTypeKey): string {
   return ENTITY_TYPE_META[type].href(projectId);
+}
+
+/**
+ * Zależności upstream obszarów strategii (skąd czerpie obszar).
+ * Źródło: `lock.requiresUpstream` w `rules/defaults.ts` dla kluczy `presentationOrder`.
+ */
+export const AREA_DEPENDENCIES: Record<StrategyArea, StrategyArea[]> = {
+  fundament: [],
+  segmenty: ["fundament"],
+  lejek: ["segmenty"],
+  kanaly: ["lejek"],
+  przekaz: ["lejek"],
+  strona: ["segmenty", "lejek"],
+  kpi: ["kanaly", "strona"],
+};
+
+/** Obszary downstream — kto zależy od danego obszaru. */
+export function areaDownstream(area: StrategyArea): StrategyArea[] {
+  const keys = Object.keys(AREA_DEPENDENCIES) as StrategyArea[];
+  return keys.filter((k) => AREA_DEPENDENCIES[k].includes(area));
 }

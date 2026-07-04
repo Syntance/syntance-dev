@@ -14,6 +14,12 @@ import {
   userFlows,
   competitors,
   objections,
+  salesPitches,
+  salesScripts,
+  leadMagnets,
+  pageSections,
+  sites,
+  geoQueries,
 } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import {
@@ -82,6 +88,12 @@ export async function getRelationGraphData(
     flowRows,
     competitorRows,
     objectionRows,
+    pitchRows,
+    scriptRows,
+    leadMagnetRows,
+    sectionRows,
+    siteRows,
+    geoQueryRows,
     semanticRelations,
   ] = await Promise.all([
     db
@@ -151,6 +163,47 @@ export async function getRelationGraphData(
       .select()
       .from(objections)
       .where(and(eq(objections.projectId, projectId), isNull(objections.deletedAt))),
+    db
+      .select({
+        id: salesPitches.id,
+        title: salesPitches.title,
+        segmentId: salesPitches.segmentId,
+      })
+      .from(salesPitches)
+      .where(and(eq(salesPitches.projectId, projectId), isNull(salesPitches.deletedAt))),
+    db
+      .select({ id: salesScripts.id, name: salesScripts.name })
+      .from(salesScripts)
+      .where(and(eq(salesScripts.projectId, projectId), isNull(salesScripts.deletedAt))),
+    db
+      .select({
+        id: leadMagnets.id,
+        name: leadMagnets.name,
+        segmentId: leadMagnets.segmentId,
+      })
+      .from(leadMagnets)
+      .where(and(eq(leadMagnets.projectId, projectId), isNull(leadMagnets.deletedAt))),
+    db
+      .select({
+        id: pageSections.id,
+        name: pageSections.name,
+        pageId: pageSections.pageId,
+      })
+      .from(pageSections)
+      .innerJoin(pages, eq(pageSections.pageId, pages.id))
+      .where(and(eq(pages.projectId, projectId), isNull(pageSections.deletedAt))),
+    db
+      .select({ id: sites.id, name: sites.name, isPrimary: sites.isPrimary })
+      .from(sites)
+      .where(and(eq(sites.projectId, projectId), isNull(sites.deletedAt))),
+    db
+      .select({
+        id: geoQueries.id,
+        query: geoQueries.query,
+        targetPageId: geoQueries.targetPageId,
+      })
+      .from(geoQueries)
+      .where(and(eq(geoQueries.projectId, projectId), isNull(geoQueries.deletedAt))),
     listProjectRelationsByType(projectId, [...SEMANTIC_RELATION_TYPES]),
   ]);
 
@@ -162,6 +215,7 @@ export async function getRelationGraphData(
   const offerIds = new Set(offerRows.map((o) => o.id));
   const flowIds = new Set(flowRows.map((f) => f.id));
   const pageIds = new Set(pageRows.map((p) => p.id));
+  const siteIds = new Set(siteRows.map((s) => s.id));
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -233,6 +287,8 @@ export async function getRelationGraphData(
       href: entityHref(projectId, "page"),
       color: entityColor("page"),
     });
+    if (p.siteId && siteIds.has(p.siteId))
+      addEdge(nid("site", p.siteId), nid("page", p.id));
   }
   for (const c of campaignRows) {
     nodes.push({
@@ -302,6 +358,67 @@ export async function getRelationGraphData(
       color: entityColor("objection"),
     });
     if (o.segmentId) addEdge(nid("segment", o.segmentId), nid("objection", o.id));
+  }
+  for (const sp of pitchRows) {
+    nodes.push({
+      id: nid("sales_pitch", sp.id),
+      type: "sales_pitch",
+      label: sp.title,
+      href: entityHref(projectId, "sales_pitch"),
+      color: entityColor("sales_pitch"),
+    });
+    if (sp.segmentId) addEdge(nid("segment", sp.segmentId), nid("sales_pitch", sp.id));
+  }
+  for (const ss of scriptRows) {
+    nodes.push({
+      id: nid("sales_script", ss.id),
+      type: "sales_script",
+      label: ss.name,
+      href: entityHref(projectId, "sales_script"),
+      color: entityColor("sales_script"),
+    });
+  }
+  for (const lm of leadMagnetRows) {
+    nodes.push({
+      id: nid("lead_magnet", lm.id),
+      type: "lead_magnet",
+      label: lm.name,
+      href: entityHref(projectId, "lead_magnet"),
+      color: entityColor("lead_magnet"),
+    });
+    if (lm.segmentId) addEdge(nid("segment", lm.segmentId), nid("lead_magnet", lm.id));
+  }
+  for (const st of siteRows) {
+    nodes.push({
+      id: nid("site", st.id),
+      type: "site",
+      label: st.name,
+      meta: st.isPrimary ? "primary" : undefined,
+      href: entityHref(projectId, "site"),
+      color: entityColor("site"),
+    });
+  }
+  for (const sec of sectionRows) {
+    nodes.push({
+      id: nid("section", sec.id),
+      type: "section",
+      label: sec.name,
+      href: entityHref(projectId, "section"),
+      color: entityColor("section"),
+    });
+    if (pageIds.has(sec.pageId))
+      addEdge(nid("page", sec.pageId), nid("section", sec.id));
+  }
+  for (const gq of geoQueryRows) {
+    nodes.push({
+      id: nid("geo_query", gq.id),
+      type: "geo_query",
+      label: gq.query.slice(0, 60),
+      href: entityHref(projectId, "geo_query"),
+      color: entityColor("geo_query"),
+    });
+    if (gq.targetPageId && pageIds.has(gq.targetPageId))
+      addEdge(nid("page", gq.targetPageId), nid("geo_query", gq.id));
   }
 
   const elementNodeIds = new Set(elementRows.map((e) => nid("element", e.id)));

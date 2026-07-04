@@ -36,6 +36,30 @@ export interface ConstellationData {
   health: number;
 }
 
+export type ConstellationScene =
+  | { level: "organism" }
+  | { level: "area"; area: StrategyArea }
+  | { level: "entity"; ref: { type: EntityTypeKey; id: string } };
+
+export interface CoreSingletons {
+  uvpMd: string | null;
+  positioningMd: string | null;
+}
+
+export interface SceneData {
+  scene: ConstellationScene;
+  center: ConstellationNode;
+  members: ConstellationNode[];
+  upstream: ConstellationNode[];
+  downstream: ConstellationNode[];
+  links: ConstellationLink[];
+  breadcrumb: { label: string; scene: ConstellationScene }[];
+  areasOrder: StrategyArea[];
+  health: number;
+  /** Treść singletonów rdzenia — tylko scena organism. */
+  singletons?: CoreSingletons;
+}
+
 /** Etykiety i kolory 7 modułów makro-mapy (zgodne z ENTITY_TYPE_META obszarów). */
 export const AREA_META: Record<
   StrategyArea,

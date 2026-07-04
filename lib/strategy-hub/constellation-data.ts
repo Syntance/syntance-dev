@@ -17,6 +17,12 @@ import {
   businessProblems,
   seoKeywords,
   strategicDecisions,
+  salesPitches,
+  salesScripts,
+  leadMagnets,
+  pageSections,
+  sites,
+  geoQueries,
 } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import {
@@ -153,6 +159,12 @@ export async function getConstellationData(
     problemRows,
     seoRows,
     decisionRows,
+    pitchRows,
+    scriptRows,
+    leadMagnetRows,
+    sectionRows,
+    siteRows,
+    geoQueryRows,
     semanticRelations,
   ] = await Promise.all([
     db
@@ -168,12 +180,21 @@ export async function getConstellationData(
       .from(segments)
       .where(and(eq(segments.projectId, projectId), isNull(segments.deletedAt))),
     db
-      .select({ id: purchaseStages.id, name: purchaseStages.name })
+      .select({
+        id: purchaseStages.id,
+        name: purchaseStages.name,
+        segmentId: purchaseStages.segmentId,
+      })
       .from(purchaseStages)
       .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
       .where(and(eq(segments.projectId, projectId), isNull(purchaseStages.deletedAt))),
     db
-      .select({ id: funnelElements.id, name: funnelElements.name })
+      .select({
+        id: funnelElements.id,
+        name: funnelElements.name,
+        stageId: funnelElements.stageId,
+        segmentId: funnelElements.segmentId,
+      })
       .from(funnelElements)
       .innerJoin(purchaseStages, eq(funnelElements.stageId, purchaseStages.id))
       .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
@@ -207,7 +228,12 @@ export async function getConstellationData(
       .from(offers)
       .where(and(eq(offers.projectId, projectId), isNull(offers.deletedAt))),
     db
-      .select({ id: userFlows.id, name: userFlows.name })
+      .select({
+        id: userFlows.id,
+        name: userFlows.name,
+        segmentId: userFlows.segmentId,
+        entryElementId: userFlows.entryElementId,
+      })
       .from(userFlows)
       .where(and(eq(userFlows.projectId, projectId), isNull(userFlows.deletedAt))),
     db
@@ -247,6 +273,39 @@ export async function getConstellationData(
       .where(
         and(eq(strategicDecisions.projectId, projectId), isNull(strategicDecisions.deletedAt))
       ),
+    db
+      .select({ id: salesPitches.id, title: salesPitches.title })
+      .from(salesPitches)
+      .where(and(eq(salesPitches.projectId, projectId), isNull(salesPitches.deletedAt))),
+    db
+      .select({ id: salesScripts.id, name: salesScripts.name })
+      .from(salesScripts)
+      .where(and(eq(salesScripts.projectId, projectId), isNull(salesScripts.deletedAt))),
+    db
+      .select({ id: leadMagnets.id, name: leadMagnets.name })
+      .from(leadMagnets)
+      .where(and(eq(leadMagnets.projectId, projectId), isNull(leadMagnets.deletedAt))),
+    db
+      .select({
+        id: pageSections.id,
+        name: pageSections.name,
+        orderIdx: pageSections.orderIdx,
+        pageId: pageSections.pageId,
+      })
+      .from(pageSections)
+      .innerJoin(pages, eq(pageSections.pageId, pages.id))
+      .where(and(eq(pages.projectId, projectId), isNull(pageSections.deletedAt))),
+    db
+      .select({ id: sites.id, name: sites.name, isPrimary: sites.isPrimary })
+      .from(sites)
+      .where(and(eq(sites.projectId, projectId), isNull(sites.deletedAt))),
+    db
+      .select({
+        id: geoQueries.id,
+        query: geoQueries.query,
+      })
+      .from(geoQueries)
+      .where(and(eq(geoQueries.projectId, projectId), isNull(geoQueries.deletedAt))),
     listRelations(projectId),
   ]);
 
@@ -255,8 +314,8 @@ export async function getConstellationData(
   const ctx: CriterionContext = {
     segN: segmentRows.length,
     chN: channelRows.length,
-    pitchN: 0,
-    scriptN: 0,
+    pitchN: pitchRows.length,
+    scriptN: scriptRows.length,
     pageN: pageRows.length,
     kpiN: kpiRows.length,
     qN: 0,
@@ -267,7 +326,7 @@ export async function getConstellationData(
     stageCount: stageRows.length,
     elementCount: elementRows.length,
     flowCount: flowRows.length,
-    leadMagnetCount: 0,
+    leadMagnetCount: leadMagnetRows.length,
     brandIdentity: null,
     brandVisual: null,
     uvp: null,
@@ -354,6 +413,18 @@ export async function getConstellationData(
   }
   for (const s of seoRows) pushRaw("seo_keyword", s.id, s.phrase);
   for (const d of decisionRows) pushRaw("decision", d.id, d.title);
+  for (const p of pitchRows) pushRaw("sales_pitch", p.id, p.title);
+  for (const s of scriptRows) pushRaw("sales_script", s.id, s.name);
+  for (const lm of leadMagnetRows) pushRaw("lead_magnet", lm.id, lm.name);
+  for (const sec of sectionRows) {
+    pushRaw("section", sec.id, sec.name, sec.orderIdx ?? 0);
+  }
+  for (const st of siteRows) {
+    pushRaw("site", st.id, st.name, st.isPrimary ? 10 : 0);
+  }
+  for (const gq of geoQueryRows) {
+    pushRaw("geo_query", gq.id, gq.query.slice(0, 60));
+  }
 
   const entityNodeIds = new Set<string>();
 
@@ -387,6 +458,42 @@ export async function getConstellationData(
       const areaNode = nodes.find((n) => n.id === parentId);
       if (areaNode) areaNode.childCount = overflow;
     }
+  }
+
+  const addFkCross = (
+    sourceType: EntityTypeKey,
+    sourceId: string,
+    targetType: EntityTypeKey,
+    targetId: string,
+    label?: string
+  ) => {
+    const sid = entityNodeId(sourceType, sourceId);
+    const tid = entityNodeId(targetType, targetId);
+    if (!entityNodeIds.has(sid) || !entityNodeIds.has(tid)) return;
+    links.push({
+      id: `fk-${linkSeq++}`,
+      sourceId: sid,
+      targetId: tid,
+      kind: "cross",
+      relationLabel: label,
+    });
+  };
+
+  for (const st of stageRows) {
+    if (st.segmentId) addFkCross("segment", st.segmentId, "stage", st.id);
+  }
+  for (const el of elementRows) {
+    addFkCross("stage", el.stageId, "element", el.id);
+    if (el.segmentId) addFkCross("segment", el.segmentId, "element", el.id);
+  }
+  for (const f of flowRows) {
+    if (f.segmentId) addFkCross("segment", f.segmentId, "flow", f.id);
+    if (f.entryElementId) {
+      addFkCross("element", f.entryElementId, "flow", f.id, "realizowany przez");
+    }
+  }
+  for (const sec of sectionRows) {
+    addFkCross("page", sec.pageId, "section", sec.id);
   }
 
   for (const rel of semanticRelations) {

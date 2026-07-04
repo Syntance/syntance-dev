@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   FileJson,
   FileText,
@@ -43,25 +43,25 @@ interface ExportJob {
  */
 export function ExportPanel({ projectId }: Props) {
   const base = `/api/strategy-hub/projects/${projectId}/exports`;
-  const [jobs, setJobs] = React.useState<ExportJob[]>([]);
-  const [downloading, setDownloading] = React.useState<ExportType | null>(null);
-  const [emailFor, setEmailFor] = React.useState<ExportType | null>(null);
-  const [email, setEmail] = React.useState("");
-  const [sending, setSending] = React.useState(false);
-  const [sentOk, setSentOk] = React.useState<ExportType | null>(null);
+  const [jobs, setJobs] = useState<ExportJob[]>([]);
+  const [downloading, setDownloading] = useState<ExportType | null>(null);
+  const [emailFor, setEmailFor] = useState<ExportType | null>(null);
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sentOk, setSentOk] = useState<ExportType | null>(null);
 
-  const loadJobs = React.useCallback(async () => {
-    try {
-      const res = await fetch(base, { signal: AbortSignal.timeout(8000) });
-      if (res.ok) setJobs((await res.json()).items ?? []);
-    } catch {
-      /* ignore */
-    }
+  const refreshJobs = useCallback(() => {
+    void fetch(base, { signal: AbortSignal.timeout(8000) })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { items?: ExportJob[] } | null) => {
+        if (data) setJobs(data.items ?? []);
+      })
+      .catch(() => null);
   }, [base]);
 
-  React.useEffect(() => {
-    void loadJobs();
-  }, [loadJobs]);
+  useEffect(() => {
+    refreshJobs();
+  }, [refreshJobs]);
 
   const download = async (type: ExportType) => {
     setDownloading(type);
@@ -82,7 +82,7 @@ export function ExportPanel({ projectId }: Props) {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      void loadJobs();
+      refreshJobs();
     } catch (err) {
       console.error("export download failed", err);
     } finally {
@@ -103,7 +103,7 @@ export function ExportPanel({ projectId }: Props) {
         setSentOk(type);
         setTimeout(() => setSentOk(null), 3000);
         setEmailFor(null);
-        void loadJobs();
+        refreshJobs();
       }
     } catch (err) {
       console.error("export email failed", err);

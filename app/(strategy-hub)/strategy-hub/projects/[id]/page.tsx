@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Map as MapIcon } from "lucide-react";
 import { requireStrategyHubAccess } from "@/lib/strategy-hub/context";
 import { db } from "@/db";
@@ -28,7 +28,16 @@ export default async function ProjectMapPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { path, view, focus } = await searchParams;
 
-  const validViews = ["list", "map", "influence", "constellation", "pipeline"] as const;
+  if (view === "constellation") {
+    const q = new URLSearchParams();
+    if (focus) q.set("focus", focus);
+    const qs = q.toString();
+    redirect(
+      `/strategy-hub/projects/${id}/constellation${qs ? `?${qs}` : ""}`
+    );
+  }
+
+  const validViews = ["list", "map", "influence", "pipeline"] as const;
   type MapView = (typeof validViews)[number];
   const initialView = validViews.includes(view as MapView)
     ? (view as MapView)
@@ -66,7 +75,6 @@ export default async function ProjectMapPage({ params, searchParams }: Props) {
         mode="editor"
         activePathId={path ?? null}
         initialView={initialView}
-        initialFocus={focus}
       />
     </div>
   );

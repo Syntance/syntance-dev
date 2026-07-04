@@ -46,5 +46,5 @@ export function mapFocusHref(
   entityId: string
 ): string {
   const focus = encodeURIComponent(`${entityType}:${entityId}`);
-  return `/strategy-hub/projects/${projectId}?view=constellation&focus=${focus}`;
+  return `/strategy-hub/projects/${projectId}/constellation?focus=${focus}`;
 }

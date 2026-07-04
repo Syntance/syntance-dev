@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { EntityCrud, type FieldDef } from "@/components/strategy-hub/entity-crud";
 import { RelationPicker } from "@/components/strategy-hub/relation-picker";
@@ -45,41 +45,38 @@ export function OffersClient({ projectId }: { projectId: string }) {
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const loadOffers = useCallback(async () => {
-    try {
-      const res = await fetch(
-        `/api/strategy-hub/projects/${projectId}/offers`,
-        { signal: AbortSignal.timeout(8000) }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setOffers((data.items ?? []).map((o: OfferRow) => ({ id: o.id, name: o.name })));
-      }
-    } catch {
-      // ignore
-    }
-  }, [projectId]);
+  useEffect(() => {
+    void fetch(`/api/strategy-hub/projects/${projectId}/offers`, {
+      signal: AbortSignal.timeout(8000),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { items?: OfferRow[] } | null) => {
+        if (data) {
+          setOffers(
+            (data.items ?? []).map((o) => ({ id: o.id, name: o.name }))
+          );
+        }
+      })
+      .catch(() => null);
+  }, [projectId, reloadKey]);
+
+  const [prevSelectedId, setPrevSelectedId] = useState<string | null>(null);
+  if (selectedId !== prevSelectedId) {
+    setPrevSelectedId(selectedId);
+    if (!selectedId) setSegmentIds([]);
+  }
 
   useEffect(() => {
-    void loadOffers();
-  }, [loadOffers, reloadKey]);
-
-  const loadSegments = useCallback(
-    async (offerId: string) => {
-      const res = await fetch(
-        `/api/strategy-hub/projects/${projectId}/offers/${offerId}/segments`
-      );
-      if (!res.ok) return;
-      const data = (await res.json()) as { segmentIds: string[] };
-      setSegmentIds(data.segmentIds ?? []);
-    },
-    [projectId]
-  );
-
-  useEffect(() => {
-    if (selectedId) void loadSegments(selectedId);
-    else setSegmentIds([]);
-  }, [selectedId, loadSegments]);
+    if (!selectedId) return;
+    void fetch(
+      `/api/strategy-hub/projects/${projectId}/offers/${selectedId}/segments`
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { segmentIds?: string[] } | null) => {
+        if (data) setSegmentIds(data.segmentIds ?? []);
+      })
+      .catch(() => null);
+  }, [selectedId, projectId]);
 
   async function saveSegments() {
     if (!selectedId) return;

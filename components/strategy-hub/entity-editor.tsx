@@ -98,26 +98,29 @@ export function FunnelElementEditor({
     ...initial,
   }));
 
-  // Reset when initial changes (open new element)
-  React.useEffect(() => {
-    setData({
-      name: "",
-      format: "Post",
-      status: "draft",
-      contentMd: "",
-      ctaText: "",
-      ctaUrl: "",
-      position: 0,
-      stageId: lockedStageId ?? null,
-      segmentId: lockedSegmentId ?? null,
-      channelIds: [],
-      kpiIds: [],
-      campaignIds: [],
-      geoAssetIds: [],
-      eventKeys: [],
-      ...initial,
-    });
-  }, [initial?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const defaultData = (): FunnelElementData => ({
+    name: "",
+    format: "Post",
+    status: "draft",
+    contentMd: "",
+    ctaText: "",
+    ctaUrl: "",
+    position: 0,
+    stageId: lockedStageId ?? null,
+    segmentId: lockedSegmentId ?? null,
+    channelIds: [],
+    kpiIds: [],
+    campaignIds: [],
+    geoAssetIds: [],
+    eventKeys: [],
+    ...initial,
+  });
+
+  const [prevInitialId, setPrevInitialId] = React.useState(initial?.id);
+  if (initial?.id !== prevInitialId) {
+    setPrevInitialId(initial?.id);
+    setData(defaultData());
+  }
 
   function patch<K extends keyof FunnelElementData>(key: K, val: FunnelElementData[K]) {
     setData((prev) => ({ ...prev, [key]: val }));

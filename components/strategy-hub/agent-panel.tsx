@@ -66,23 +66,18 @@ export function AgentPanel({ projectId }: Props) {
   const [running, setRunning] = React.useState<AgentMode | null>(null);
   const [undoing, setUndoing] = React.useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
-    try {
-      const res = await fetch(`${base}?status=applied`, {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { items?: ActivityItem[] };
-        setItems(data.items ?? []);
-      }
-    } catch {
-      /* ignore */
-    }
+  const refreshItems = React.useCallback(() => {
+    void fetch(`${base}?status=applied`, { signal: AbortSignal.timeout(8000) })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { items?: ActivityItem[] } | null) => {
+        if (data) setItems(data.items ?? []);
+      })
+      .catch(() => null);
   }, [base]);
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    refreshItems();
+  }, [refreshItems]);
 
   const run = async (mode: AgentMode) => {
     setRunning(mode);
@@ -92,7 +87,7 @@ export function AgentPanel({ projectId }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
       });
-      if (res.ok) void load();
+      if (res.ok) refreshItems();
     } catch (err) {
       console.error("agent run failed", err);
     } finally {
@@ -107,7 +102,7 @@ export function AgentPanel({ projectId }: Props) {
         `/api/strategy-hub/projects/${projectId}/changes/${batchId}/undo`,
         { method: "POST", signal: AbortSignal.timeout(15000) }
       );
-      if (res.ok) void load();
+      if (res.ok) refreshItems();
     } catch (err) {
       console.error("undo failed", err);
     } finally {
