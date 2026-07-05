@@ -1,4 +1,5 @@
 import { redirect, notFound } from "next/navigation";
+import { Fraunces } from "next/font/google";
 import { Orbit } from "lucide-react";
 import { getClientSession } from "@/lib/auth";
 import { getProjectBySlugForUser } from "@/lib/client-portal/queries";
@@ -11,6 +12,14 @@ import {
   parseConstellationScene,
 } from "@/lib/strategy-hub/constellation-scenes";
 import { ConstellationPageLoader } from "@/components/strategy-hub/constellation/constellation-page-loader";
+
+/** Krój display konstelacji — ładowany tylko w tej route. */
+const fraunces = Fraunces({
+  subsets: ["latin", "latin-ext"],
+  weight: ["300", "400"],
+  display: "swap",
+  variable: "--font-konst",
+});
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -57,7 +66,9 @@ export default async function ClientConstellationPage({
   const basePath = `/projects/${slug}/strategy/constellation`;
 
   return (
-    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4">
+    <div
+      className={`${fraunces.variable} flex min-h-[calc(100dvh-8rem)] flex-col gap-4`}
+    >
       <div>
         <div className="mb-1 flex items-center gap-2">
           <Orbit className="size-5 text-brand" />

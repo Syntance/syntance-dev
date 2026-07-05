@@ -21,17 +21,21 @@ import {
   areaNodeId,
   parseEntityNodeId,
 } from "@/lib/strategy-hub/constellation-types";
-import type { EntityTypeKey } from "@/lib/strategy-hub/entities/entity-types";
+import {
+  ENTITY_TYPE_META,
+  type EntityTypeKey,
+} from "@/lib/strategy-hub/entities/entity-types";
 import {
   mapFocusNodeId,
   onMapFocus,
   type MapFocusDetail,
 } from "@/lib/strategy-hub/map-focus-bus";
 import { useCamera } from "./use-camera";
-import { ConstellationNodeView, nodeRadius } from "./constellation-node";
+import { ConstellationNodeView } from "./constellation-node";
 import { EntityPanel } from "./entity-panel";
 import { CorePanel } from "./core-panel";
 import { computeSceneLayout, allSceneNodes } from "./scene-layout";
+import { KONST, generateStars } from "./constellation-theme";
 
 interface ConstellationViewProps {
   projectId: string;
@@ -52,6 +56,45 @@ function crossLinkPath(
   const cx = mx * 0.35;
   const cy = my * 0.35;
   return `M ${x1} ${y1} Q ${cx} ${cy}, ${x2} ${y2}`;
+}
+
+/** Punkt oddalony o `trim` od (x2,y2) w stronę (x1,y1) — strzałka nie ginie pod węzłem. */
+function trimEnd(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  trim: number
+): { x: number; y: number } {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const t = Math.max(0, 1 - trim / len);
+  return { x: x1 + dx * t, y: y1 + dy * t };
+}
+
+/** Łuk krawędzi skrzydła — delikatnie ugięty ku osi poziomej centrum. */
+function wingLinkPath(x1: number, y1: number, x2: number, y2: number): string {
+  const cx = (x1 + x2) / 2;
+  const cy = ((y1 + y2) / 2) * 0.55;
+  return `M ${x1} ${y1} Q ${cx} ${cy}, ${x2} ${y2}`;
+}
+
+/** Punkt na krzywej kwadratowej w parametrze t (etykieta relacji). */
+function quadPoint(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  t: number
+): { x: number; y: number } {
+  const cx = (x1 + x2) / 2;
+  const cy = ((y1 + y2) / 2) * 0.55;
+  const mt = 1 - t;
+  return {
+    x: mt * mt * x1 + 2 * mt * t * cx + t * t * x2,
+    y: mt * mt * y1 + 2 * mt * t * cy + t * t * y2,
+  };
 }
 
 function sceneToQuery(scene: ConstellationScene): string {
@@ -103,6 +146,22 @@ function sceneLiveMessage(data: SceneData): string {
   }
   return `Element ${data.center.label}, ${data.upstream.length} wpływających, ${data.downstream.length} wynikających`;
 }
+
+/** Etykieta z prefiksem typu dla węzłów skrzydeł („Segment: MŚP B2B"). */
+function sideLabel(node: ConstellationNode): string {
+  if (node.kind === "area") return node.label;
+  const meta = node.entityType ? ENTITY_TYPE_META[node.entityType] : null;
+  return meta ? `${meta.label}: ${node.label}` : node.label;
+}
+
+/** Pierwsze słowo nazwy — watermark sceny elementu. */
+function watermarkWord(label: string): string {
+  const word = label.split(/\s+/)[0] ?? label;
+  return word.length > 12 ? word.slice(0, 12) : word;
+}
+
+const DISPLAY_FONT =
+  "var(--font-konst, Georgia, 'Times New Roman', serif)";
 
 export function ConstellationView({
   projectId,
@@ -241,6 +300,42 @@ export function ConstellationView({
     return allSceneNodes(data);
   }, [data]);
 
+  const upIds = useMemo(
+    () => new Set((data?.upstream ?? []).map((n) => n.id)),
+    [data]
+  );
+  const downIds = useMemo(
+    () => new Set((data?.downstream ?? []).map((n) => n.id)),
+    [data]
+  );
+
+  /** Liczba krawędzi per węzeł — waga wpływa na promień encji. */
+  const degreeById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const link of data?.links ?? []) {
+      map.set(link.sourceId, (map.get(link.sourceId) ?? 0) + 1);
+      map.set(link.targetId, (map.get(link.targetId) ?? 0) + 1);
+    }
+    return map;
+  }, [data]);
+
+  /** Obszar-przodek węzła (rozjaśnianie gałęzi fokusowanego obszaru na organizmie). */
+  const areaOfNode = useCallback(
+    (id: string): string | null => {
+      if (id.startsWith("area:")) return id;
+      const node = nodeById.get(id);
+      if (!node?.parentId) return null;
+      if (node.parentId.startsWith("area:")) return node.parentId;
+      return null;
+    },
+    [nodeById]
+  );
+
+  const stars = useMemo(
+    () => generateStars(projectId, 150, viewport.w, viewport.h),
+    [projectId, viewport.w, viewport.h]
+  );
+
   const announceFocus = useCallback(
     (id: string) => {
       const node = nodeById.get(id);
@@ -367,6 +462,47 @@ export function ConstellationView({
     }
   }, [data, navigateToScene]);
 
+  /** Cykl ‹ › — obszary (organizm/obszar) lub encje obszaru (element). */
+  const cycle = useCallback(
+    (delta: number) => {
+      if (!data) return;
+
+      if (data.scene.level === "area") {
+        const idx = data.areasOrder.indexOf(data.scene.area);
+        const nextIdx =
+          (idx + delta + data.areasOrder.length) % data.areasOrder.length;
+        const nextArea = data.areasOrder[nextIdx];
+        if (nextArea) navigateToScene({ level: "area", area: nextArea });
+        return;
+      }
+
+      if (data.scene.level === "entity") {
+        const members = areaMembersRef.current;
+        if (members.length === 0) return;
+        const curIdx = focusedId
+          ? members.findIndex((n) => n.id === focusedId)
+          : members.findIndex((n) => n.id === data.center.id);
+        const baseIdx = curIdx < 0 ? 0 : curIdx;
+        const nextIdx = (baseIdx + delta + members.length) % members.length;
+        const next = members[nextIdx];
+        if (next) {
+          const parsed = parseEntityNodeId(next.id);
+          if (parsed) navigateToScene({ level: "entity", ref: parsed });
+        }
+        return;
+      }
+
+      const areaIds = data.areasOrder.map((a) => areaNodeId(a));
+      const idx = focusedId?.startsWith("area:")
+        ? areaIds.indexOf(focusedId)
+        : -1;
+      const nextIdx =
+        idx < 0 ? 0 : (idx + delta + areaIds.length) % areaIds.length;
+      focusNodeById(areaIds[nextIdx] ?? CORE_NODE_ID);
+    },
+    [data, focusedId, focusNodeById, navigateToScene]
+  );
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!data) return;
 
@@ -397,58 +533,75 @@ export function ConstellationView({
 
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
-      const delta = e.key === "ArrowRight" ? 1 : -1;
-
-      if (data.scene.level === "area") {
-        const idx = data.areasOrder.indexOf(data.scene.area);
-        const nextIdx = (idx + delta + data.areasOrder.length) % data.areasOrder.length;
-        const nextArea = data.areasOrder[nextIdx];
-        if (nextArea) navigateToScene({ level: "area", area: nextArea });
-        return;
-      }
-
-      if (data.scene.level === "entity") {
-        const members = areaMembersRef.current;
-        if (members.length === 0) return;
-        const curIdx = focusedId
-          ? members.findIndex((n) => n.id === focusedId)
-          : members.findIndex((n) => n.id === data.center.id);
-        const baseIdx = curIdx < 0 ? 0 : curIdx;
-        const nextIdx = (baseIdx + delta + members.length) % members.length;
-        const next = members[nextIdx];
-        if (next) {
-          const parsed = parseEntityNodeId(next.id);
-          if (parsed) navigateToScene({ level: "entity", ref: parsed });
-        }
-        return;
-      }
-
-      const areaIds = data.areasOrder.map((a) => areaNodeId(a));
-      const idx = focusedId?.startsWith("area:")
-        ? areaIds.indexOf(focusedId)
-        : -1;
-      const nextIdx =
-        idx < 0 ? 0 : (idx + delta + areaIds.length) % areaIds.length;
-      focusNodeById(areaIds[nextIdx] ?? CORE_NODE_ID);
+      cycle(e.key === "ArrowRight" ? 1 : -1);
     }
   };
 
   const scale = camera.getScale();
-  const showEntityLabels =
-    data?.scene.level === "organism" ? scale >= 0.9 : scale >= 0.75;
+  const isOrganism = data?.scene.level === "organism";
+  const isEntityScene = data?.scene.level === "entity";
+  const showEntityLabels = isOrganism ? scale >= 0.9 : scale >= 0.7;
   const showCrossLinks = scale >= 0.65;
 
-  const sideColumnHeader = data?.center.label ?? "";
+  /** Fokusowany obszar (organizm) — jego gałęzie świecą jaśniej. */
+  const focusedArea = isOrganism
+    ? focusedId?.startsWith("area:")
+      ? focusedId
+      : focusedId
+        ? areaOfNode(focusedId)
+        : null
+    : null;
+
+  // ── Treść dolnej etykiety (duży serif) ──────────────────────────────────
+  let displayLabel = "";
+  let displaySub = "";
+  if (data) {
+    if (isOrganism) {
+      if (focusedArea) {
+        const areaNode = nodeById.get(focusedArea);
+        const count = data.members.filter(
+          (m) => m.parentId === focusedArea
+        ).length;
+        displayLabel = areaNode?.label ?? "";
+        displaySub = `${count} elementów · Enter — wejdź w obszar`;
+      } else {
+        displayLabel = data.center.label;
+        displaySub = `zdrowie ${data.health}% · ${data.members.length} elementów`;
+      }
+    } else if (data.scene.level === "area") {
+      displayLabel = data.center.label;
+      displaySub = `${data.members.length} elementów · ${data.upstream.length} wpływające · ${data.downstream.length} wynikające`;
+    } else {
+      const meta = data.center.entityType
+        ? ENTITY_TYPE_META[data.center.entityType]
+        : null;
+      displayLabel = data.center.label;
+      displaySub = `${meta?.label ?? "Element"} · ${data.upstream.length} wpływające · ${data.downstream.length} wynikające`;
+    }
+  }
+
+  const watermark =
+    data?.scene.level === "area"
+      ? data.center.label
+      : isEntityScene && data
+        ? watermarkWord(data.center.label)
+        : null;
+
+  const chromeShell = cn(
+    "dark relative overflow-hidden",
+    fullscreen
+      ? "h-full min-h-0 flex-1"
+      : "h-[min(72vh,640px)] min-h-[420px] rounded-2xl border border-[#3A342A]"
+  );
 
   if (loading && !data) {
     return (
       <div
         className={cn(
-          "flex items-center justify-center gap-2 text-sm text-muted-foreground",
-          fullscreen
-            ? "h-full min-h-[420px] bg-[oklch(0.13_0.02_260)]"
-            : "h-[520px] rounded-2xl border border-border bg-[oklch(0.13_0.02_260)]"
+          chromeShell,
+          "flex items-center justify-center gap-2 text-sm"
         )}
+        style={{ backgroundColor: KONST.bg, color: KONST.muted }}
       >
         <Loader2 className="size-4 animate-spin" /> Ładowanie konstelacji…
       </div>
@@ -458,12 +611,8 @@ export function ConstellationView({
   if (error || !data) {
     return (
       <div
-        className={cn(
-          "flex items-center justify-center text-sm text-muted-foreground",
-          fullscreen
-            ? "h-full min-h-[420px] bg-[oklch(0.13_0.02_260)]"
-            : "h-[520px] rounded-2xl border border-border bg-[oklch(0.13_0.02_260)]"
-        )}
+        className={cn(chromeShell, "flex items-center justify-center text-sm")}
+        style={{ backgroundColor: KONST.bg, color: KONST.muted }}
       >
         {error ?? "Brak danych"}
       </div>
@@ -473,28 +622,52 @@ export function ConstellationView({
   return (
     <div
       ref={containerRef}
-      className={cn(
-        "relative overflow-hidden bg-[oklch(0.13_0.02_260)]",
-        fullscreen
-          ? "h-full min-h-0 flex-1"
-          : "h-[min(72vh,640px)] min-h-[420px] rounded-2xl border border-border"
-      )}
+      className={chromeShell}
+      style={{ backgroundColor: KONST.bg }}
     >
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {liveMessage}
       </div>
 
+      {watermark && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden"
+        >
+          <span
+            className="select-none uppercase"
+            style={{
+              fontFamily: DISPLAY_FONT,
+              fontWeight: 300,
+              fontSize: "clamp(72px, 14vw, 150px)",
+              letterSpacing: "0.22em",
+              color: KONST.watermark,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {watermark}
+          </span>
+        </div>
+      )}
+
       {data.breadcrumb.length > 0 && (
         <nav
           aria-label="Ścieżka nawigacji konstelacji"
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-1 px-4 py-3 text-xs"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-4 py-3 text-xs"
         >
-          <ol className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-full border border-border/60 bg-card/90 px-3 py-1.5 shadow-sm backdrop-blur">
+          <ol
+            className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-full border px-3.5 py-1.5 backdrop-blur"
+            style={{
+              backgroundColor: KONST.chromeBg,
+              borderColor: KONST.chromeBorder,
+            }}
+          >
             {data.breadcrumb.map((crumb, i) => (
               <li key={`${crumb.label}-${i}`} className="flex items-center gap-1">
                 {i > 0 && (
                   <ChevronRight
-                    className="size-3 text-muted-foreground"
+                    className="size-3"
+                    style={{ color: KONST.muted }}
                     aria-hidden
                   />
                 )}
@@ -502,43 +675,58 @@ export function ConstellationView({
                   <button
                     type="button"
                     onClick={() => navigateToScene(crumb.scene)}
-                    className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded px-1"
+                    className="rounded px-1 transition-colors hover:text-[#E9E1C6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/60"
+                    style={{ color: KONST.muted }}
                   >
                     {crumb.label}
                   </button>
                 ) : (
-                  <span className="font-medium text-foreground">{crumb.label}</span>
+                  <span className="px-1 font-medium" style={{ color: KONST.label }}>
+                    {crumb.label}
+                  </span>
                 )}
               </li>
             ))}
+            <li aria-hidden style={{ color: KONST.muted }}>
+              · {data.health}%
+            </li>
           </ol>
         </nav>
       )}
 
-      {(data.scene.level === "area" || data.scene.level === "entity") && (
+      {(data.scene.level === "area" || isEntityScene) && (
         <>
           <div
             data-testid="scene-upstream"
-            className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 max-w-[140px]"
+            className="pointer-events-none absolute left-6 top-[16%] z-10"
           >
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Wpływa na: {sideColumnHeader}
+            <p
+              className="text-[11px] uppercase"
+              style={{ color: KONST.up, letterSpacing: "0.32em" }}
+            >
+              Wpływa
             </p>
           </div>
           <div
             data-testid="scene-downstream"
-            className="pointer-events-none absolute right-3 top-1/2 z-10 -translate-y-1/2 max-w-[140px] text-right"
+            className="pointer-events-none absolute right-6 top-[16%] z-10 text-right"
           >
-            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Wynika z tego
+            <p
+              className="text-[11px] uppercase"
+              style={{ color: KONST.down, letterSpacing: "0.32em" }}
+            >
+              Wynika
             </p>
           </div>
         </>
       )}
 
       {loading && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[oklch(0.13_0.02_260)]/60">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        <div
+          className="absolute inset-0 z-30 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(22,19,14,0.6)" }}
+        >
+          <Loader2 className="size-5 animate-spin" style={{ color: KONST.muted }} />
         </div>
       )}
 
@@ -548,7 +736,7 @@ export function ConstellationView({
         tabIndex={0}
         role="img"
         aria-label="Widok konstelacji strategii"
-        className="touch-none size-full select-none outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+        className="touch-none relative z-[1] size-full select-none outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/40"
         onKeyDown={handleKeyDown}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
@@ -576,15 +764,142 @@ export function ConstellationView({
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+          <marker
+            id="konst-arrow-up"
+            viewBox="0 0 8 8"
+            refX="7"
+            refY="4"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto"
+          >
+            <path d="M1 1 L7 4 L1 7" fill="none" stroke={KONST.up} strokeWidth="1.2" />
+          </marker>
+          <marker
+            id="konst-arrow-down"
+            viewBox="0 0 8 8"
+            refX="7"
+            refY="4"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto"
+          >
+            <path d="M1 1 L7 4 L1 7" fill="none" stroke={KONST.down} strokeWidth="1.2" />
+          </marker>
         </defs>
 
+        <g aria-hidden>
+          {stars.map((s, i) => (
+            <circle
+              key={i}
+              cx={s.x}
+              cy={s.y}
+              r={s.r}
+              fill={KONST.star}
+              opacity={s.o}
+            />
+          ))}
+        </g>
+
         <motion.g style={{ transform: svgTransform, transformOrigin: "0 0" }}>
+          {isOrganism && (
+            <g fill="none" stroke={KONST.node} aria-hidden>
+              <circle r={220} strokeOpacity={0.05} />
+              <circle r={330} strokeOpacity={0.035} />
+              <circle r={440} strokeOpacity={0.025} />
+            </g>
+          )}
+
+          {/* Syntetyczne krawędzie skrzydeł — gdy API nie zwraca linku dla węzła zależności. */}
+          {[...upIds, ...downIds].map((sideId) => {
+            const hasLink = data.links.some(
+              (l) => l.sourceId === sideId || l.targetId === sideId
+            );
+            if (hasLink) return null;
+            const from = layout.get(sideId);
+            const to = layout.get(data.center.id);
+            if (!from || !to) return null;
+            const isUp = upIds.has(sideId);
+            const end = isUp
+              ? trimEnd(from.x, from.y, to.x, to.y, 24)
+              : trimEnd(to.x, to.y, from.x, from.y, 17);
+            return (
+              <path
+                key={`wing-${sideId}`}
+                d={
+                  isUp
+                    ? wingLinkPath(from.x, from.y, end.x, end.y)
+                    : wingLinkPath(to.x, to.y, end.x, end.y)
+                }
+                fill="none"
+                stroke={isUp ? KONST.up : KONST.down}
+                strokeWidth={1}
+                strokeDasharray="2 4"
+                strokeOpacity={0.42}
+                markerEnd={
+                  isUp ? "url(#konst-arrow-up)" : "url(#konst-arrow-down)"
+                }
+              />
+            );
+          })}
+
           {data.links.map((link) => {
             const from = layout.get(link.sourceId);
             const to = layout.get(link.targetId);
             if (!from || !to) return null;
 
+            const pathHighlighted = highlightedLinkIds.has(link.id);
+            const isUpWing = upIds.has(link.sourceId) || upIds.has(link.targetId);
+            const isDownWing =
+              !isUpWing && (downIds.has(link.sourceId) || downIds.has(link.targetId));
+
+            // Krawędź do skrzydła zależności — tinta + strzałka + etykieta relacji.
+            if (isUpWing || isDownWing) {
+              const tint = isUpWing ? KONST.up : KONST.down;
+              const marker = isUpWing
+                ? "url(#konst-arrow-up)"
+                : "url(#konst-arrow-down)";
+              const labelPos =
+                isEntityScene && link.relationLabel
+                  ? quadPoint(from.x, from.y, to.x, to.y, 0.42)
+                  : null;
+              const wingEnd = trimEnd(from.x, from.y, to.x, to.y, 18);
+              return (
+                <g key={link.id}>
+                  <path
+                    d={wingLinkPath(from.x, from.y, wingEnd.x, wingEnd.y)}
+                    fill="none"
+                    stroke={pathHighlighted ? KONST.pathHighlight : tint}
+                    strokeWidth={pathHighlighted ? 2 : 1}
+                    strokeDasharray="2 4"
+                    strokeOpacity={pathHighlighted ? 0.95 : 0.42}
+                    markerEnd={marker}
+                  />
+                  {labelPos && (
+                    <text
+                      x={labelPos.x}
+                      y={labelPos.y - 6}
+                      textAnchor="middle"
+                      fill={isUpWing ? KONST.upEdgeLabel : KONST.downEdgeLabel}
+                      style={{
+                        fontSize: 11,
+                        fontStyle: "italic",
+                        letterSpacing: "0.04em",
+                      }}
+                      className="pointer-events-none select-none"
+                    >
+                      {link.relationLabel}
+                    </text>
+                  )}
+                </g>
+              );
+            }
+
             if (link.kind === "tree") {
+              const bright =
+                focusedArea != null &&
+                (areaOfNode(link.sourceId) === focusedArea ||
+                  areaOfNode(link.targetId) === focusedArea);
               return (
                 <line
                   key={link.id}
@@ -592,9 +907,8 @@ export function ConstellationView({
                   y1={from.y}
                   x2={to.x}
                   y2={to.y}
-                  stroke="oklch(0.45 0.02 260)"
+                  stroke={bright ? KONST.edgeBright : KONST.edge}
                   strokeWidth={1}
-                  strokeOpacity={0.35}
                 />
               );
             }
@@ -603,10 +917,9 @@ export function ConstellationView({
               showCrossLinks ||
               focusedId === link.sourceId ||
               focusedId === link.targetId ||
-              highlightedLinkIds.has(link.id);
+              pathHighlighted;
             if (!show) return null;
 
-            const pathHighlighted = highlightedLinkIds.has(link.id);
             return (
               <path
                 key={link.id}
@@ -614,14 +927,14 @@ export function ConstellationView({
                 fill="none"
                 stroke={
                   pathHighlighted
-                    ? "oklch(0.78 0.12 280)"
+                    ? KONST.pathHighlight
                     : link.aiGenerated
-                      ? "#a78bfa"
-                      : "oklch(0.65 0.04 260)"
+                      ? KONST.crossAi
+                      : KONST.cross
                 }
-                strokeWidth={pathHighlighted ? 2.5 : 1.2}
-                strokeDasharray={link.aiGenerated ? "2 4" : "4 4"}
-                strokeOpacity={pathHighlighted ? 0.95 : 0.55}
+                strokeWidth={pathHighlighted ? 2.2 : 1}
+                strokeDasharray="2 4"
+                strokeOpacity={pathHighlighted ? 0.95 : 1}
               />
             );
           })}
@@ -631,22 +944,32 @@ export function ConstellationView({
             if (!pos) return null;
             const focused = focusedId === node.id;
             const highlighted = highlightedId === node.id;
-            const isSide =
-              data.upstream.some((n) => n.id === node.id) ||
-              data.downstream.some((n) => n.id === node.id);
+            const isUp = upIds.has(node.id);
+            const isDown = downIds.has(node.id);
+            const isSide = isUp || isDown;
             const isCenter = node.id === data.center.id;
+
             const showLabel =
-              node.kind === "area" ||
-              focused ||
-              isCenter ||
-              (node.kind === "entity" && showEntityLabels && !isSide) ||
-              (isSide && focused);
-            const radius =
-              isCenter && data.scene.level === "entity"
-                ? nodeRadius("area")
-                : isSide
-                  ? nodeRadius("entity") * 0.85
-                  : nodeRadius(node.kind);
+              !(isCenter && isEntityScene) &&
+              (node.kind === "area" ||
+                focused ||
+                isSide ||
+                (node.kind === "entity" && showEntityLabels && !isSide));
+
+            const degree = degreeById.get(node.id) ?? 0;
+            let radius: number;
+            if (node.kind === "core") {
+              radius = 30;
+            } else if (node.kind === "area") {
+              radius = 16;
+            } else if (isCenter && isEntityScene) {
+              radius = 15;
+            } else if (isSide) {
+              radius = 11;
+            } else {
+              const base = isOrganism ? 3.2 : 5;
+              radius = base + Math.min(2.5, degree * 0.35);
+            }
 
             return (
               <ConstellationNodeView
@@ -659,6 +982,10 @@ export function ConstellationView({
                 showLabel={showLabel}
                 mode={mode}
                 tabIndex={focused ? 0 : index === 0 ? 0 : -1}
+                sideTint={isUp ? "up" : isDown ? "down" : null}
+                isSceneCenter={isCenter && isEntityScene}
+                labelText={isSide ? sideLabel(node) : undefined}
+                coreSeed={projectId}
                 onFocus={() => setFocusedId(node.id)}
                 onClick={() => {
                   focusNodeById(node.id, false);
@@ -670,17 +997,74 @@ export function ConstellationView({
         </motion.g>
       </svg>
 
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-[2]"
+        style={{ background: KONST.bgVignette }}
+      />
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-5 z-10 flex items-end justify-center gap-6 px-6">
+        <button
+          type="button"
+          onClick={() => cycle(-1)}
+          aria-label="Poprzedni"
+          className="pointer-events-auto mb-2 inline-flex size-9 items-center justify-center rounded-full text-xl transition-colors hover:text-[#E9E1C6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/60"
+          style={{ color: KONST.label }}
+        >
+          ‹
+        </button>
+        <div className="max-w-[70%] text-center">
+          <p
+            className="select-none uppercase leading-tight"
+            style={{
+              fontFamily: DISPLAY_FONT,
+              fontWeight: 300,
+              fontSize: isEntityScene
+                ? "clamp(18px, 2.6vw, 26px)"
+                : "clamp(22px, 3.6vw, 38px)",
+              letterSpacing: "0.3em",
+              color: KONST.display,
+              textIndent: "0.3em",
+            }}
+          >
+            {displayLabel}
+          </p>
+          {displaySub && (
+            <p
+              className="mt-1.5 select-none text-[11px]"
+              style={{ color: KONST.muted, letterSpacing: "0.18em" }}
+            >
+              {displaySub}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => cycle(1)}
+          aria-label="Następny"
+          className="pointer-events-auto mb-2 inline-flex size-9 items-center justify-center rounded-full text-xl transition-colors hover:text-[#E9E1C6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/60"
+          style={{ color: KONST.label }}
+        >
+          ›
+        </button>
+      </div>
+
       {focusedId &&
         nodeById.get(focusedId)?.kind === "entity" &&
         !panelNode && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+          <div className="pointer-events-none absolute bottom-5 right-5 z-10">
             <button
               type="button"
               onClick={() => {
                 const node = nodeById.get(focusedId);
                 if (node) setPanelNode(node);
               }}
-              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg backdrop-blur hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium backdrop-blur transition-colors hover:text-[#E9E1C6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/60"
+              style={{
+                backgroundColor: KONST.chromeBg,
+                borderColor: KONST.chromeBorder,
+                color: KONST.label,
+              }}
             >
               <Info className="size-3.5" />
               Szczegóły

@@ -28,16 +28,6 @@ async function loginAsClient(page: import("@playwright/test").Page): Promise<str
   return page.url().match(/\/projects\/([^/?#]+)/)?.[1] ?? "";
 }
 
-async function openFirstProject(page: import("@playwright/test").Page) {
-  const res = await page.request.get("/api/strategy-hub/projects");
-  expect(res.ok()).toBeTruthy();
-  const body = (await res.json()) as { projects: Array<{ id: string }> };
-  expect(body.projects.length).toBeGreaterThan(0);
-  await page.goto(`/strategy-hub/projects/${body.projects[0].id}`, {
-    waitUntil: "domcontentloaded",
-  });
-}
-
 async function openFirstProjectConstellation(page: import("@playwright/test").Page) {
   const res = await page.request.get("/api/strategy-hub/projects");
   expect(res.ok()).toBeTruthy();

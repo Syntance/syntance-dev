@@ -7,7 +7,7 @@ import {
 export type { LayoutPosition };
 
 const COLUMN_X = 300;
-const COLUMN_GAP = 52;
+const COLUMN_GAP = 72;
 const MEMBER_RADIUS = 130;
 
 function stackColumn(

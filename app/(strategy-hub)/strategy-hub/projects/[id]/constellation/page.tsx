@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { Fraunces } from "next/font/google";
 import { Orbit } from "lucide-react";
 import { requireStrategyHubAccess } from "@/lib/strategy-hub/context";
 import { db } from "@/db";
@@ -9,6 +10,14 @@ import {
   parseConstellationScene,
 } from "@/lib/strategy-hub/constellation-scenes";
 import { ConstellationPageLoader } from "@/components/strategy-hub/constellation/constellation-page-loader";
+
+/** Krój display konstelacji — ładowany tylko w tej route (budżet JS globalu bez zmian). */
+const fraunces = Fraunces({
+  subsets: ["latin", "latin-ext"],
+  weight: ["300", "400"],
+  display: "swap",
+  variable: "--font-konst",
+});
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -51,7 +60,9 @@ export default async function ConstellationPage({ params, searchParams }: Props)
   const initialScene = await getConstellationScene(id, scene, "editor");
 
   return (
-    <div className="-m-6 flex h-[calc(100dvh-3rem)] min-h-0 flex-col">
+    <div
+      className={`${fraunces.variable} -m-6 flex h-[calc(100dvh-3rem)] min-h-0 flex-col`}
+    >
       <div className="sr-only">
         <Orbit aria-hidden className="size-5" />
         <h1>Konstelacja — {project.name}</h1>
