@@ -194,10 +194,11 @@ export function ConstellationView({
   const camera = useCamera();
   const svgTransform = useMotionTemplate`${camera.transform}`;
 
-  // Punkty organizmu stabilizują się (rosną, przestają dryfować) po zbliżeniu kamery.
+  // Punkty organizmu stabilizują się (rosną, przestają dryfować, dostają etykiety)
+  // dopiero gdy użytkownik AKTYWNIE zbliży kamerę (reset = 1, próg = ~3 kroki scrolla).
   const [stabilized, setStabilized] = useState(false);
   useMotionValueEvent(camera.scale, "change", (v) => {
-    const next = v >= 0.9;
+    const next = v >= 1.25;
     setStabilized((prev) => (prev === next ? prev : next));
   });
 
@@ -447,8 +448,14 @@ export function ConstellationView({
         return;
       }
 
-      // Klik elementu = panel informacji po prawej (scena grafu — z panelu).
       if (node.kind === "entity") {
+        // Z oddalonego organizmu klik przenosi od razu do widoku grafu elementu;
+        // w scenach obszaru/elementu klik otwiera panel informacyjny po prawej.
+        if (data.scene.level === "organism") {
+          const parsed = parseEntityNodeId(node.id);
+          if (parsed) navigateToScene({ level: "entity", ref: parsed });
+          return;
+        }
         setPanelNode(node);
         setCorePanelOpen(false);
       }
