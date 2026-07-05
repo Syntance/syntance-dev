@@ -19,6 +19,7 @@ import {
   Milestone,
   Megaphone,
   Orbit,
+  Grid3x3,
   Palette,
   ShieldCheck,
 } from "lucide-react";
@@ -46,6 +47,12 @@ const navItems = (slug: string) => [
     href: `/projects/${slug}/strategy/constellation`,
     icon: Orbit,
     label: "Konstelacja",
+    badge: "Nowe",
+  },
+  {
+    href: `/projects/${slug}/strategy/blueprint`,
+    icon: Grid3x3,
+    label: "Blueprint segmentu",
     badge: "Nowe",
   },
   {

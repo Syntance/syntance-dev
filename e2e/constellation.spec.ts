@@ -90,4 +90,18 @@ test.describe("Konstelacja Strategy Hub", () => {
     await expect(page.getByRole("button", { name: "Dodaj relację" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /Otwórz w edytorze/ })).toHaveCount(0);
   });
+
+  test("nitka — panel encji i widok NITKA", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await loginAsAdmin(page);
+    await openFirstProjectConstellation(page);
+
+    await page.getByRole("button", { name: "Szczegóły" }).click({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Pokaż nitkę" }).click();
+    await expect(page).toHaveURL(/thread=/, { timeout: 10_000 });
+    await expect(page.getByText("NITKA")).toBeVisible({ timeout: 10_000 });
+
+    await page.keyboard.press("Escape");
+    await expect(page).not.toHaveURL(/thread=/, { timeout: 5_000 });
+  });
 });

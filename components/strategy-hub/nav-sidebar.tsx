@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   Map as MapIcon,
   Orbit,
+  Grid3x3,
   LogOut,
   Clock,
   Puzzle,
@@ -82,6 +83,11 @@ const projectViewItems = (projectId: string) => [
     label: "Konstelacja",
     href: `/strategy-hub/projects/${projectId}/constellation`,
     icon: Orbit,
+  },
+  {
+    label: "Blueprint segmentu",
+    href: `/strategy-hub/projects/${projectId}/blueprint`,
+    icon: Grid3x3,
   },
   {
     label: "Strategy Canvas",

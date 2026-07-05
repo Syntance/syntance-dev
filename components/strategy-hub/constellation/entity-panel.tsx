@@ -27,6 +27,8 @@ interface EntityPanelProps {
   onRelationAdded: () => void;
   /** Przejście do sceny grafu tego elementu (wpływa/wynika). */
   onShowScene?: () => void;
+  /** Otwiera widok nitki end-to-end. */
+  onShowThread?: () => void;
 }
 
 export function EntityPanel({
@@ -39,10 +41,12 @@ export function EntityPanel({
   onClose,
   onRelationAdded,
   onShowScene,
+  onShowThread,
 }: EntityPanelProps) {
   const [decisionsOpen, setDecisionsOpen] = useState(false);
   const [targetId, setTargetId] = useState("");
   const [relationType, setRelationType] = useState<RelationTypeKey>("powiazany_z");
+  const [rationaleMd, setRationaleMd] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +81,7 @@ export function EntityPanel({
     setPrevOpen(open);
     setError(null);
     setTargetId("");
+    setRationaleMd("");
   } else if (open !== prevOpen) {
     setPrevOpen(open);
   }
@@ -96,6 +101,7 @@ export function EntityPanel({
           source: { type: entityType, id: entityId },
           target: { type: targetParsed.type, id: targetParsed.id },
           relationType,
+          rationaleMd: rationaleMd.trim() || null,
         }),
       });
       if (!res.ok) {
@@ -105,6 +111,7 @@ export function EntityPanel({
       }
       onRelationAdded();
       setTargetId("");
+      setRationaleMd("");
     } finally {
       setSaving(false);
     }
@@ -206,6 +213,14 @@ export function EntityPanel({
                   </option>
                 ))}
               </select>
+              <input
+                type="text"
+                value={rationaleMd}
+                onChange={(e) => setRationaleMd(e.target.value)}
+                placeholder="np. COO nie czyta PDF-ów — webinar konwertuje lepiej"
+                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Dlaczego? (uzasadnienie)"
+              />
               {error && <p className="text-xs text-destructive">{error}</p>}
               <Button
                 type="button"
@@ -235,6 +250,17 @@ export function EntityPanel({
               onClick={onShowScene}
             >
               Graf zależności
+            </Button>
+          )}
+          {onShowThread && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={onShowThread}
+            >
+              Pokaż nitkę
             </Button>
           )}
           {mode === "editor" && node.href && (

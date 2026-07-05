@@ -20,7 +20,9 @@ function parseFocusArgs(args: unknown): MapFocusDetail | null {
   const mode = args.mode;
   if (typeof entityType !== "string" || typeof entityId !== "string") return null;
   const focusMode: MapFocusMode =
-    mode === "highlight" || mode === "path" ? mode : "focus";
+    mode === "highlight" || mode === "path" || mode === "thread"
+      ? mode
+      : "focus";
   const pathIds = Array.isArray(args.pathIds)
     ? args.pathIds.filter((id): id is string => typeof id === "string")
     : undefined;

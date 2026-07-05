@@ -19,6 +19,7 @@ import type {
 import {
   CORE_NODE_ID,
   areaNodeId,
+  entityNodeId,
   parseEntityNodeId,
 } from "@/lib/strategy-hub/constellation-types";
 import {
@@ -36,6 +37,9 @@ import { EntityPanel } from "./entity-panel";
 import { CorePanel } from "./core-panel";
 import { computeSceneLayout, allSceneNodes } from "./scene-layout";
 import { KONST, generateStars } from "./constellation-theme";
+import { ThreadView } from "./thread-view";
+import { DecisionLedger } from "@/components/strategy-hub/decisions/decision-ledger";
+import type { LedgerDecision } from "@/lib/strategy-hub/decisions-ledger";
 
 interface ConstellationViewProps {
   projectId: string;
@@ -201,6 +205,50 @@ export function ConstellationView({
     const next = v >= 1.25;
     setStabilized((prev) => (prev === next ? prev : next));
   });
+
+  const threadParam = searchParams.get("thread");
+  const threadActive = Boolean(threadParam);
+  const decisionsParam = searchParams.get("decisions") === "1";
+
+  const [ledger, setLedger] = useState<LedgerDecision[]>([]);
+  const [dimDecision, setDimDecision] = useState<LedgerDecision | null>(null);
+  const ledgerOpen = decisionsParam;
+
+  useEffect(() => {
+    if (mode !== "editor") return;
+    void fetch(`/api/strategy-hub/projects/${projectId}/decisions-ledger`, {
+      signal: AbortSignal.timeout(15_000),
+    })
+      .then((r) => r.json())
+      .then((body: { decisions?: LedgerDecision[] }) => {
+        setLedger(body.decisions ?? []);
+      })
+      .catch(() => undefined);
+  }, [projectId, mode]);
+
+  const decisionScopeIds = useMemo(() => {
+    if (!dimDecision) return null;
+    const ids = new Set<string>();
+    for (const c of dimDecision.causes) {
+      ids.add(entityNodeId(c.type, c.id));
+    }
+    for (const e of dimDecision.effects) {
+      ids.add(entityNodeId(e.type, e.id));
+    }
+    return ids;
+  }, [dimDecision]);
+
+  const toggleDecisions = useCallback(() => {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (decisionsParam) {
+      sp.delete("decisions");
+      setDimDecision(null);
+    } else {
+      sp.set("decisions", "1");
+    }
+    const q = sp.toString();
+    router.replace(q ? `${pageBase}?${q}` : pageBase, { scroll: false });
+  }, [decisionsParam, pageBase, router, searchParams]);
 
   const sceneQuery = sceneQueryFromSearchParams(searchParams);
   const apiUrl = buildSceneApiUrl(projectId, mode, sceneQuery);
@@ -404,8 +452,28 @@ export function ConstellationView({
     camera.focusNode(pos, viewport.w, viewport.h, targetScale);
   }, [focusParam, layout, nodeById, camera, viewport, data?.scene.level]);
 
+  const closeThread = useCallback(() => {
+    const sp = new URLSearchParams(searchParams.toString());
+    sp.delete("thread");
+    const q = sp.toString();
+    router.push(q ? `${pageBase}?${q}` : pageBase);
+  }, [pageBase, router, searchParams]);
+
+  const openThread = useCallback(
+    (entityType: string, entityId: string) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.set("thread", `${entityType}:${entityId}`);
+      router.push(`${pageBase}?${sp.toString()}`);
+    },
+    [pageBase, router, searchParams]
+  );
+
   useEffect(() => {
     const handleMapFocus = (detail: MapFocusDetail) => {
+      if (detail.mode === "thread") {
+        openThread(detail.entityType, detail.entityId);
+        return;
+      }
       if (detail.mode === "focus" || detail.mode === "path") {
         setHighlightedLinkIds(new Set());
         setHighlightedId(null);
@@ -429,7 +497,7 @@ export function ConstellationView({
     };
 
     return onMapFocus(handleMapFocus);
-  }, [layout, announceFocus, navigateToEntity]);
+  }, [layout, announceFocus, navigateToEntity, openThread]);
 
   const handleNodeActivate = useCallback(
     (node: ConstellationNode) => {
@@ -665,7 +733,18 @@ export function ConstellationView({
         </div>
       )}
 
-      {data.breadcrumb.length > 0 && (
+      {threadActive && threadParam && (
+        <ThreadView
+          projectId={projectId}
+          mode={mode}
+          pageBase={pageBase}
+          threadParam={threadParam}
+          viewport={viewport}
+          onClose={closeThread}
+        />
+      )}
+
+      {data.breadcrumb.length > 0 && !threadActive && (
         <nav
           aria-label="Ścieżka nawigacji konstelacji"
           className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center px-4 py-3 text-xs"
@@ -709,6 +788,23 @@ export function ConstellationView({
         </nav>
       )}
 
+      {mode === "editor" && !threadActive && (
+        <div className="pointer-events-none absolute left-4 top-3 z-20">
+          <button
+            type="button"
+            onClick={toggleDecisions}
+            className="pointer-events-auto rounded-full border px-3 py-1 text-[11px] font-medium backdrop-blur transition-colors hover:text-[#E9E1C6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/60"
+            style={{
+              backgroundColor: KONST.chromeBg,
+              borderColor: KONST.chromeBorder,
+              color: KONST.label,
+            }}
+          >
+            Decyzje ({ledger.length})
+          </button>
+        </div>
+      )}
+
       {(data.scene.level === "area" || isEntityScene) && (
         <>
           <div
@@ -748,10 +844,14 @@ export function ConstellationView({
       <svg
         width={viewport.w}
         height={viewport.h}
-        tabIndex={0}
+        tabIndex={threadActive ? -1 : 0}
         role="img"
         aria-label="Widok konstelacji strategii"
-        className="touch-none relative z-[1] size-full select-none outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/40"
+        aria-hidden={threadActive}
+        className={cn(
+          "touch-none relative z-[1] size-full select-none outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/40",
+          threadActive && "pointer-events-none invisible"
+        )}
         onKeyDown={handleKeyDown}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
@@ -1005,9 +1105,36 @@ export function ConstellationView({
               !focused &&
               !highlighted;
 
+            const inDecisionScope =
+              !decisionScopeIds || decisionScopeIds.has(node.id);
+            const decisionDim = decisionScopeIds && !inDecisionScope;
+            const isCause =
+              dimDecision?.causes.some(
+                (c) => entityNodeId(c.type, c.id) === node.id
+              ) ?? false;
+            const isEffect =
+              dimDecision?.effects.some(
+                (e) => entityNodeId(e.type, e.id) === node.id
+              ) ?? false;
+
             return (
-              <ConstellationNodeView
+              <g
                 key={node.id}
+                opacity={decisionDim ? 0.18 : 1}
+                style={{ transition: "opacity 200ms ease-out" }}
+              >
+                {decisionScopeIds && inDecisionScope && (
+                  <circle
+                    cx={pos.x}
+                    cy={pos.y}
+                    r={radius + 5}
+                    fill="none"
+                    stroke={isCause ? KONST.up : isEffect ? KONST.down : KONST.spark}
+                    strokeOpacity={0.55}
+                    strokeWidth={1.2}
+                  />
+                )}
+                <ConstellationNodeView
                 node={node}
                 x={pos.x}
                 y={pos.y}
@@ -1027,6 +1154,7 @@ export function ConstellationView({
                   handleNodeActivate(node);
                 }}
               />
+              </g>
             );
           })}
         </motion.g>
@@ -1038,7 +1166,12 @@ export function ConstellationView({
         style={{ background: KONST.bgVignette }}
       />
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-5 z-10 flex items-end justify-center gap-6 px-6">
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-5 z-10 flex items-end justify-center gap-6 px-6",
+          threadActive && "hidden"
+        )}
+      >
         <button
           type="button"
           onClick={() => cycle(-1)}
@@ -1130,6 +1263,13 @@ export function ConstellationView({
                 }
               : undefined
           }
+          onShowThread={() => {
+            const parsed = parseEntityNodeId(panelNode.id);
+            if (parsed) {
+              setPanelNode(null);
+              openThread(parsed.type, parsed.id);
+            }
+          }}
         />
       )}
 
@@ -1140,6 +1280,26 @@ export function ConstellationView({
           singletons={data.singletons}
           open
           onClose={() => setCorePanelOpen(false)}
+        />
+      )}
+
+      {mode === "editor" && (
+        <DecisionLedger
+          open={ledgerOpen}
+          decisions={ledger}
+          selectedId={dimDecision?.id ?? null}
+          segmentId={null}
+          onClose={() => {
+            setDimDecision(null);
+            const sp = new URLSearchParams(searchParams.toString());
+            sp.delete("decisions");
+            const q = sp.toString();
+            router.replace(q ? `${pageBase}?${q}` : pageBase, { scroll: false });
+          }}
+          onSelect={setDimDecision}
+          onShowThread={(entityType, entityId) => {
+            openThread(entityType, entityId);
+          }}
         />
       )}
     </div>

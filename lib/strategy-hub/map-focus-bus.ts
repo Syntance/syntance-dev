@@ -1,4 +1,4 @@
-export type MapFocusMode = "focus" | "highlight" | "path";
+export type MapFocusMode = "focus" | "highlight" | "path" | "thread";
 
 export interface MapFocusDetail {
   entityType: string;

@@ -240,7 +240,7 @@ const focusMapNodeTool = () =>
     parameters: z.object({
       entityType: z.enum(entityTypeKeys),
       entityId: z.string().uuid(),
-      mode: z.enum(["focus", "highlight", "path"]).default("focus"),
+      mode: z.enum(["focus", "highlight", "path", "thread"]).default("focus"),
       pathIds: z.array(z.string().uuid()).optional(),
     }),
     execute: async () => ({ ok: true as const }),

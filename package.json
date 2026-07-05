@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx scripts/test-rules.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-relations.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-embeddings.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-undo.ts && tsx scripts/test-constellation-layout.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-constellation-scenes.ts",
+    "test": "tsx scripts/test-rules.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-relations.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-embeddings.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-undo.ts && tsx scripts/test-constellation-layout.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-constellation-scenes.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-thread.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-blueprint.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "db:seed": "npx tsx --env-file=.env.local scripts/seed-local-accounts.ts",
