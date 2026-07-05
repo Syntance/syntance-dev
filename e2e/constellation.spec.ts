@@ -96,7 +96,13 @@ test.describe("Konstelacja Strategy Hub", () => {
     await loginAsAdmin(page);
     await openFirstProjectConstellation(page);
 
-    await page.getByRole("button", { name: "Szczegóły" }).click({ timeout: 10_000 });
+    const container = page.getByRole("img", { name: "Widok konstelacji strategii" });
+    await container.focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("constellation-info-panel")).toBeVisible({
+      timeout: 5_000,
+    });
     await page.getByRole("button", { name: "Pokaż nitkę" }).click();
     await expect(page).toHaveURL(/thread=/, { timeout: 10_000 });
     await expect(page.getByText("NITKA")).toBeVisible({ timeout: 10_000 });

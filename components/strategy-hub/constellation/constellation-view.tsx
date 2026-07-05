@@ -8,8 +8,8 @@ import {
   useState,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion, useMotionTemplate, useMotionValueEvent } from "motion/react";
-import { ChevronRight, Info, Loader2 } from "lucide-react";
+import { motion, AnimatePresence, useMotionTemplate, useMotionValueEvent } from "motion/react";
+import { ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
   ConstellationNode,
@@ -18,10 +18,12 @@ import type {
 } from "@/lib/strategy-hub/constellation-types";
 import {
   CORE_NODE_ID,
+  AREA_META,
   areaNodeId,
   entityNodeId,
   parseEntityNodeId,
 } from "@/lib/strategy-hub/constellation-types";
+import type { StrategyArea } from "@/lib/strategy-hub/entities/entity-types";
 import {
   ENTITY_TYPE_META,
   type EntityTypeKey,
@@ -34,7 +36,6 @@ import {
 import { useCamera } from "./use-camera";
 import { ConstellationNodeView } from "./constellation-node";
 import { EntityPanel } from "./entity-panel";
-import { CorePanel } from "./core-panel";
 import { computeSceneLayout, allSceneNodes } from "./scene-layout";
 import { KONST, generateStars } from "./constellation-theme";
 import { ThreadView } from "./thread-view";
@@ -190,7 +191,6 @@ export function ConstellationView({
     () => new Set()
   );
   const [panelNode, setPanelNode] = useState<ConstellationNode | null>(null);
-  const [corePanelOpen, setCorePanelOpen] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
   const [viewport, setViewport] = useState({ w: 960, h: 560 });
   const areaMembersRef = useRef<ConstellationNode[]>([]);
@@ -278,7 +278,6 @@ export function ConstellationView({
         setData(json);
         setLiveMessage(sceneLiveMessage(json));
         setPanelNode(null);
-        setCorePanelOpen(false);
         if (json.scene.level === "entity") {
           const areaCrumb = json.breadcrumb.find((b) => b.scene.level === "area");
           if (areaCrumb?.scene.level === "area") {
@@ -502,33 +501,10 @@ export function ConstellationView({
   const handleNodeActivate = useCallback(
     (node: ConstellationNode) => {
       if (!data) return;
-
-      if (node.kind === "core" && data.scene.level === "organism") {
-        setCorePanelOpen(true);
-        setPanelNode(null);
-        focusNodeById(node.id, false);
-        return;
-      }
-
-      if (node.kind === "area") {
-        const area = data.areasOrder.find((a) => areaNodeId(a) === node.id);
-        if (area) navigateToScene({ level: "area", area });
-        return;
-      }
-
-      if (node.kind === "entity") {
-        // Z oddalonego organizmu klik przenosi od razu do widoku grafu elementu;
-        // w scenach obszaru/elementu klik otwiera panel informacyjny po prawej.
-        if (data.scene.level === "organism") {
-          const parsed = parseEntityNodeId(node.id);
-          if (parsed) navigateToScene({ level: "entity", ref: parsed });
-          return;
-        }
-        setPanelNode(node);
-        setCorePanelOpen(false);
-      }
+      setPanelNode(node);
+      focusNodeById(node.id, false);
     },
-    [data, focusNodeById, navigateToScene]
+    [data, focusNodeById]
   );
 
   const goUpScene = useCallback(() => {
@@ -594,10 +570,6 @@ export function ConstellationView({
         setPanelNode(null);
         return;
       }
-      if (corePanelOpen) {
-        setCorePanelOpen(false);
-        return;
-      }
       if (data.scene.level !== "organism") {
         goUpScene();
         return;
@@ -609,8 +581,7 @@ export function ConstellationView({
 
     if (e.key === "Enter" && focusedId) {
       const node = nodeById.get(focusedId);
-      if (node?.kind === "entity") setPanelNode(node);
-      if (node?.kind === "core") setCorePanelOpen(true);
+      if (node) setPanelNode(node);
       return;
     }
 
@@ -646,7 +617,7 @@ export function ConstellationView({
           (m) => m.parentId === focusedArea
         ).length;
         displayLabel = areaNode?.label ?? "";
-        displaySub = `${count} elementów · Enter — wejdź w obszar`;
+        displaySub = `${count} elementów · Enter — szczegóły`;
       } else {
         displayLabel = data.center.label;
         displaySub = `zdrowie ${data.health}% · ${data.members.length} elementów`;
@@ -671,9 +642,9 @@ export function ConstellationView({
         : null;
 
   const chromeShell = cn(
-    "dark relative overflow-hidden",
+    "dark relative flex min-h-0",
     fullscreen
-      ? "h-full min-h-0 flex-1"
+      ? "h-full flex-1"
       : "h-[min(72vh,640px)] min-h-[420px] rounded-2xl border border-[#3A342A]"
   );
 
@@ -708,6 +679,7 @@ export function ConstellationView({
       className={chromeShell}
       style={{ backgroundColor: KONST.bg }}
     >
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {liveMessage}
       </div>
@@ -1217,71 +1189,68 @@ export function ConstellationView({
         </button>
       </div>
 
-      {focusedId &&
-        nodeById.get(focusedId)?.kind === "entity" &&
-        !panelNode && (
-          <div className="pointer-events-none absolute bottom-5 right-5 z-10">
-            <button
-              type="button"
-              onClick={() => {
-                const node = nodeById.get(focusedId);
-                if (node) setPanelNode(node);
-              }}
-              className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium backdrop-blur transition-colors hover:text-[#E9E1C6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/60"
-              style={{
-                backgroundColor: KONST.chromeBg,
-                borderColor: KONST.chromeBorder,
-                color: KONST.label,
-              }}
-            >
-              <Info className="size-3.5" />
-              Szczegóły
-            </button>
-          </div>
-        )}
+      </div>
 
-      {panelNode && (
-        <EntityPanel
-          projectId={projectId}
-          node={panelNode}
-          links={data.links}
-          allNodes={allNodesFlat}
-          mode={mode}
-          open
-          onClose={() => setPanelNode(null)}
-          onRelationAdded={() => {
-            void fetchScene(apiUrl).then(setData);
-          }}
-          onShowScene={
-            data.center.id !== panelNode.id
-              ? () => {
-                  const parsed = parseEntityNodeId(panelNode.id);
-                  if (parsed) {
-                    setPanelNode(null);
-                    navigateToScene({ level: "entity", ref: parsed });
+      <AnimatePresence mode="popLayout">
+        {panelNode && data && (
+          <EntityPanel
+            key={panelNode.id}
+            projectId={projectId}
+            node={panelNode}
+            links={data.links}
+            allNodes={allNodesFlat}
+            upstream={data.upstream}
+            downstream={data.downstream}
+            health={data.health}
+            singletons={data.singletons}
+            mode={mode}
+            open
+            onClose={() => setPanelNode(null)}
+            onRelationAdded={() => {
+              void fetchScene(apiUrl).then(setData);
+            }}
+            onShowScene={
+              panelNode.kind === "entity" && data.center.id !== panelNode.id
+                ? () => {
+                    const parsed = parseEntityNodeId(panelNode.id);
+                    if (parsed) {
+                      setPanelNode(null);
+                      navigateToScene({ level: "entity", ref: parsed });
+                    }
                   }
-                }
-              : undefined
-          }
-          onShowThread={() => {
-            const parsed = parseEntityNodeId(panelNode.id);
-            if (parsed) {
-              setPanelNode(null);
-              openThread(parsed.type, parsed.id);
+                : undefined
             }
-          }}
-        />
-      )}
-
-      {corePanelOpen && data.singletons && (
-        <CorePanel
-          projectLabel={data.center.label}
-          health={data.health}
-          singletons={data.singletons}
-          open
-          onClose={() => setCorePanelOpen(false)}
-        />
-      )}
+            onShowThread={
+              panelNode.kind === "entity"
+                ? () => {
+                    const parsed = parseEntityNodeId(panelNode.id);
+                    if (parsed) {
+                      setPanelNode(null);
+                      openThread(parsed.type, parsed.id);
+                    }
+                  }
+                : undefined
+            }
+            onEnterArea={
+              panelNode.kind === "area"
+                ? () => {
+                    const areaKey = panelNode.id.slice(5) as StrategyArea;
+                    if (areaKey in AREA_META) {
+                      navigateToScene({ level: "area", area: areaKey });
+                    }
+                  }
+                : undefined
+            }
+            onNodeFocus={(nodeId) => {
+              const n = nodeById.get(nodeId);
+              if (n) {
+                setPanelNode(n);
+                focusNodeById(nodeId, false);
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {mode === "editor" && (
         <DecisionLedger

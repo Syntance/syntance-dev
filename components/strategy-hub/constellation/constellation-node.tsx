@@ -274,7 +274,13 @@ export function ConstellationNodeView({
           tabIndex={tabIndex}
           aria-label={ariaParts.join(", ")}
           onFocus={onFocus}
-          onClick={onClick}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
           className="size-full rounded-full opacity-0 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EFE7CE]/70"
         >
           {node.kind === "area" && node.status && (
