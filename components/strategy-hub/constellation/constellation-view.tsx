@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion, useMotionTemplate } from "motion/react";
+import { motion, useMotionTemplate, useMotionValueEvent } from "motion/react";
 import { ChevronRight, Info, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -193,6 +193,13 @@ export function ConstellationView({
 
   const camera = useCamera();
   const svgTransform = useMotionTemplate`${camera.transform}`;
+
+  // Punkty organizmu stabilizują się (rosną, przestają dryfować) po zbliżeniu kamery.
+  const [stabilized, setStabilized] = useState(false);
+  useMotionValueEvent(camera.scale, "change", (v) => {
+    const next = v >= 0.9;
+    setStabilized((prev) => (prev === next ? prev : next));
+  });
 
   const sceneQuery = sceneQueryFromSearchParams(searchParams);
   const apiUrl = buildSceneApiUrl(projectId, mode, sceneQuery);
@@ -440,9 +447,10 @@ export function ConstellationView({
         return;
       }
 
+      // Klik elementu = panel informacji po prawej (scena grafu — z panelu).
       if (node.kind === "entity") {
-        const parsed = parseEntityNodeId(node.id);
-        if (parsed) navigateToScene({ level: "entity", ref: parsed });
+        setPanelNode(node);
+        setCorePanelOpen(false);
       }
     },
     [data, focusNodeById, navigateToScene]
@@ -540,7 +548,7 @@ export function ConstellationView({
   const scale = camera.getScale();
   const isOrganism = data?.scene.level === "organism";
   const isEntityScene = data?.scene.level === "entity";
-  const showEntityLabels = isOrganism ? scale >= 0.9 : scale >= 0.7;
+  const showEntityLabels = isOrganism ? stabilized : scale >= 0.7;
   const showCrossLinks = scale >= 0.65;
 
   /** Fokusowany obszar (organizm) — jego gałęzie świecą jaśniej. */
@@ -844,6 +852,14 @@ export function ConstellationView({
           })}
 
           {data.links.map((link) => {
+            // Organizm: zero korelacji między elementami — widoczne tylko nici rdzeń↔obszar.
+            if (isOrganism) {
+              const structural =
+                (link.sourceId === CORE_NODE_ID || link.sourceId.startsWith("area:")) &&
+                (link.targetId === CORE_NODE_ID || link.targetId.startsWith("area:"));
+              if (!structural) return null;
+            }
+
             const from = layout.get(link.sourceId);
             const to = layout.get(link.targetId);
             if (!from || !to) return null;
@@ -966,10 +982,21 @@ export function ConstellationView({
               radius = 15;
             } else if (isSide) {
               radius = 11;
+            } else if (isOrganism) {
+              // Luźne punkty: małe przed stabilizacją, większe po zbliżeniu.
+              radius = stabilized
+                ? 4.5 + Math.min(2.5, degree * 0.35)
+                : 2.6 + Math.min(1.2, degree * 0.2);
             } else {
-              const base = isOrganism ? 3.2 : 5;
-              radius = base + Math.min(2.5, degree * 0.35);
+              radius = 5 + Math.min(2.5, degree * 0.35);
             }
+
+            const drift =
+              isOrganism &&
+              !stabilized &&
+              node.kind === "entity" &&
+              !focused &&
+              !highlighted;
 
             return (
               <ConstellationNodeView
@@ -986,6 +1013,7 @@ export function ConstellationView({
                 isSceneCenter={isCenter && isEntityScene}
                 labelText={isSide ? sideLabel(node) : undefined}
                 coreSeed={projectId}
+                drift={drift}
                 onFocus={() => setFocusedId(node.id)}
                 onClick={() => {
                   focusNodeById(node.id, false);
@@ -1084,6 +1112,17 @@ export function ConstellationView({
           onRelationAdded={() => {
             void fetchScene(apiUrl).then(setData);
           }}
+          onShowScene={
+            data.center.id !== panelNode.id
+              ? () => {
+                  const parsed = parseEntityNodeId(panelNode.id);
+                  if (parsed) {
+                    setPanelNode(null);
+                    navigateToScene({ level: "entity", ref: parsed });
+                  }
+                }
+              : undefined
+          }
         />
       )}
 

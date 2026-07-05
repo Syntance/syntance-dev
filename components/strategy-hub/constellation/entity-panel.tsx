@@ -25,6 +25,8 @@ interface EntityPanelProps {
   open: boolean;
   onClose: () => void;
   onRelationAdded: () => void;
+  /** Przejście do sceny grafu tego elementu (wpływa/wynika). */
+  onShowScene?: () => void;
 }
 
 export function EntityPanel({
@@ -36,6 +38,7 @@ export function EntityPanel({
   open,
   onClose,
   onRelationAdded,
+  onShowScene,
 }: EntityPanelProps) {
   const [decisionsOpen, setDecisionsOpen] = useState(false);
   const [targetId, setTargetId] = useState("");
@@ -223,6 +226,17 @@ export function EntityPanel({
         </div>
 
         <div className="flex flex-wrap gap-2 border-t border-border px-4 py-3">
+          {onShowScene && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={onShowScene}
+            >
+              Graf zależności
+            </Button>
+          )}
           {mode === "editor" && node.href && (
             <Link
               href={node.href}

@@ -254,3 +254,18 @@ html.strategy-hub-viewport body {
   width: 100%;
   overflow: hidden;
 }
+
+/* Konstelacja — dryf luznych punktow na poziomie organizmu (stabilizuja sie przy zoomie). */
+@keyframes konst-drift {
+  0%, 100% { transform: translate(0px, 0px); }
+  25% { transform: translate(var(--drift-x, 3px), calc(var(--drift-y, 2px) * -1)); }
+  50% { transform: translate(calc(var(--drift-x, 3px) * -0.7), var(--drift-y, 2px)); }
+  75% { transform: translate(calc(var(--drift-x, 3px) * 0.4), calc(var(--drift-y, 2px) * 0.6)); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .konst-drift {
+    animation: konst-drift var(--drift-dur, 9s) ease-in-out infinite;
+    animation-delay: var(--drift-delay, 0s);
+  }
+}

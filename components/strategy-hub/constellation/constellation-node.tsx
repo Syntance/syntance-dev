@@ -7,7 +7,7 @@ import type { NodeStatus } from "@/lib/strategy-hub/strategy-map-types";
 import type { StrategyArea } from "@/lib/strategy-hub/entities/entity-types";
 import { StatusDot } from "@/components/strategy-hub/strategy-map/status-dot";
 import { AreaGlyph } from "./area-glyphs";
-import { KONST, generateCoreBurst } from "./constellation-theme";
+import { KONST, generateCoreBurst, seededRandom } from "./constellation-theme";
 
 const STATUS_ARC: Record<NodeStatus, string> = {
   ready: "#22c55e",
@@ -35,6 +35,8 @@ interface ConstellationNodeProps {
   labelText?: string;
   /** Seed rozbłysku rdzenia (projectId) — unikalny wzór per projekt. */
   coreSeed?: string;
+  /** Luźny dryf punktu (poziom organizm, przed stabilizacją zoomem). */
+  drift?: boolean;
 }
 
 export function ConstellationNodeView({
@@ -52,8 +54,20 @@ export function ConstellationNodeView({
   isSceneCenter = false,
   labelText,
   coreSeed,
+  drift = false,
 }: ConstellationNodeProps) {
   const reduce = useReducedMotion();
+
+  const driftStyle = useMemo((): React.CSSProperties | undefined => {
+    if (!drift) return undefined;
+    const rand = seededRandom(`drift:${node.id}`);
+    return {
+      "--drift-x": `${(2 + rand() * 4).toFixed(1)}px`,
+      "--drift-y": `${(2 + rand() * 4).toFixed(1)}px`,
+      "--drift-dur": `${(6 + rand() * 8).toFixed(1)}s`,
+      "--drift-delay": `${(-rand() * 8).toFixed(1)}s`,
+    } as React.CSSProperties;
+  }, [drift, node.id]);
 
   const burst = useMemo(
     () =>
@@ -91,6 +105,7 @@ export function ConstellationNodeView({
 
   return (
     <g transform={`translate(${x}, ${y})`}>
+      <g className={drift ? "konst-drift" : undefined} style={driftStyle}>
       {focused && node.kind !== "core" && (
         <circle
           r={radius + 9}
@@ -269,6 +284,7 @@ export function ConstellationNodeView({
           )}
         </button>
       </foreignObject>
+      </g>
     </g>
   );
 }

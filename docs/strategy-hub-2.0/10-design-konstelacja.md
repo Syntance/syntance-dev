@@ -139,6 +139,14 @@ Doprecyzowania po drugiej iteracji makiet (organizm / obszar / element):
 - Dolna etykieta: nazwa encji w Fraunces (uppercase, tracking 9px, clamp 20–28px) + linia meta (typ · etap · liczby zależności).
 - Skrzydła do 4 węzłów na stronę; klik węzła skrzydła = przejście do JEGO sceny element (breadcrumb się wydłuża/wymienia ostatni segment).
 
+## 10a. Model interakcji v3 (zaakceptowany 2026-07-05 — nadpisuje wcześniejsze zasady tam, gdzie kolidują)
+
+- **Organizm = kategorie + luźne punkty, ZERO korelacji.** Na scenie organizmu widoczne są wyłącznie nici rdzeń↔obszar. Żadnych krawędzi do/między elementami (tree ani cross). Elementy to mała „masa kropek" **rozsiana w przestrzeni** (nie drzewo radialne wokół planety): każda encja dostaje pozycję w sektorze swojego obszaru z seedowanym rozrzutem (kąt ±44% sektora, promień 310–500).
+- **Dryf:** punkty encji na organizmie powoli dryfują (CSS `konst-drift`, amplituda 2–6px, czas 6–14s, seed z id węzła; `prefers-reduced-motion` wyłącza). Przy zoomie ≥ 0.9 punkty **stabilizują się**: dryf znika, promień rośnie (2.6→4.5+), pojawiają się etykiety.
+- **Klik obszaru** = wejście w scenę obszaru (graf wpływu/efektu ze skrzydłami WPŁYWA/WYNIKA) — bez zmian.
+- **Klik elementu** (na każdej scenie) = panel informacyjny po prawej (EntityPanel), NIE nawigacja. Scena grafu elementu dostępna z panelu przyciskiem **„Graf zależności"** oraz przez focus z czatu.
+- Implementacja: scatter w `scene-layout.ts` (organizm), dryf w `constellation-node.tsx` + keyframes w `globals.css`, stabilizacja przez `useMotionValueEvent(camera.scale)` w `constellation-view.tsx`.
+
 ## 11. Definition of Done (bramka wizualna)
 
 1. `npm run typecheck && npm run lint && npm run build` zielone; bundle route konstelacji < 200 KB initial JS (Fraunces nie wchodzi do global bundle — sprawdzić `npm run analyze`).
