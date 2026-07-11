@@ -67,6 +67,13 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
   const segmentId = view.segmentId;
   const stages = [...view.stages].sort((a, b) => a.orderIdx - b.orderIdx);
 
+  // Automatycznie rozpinaj wszystkie etapy gdy się załadują
+  React.useEffect(() => {
+    if (stages.length > 0) {
+      setExpandedIds(new Set(stages.map((s) => s.id)));
+    }
+  }, [stages.length]);
+
   const crudBase = React.useCallback(
     (sid: string) =>
       `/api/strategy-hub/projects/${projectId}/segments/${sid}/purchase-stages`,
@@ -205,7 +212,7 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
         <div className="flex flex-wrap gap-1.5">
           {view.segments.map((s) => (
@@ -238,8 +245,8 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
           <Loader2 className="size-5 animate-spin" />
         </div>
       ) : (
-        <div className="overflow-x-auto pb-3">
-          <div className="flex min-w-max items-stretch gap-0">
+        <div className="min-h-0 flex-1 overflow-x-auto pb-1">
+          <div className="flex h-full min-w-max items-stretch gap-0">
             {stages.map((stage, i) => (
               <React.Fragment key={stage.id}>
                 {i > 0 && (
@@ -324,7 +331,7 @@ function StageCard({
   onRemove: () => void;
 }) {
   return (
-    <div className="flex w-[300px] shrink-0 flex-col gap-2.5 rounded-xl border border-border bg-card/40 p-4">
+    <div className="flex h-full min-h-0 w-[300px] shrink-0 flex-col gap-2.5 overflow-y-auto rounded-xl border border-border bg-card/40 p-4">
       <div className="flex items-center gap-2">
         <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand/10 text-[11px] font-semibold text-brand">
           {index + 1}

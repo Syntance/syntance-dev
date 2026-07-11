@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Loader2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { SectionCard } from "@/components/strategy-hub/entity-singleton";
 import { EntityCrud, type FieldDef } from "@/components/strategy-hub/entity-crud";
 import { ChannelHeatmap } from "@/components/strategy-hub/channel-heatmap";
@@ -12,36 +11,24 @@ import type {
   ChannelRow,
 } from "@/components/strategy-hub/funnel-flow";
 
+/**
+ * Zakładka „Kanały i plan" warsztatu lejka: CRUD kanałów, plan aktywności
+ * (kadencje per kanał × etap × segment), heatmapa i diagram zasilania.
+ * Wydzielone z dawnego FunnelClient — edytor lejka ma własny pełny ekran.
+ */
+
 const FunnelFlow = dynamic(
   () => import("@/components/strategy-hub/funnel-flow"),
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[420px] items-center justify-center rounded-xl border border-border text-sm text-muted-foreground gap-2">
+      <div className="flex h-[420px] items-center justify-center gap-2 rounded-xl border border-border text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
         Ładowanie diagramu…
       </div>
     ),
   }
 );
-
-const FunnelBoard = dynamic(
-  () => import("@/components/strategy-hub/funnel-board").then((m) => m.FunnelBoard),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-[520px] items-center justify-center rounded-xl border border-border text-sm text-muted-foreground gap-2">
-        <Loader2 className="size-4 animate-spin" />
-        Ładowanie planszy lejka…
-      </div>
-    ),
-  }
-);
-
-interface Props {
-  projectId: string;
-  projectName: string;
-}
 
 const channelFields: FieldDef[] = [
   { key: "name", label: "Kanał", type: "text", primary: true },
@@ -62,7 +49,7 @@ const channelFields: FieldDef[] = [
   },
 ];
 
-export function FunnelClient({ projectId, projectName }: Props) {
+export function FunnelChannelsPanel({ projectId }: { projectId: string }) {
   const channelsBase = `/api/strategy-hub/projects/${projectId}/channels`;
   const activitiesBase = `/api/strategy-hub/projects/${projectId}/channel-activity-plan`;
   const segmentsBase = `/api/strategy-hub/projects/${projectId}/segments`;
@@ -108,10 +95,7 @@ export function FunnelClient({ projectId, projectName }: Props) {
     return () => ctrl.abort();
   }, [channelsBase, activitiesBase, segmentsBase]);
 
-  const channelOptions = channels.map((c) => ({
-    value: c.id,
-    label: c.name,
-  }));
+  const channelOptions = channels.map((c) => ({ value: c.id, label: c.name }));
   const segmentOptions = segments.map((s) => ({ value: s.id, label: s.name }));
 
   const activityFields: FieldDef[] = [
@@ -148,37 +132,33 @@ export function FunnelClient({ projectId, projectName }: Props) {
 
   return (
     <div className="w-full min-w-0 space-y-6">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">{projectName}</p>
-          <h1 className="text-xl font-semibold tracking-tight">Lejek i kanały</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Przepływ konwersji, plan aktywności kanałów i macierz kanał × etap.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => void refreshViz()}
-          className="h-8 text-xs gap-1.5 shrink-0"
-        >
-          <RefreshCw className="size-3.5" />
-          Odśwież podgląd
-        </Button>
-      </header>
-
-      <SectionCard
-        title="Funnel Flow Builder"
-        description="Elementy lejka per segment i faza (TOFU/MOFU/BOFU/Retencja). Przeciągnij element między kolumnami, aby zmienić etap; połącz z kanałem przeciągając z portu. ⌘L — auto-layout."
-      >
-        <FunnelBoard projectId={projectId} />
+      <SectionCard title="Kanały">
+        <EntityCrud
+          projectId={projectId}
+          entity="channels"
+          fields={channelFields}
+          addLabel="Dodaj kanał"
+          emptyHint="Brak kanałów."
+          onMutate={refreshViz}
+        />
       </SectionCard>
 
-      <SectionCard
-        title="Funnel Flow — kanały"
-        description="Kanały zasilające kolejne etapy lejka."
-      >
-        <FunnelFlow key={vizKey} channels={channels} activities={activities} />
+      <SectionCard title="Plan aktywności">
+        {channelOptions.length === 0 ? (
+          <p className="py-2 text-sm text-muted-foreground">
+            Najpierw dodaj kanał, aby zaplanować aktywności.
+          </p>
+        ) : (
+          <EntityCrud
+            projectId={projectId}
+            entity="channel-activity-plan"
+            fields={activityFields}
+            addLabel="Dodaj aktywność"
+            emptyHint="Brak zaplanowanych aktywności."
+            onMutate={refreshViz}
+            dense
+          />
+        )}
       </SectionCard>
 
       <SectionCard
@@ -195,33 +175,11 @@ export function FunnelClient({ projectId, projectName }: Props) {
         />
       </SectionCard>
 
-      <SectionCard title="Kanały">
-        <EntityCrud
-          projectId={projectId}
-          entity="channels"
-          fields={channelFields}
-          addLabel="Dodaj kanał"
-          emptyHint="Brak kanałów."
-          onMutate={refreshViz}
-        />
-      </SectionCard>
-
-      <SectionCard title="Plan aktywności">
-        {channelOptions.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">
-            Najpierw dodaj kanał, aby zaplanować aktywności.
-          </p>
-        ) : (
-          <EntityCrud
-            projectId={projectId}
-            entity="channel-activity-plan"
-            fields={activityFields}
-            addLabel="Dodaj aktywność"
-            emptyHint="Brak zaplanowanych aktywności."
-            onMutate={refreshViz}
-            dense
-          />
-        )}
+      <SectionCard
+        title="Funnel Flow — kanały"
+        description="Kanały zasilające kolejne etapy lejka."
+      >
+        <FunnelFlow key={vizKey} channels={channels} activities={activities} />
       </SectionCard>
     </div>
   );

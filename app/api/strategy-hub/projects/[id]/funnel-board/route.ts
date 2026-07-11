@@ -91,7 +91,11 @@ export async function GET(
         r.targetType === "campaign" &&
         r.relationType === "promowany_przez"
     )
-    .map((r) => ({ funnelElementId: r.sourceId, campaignId: r.targetId }));
+    .map((r) => ({
+      relationId: r.id,
+      funnelElementId: r.sourceId,
+      campaignId: r.targetId,
+    }));
   const magnetStageRows = relations
     .filter(
       (r) =>
@@ -99,7 +103,11 @@ export async function GET(
         r.targetType === "stage" &&
         r.relationType === "uzywany_w_etapie"
     )
-    .map((r) => ({ leadMagnetId: r.sourceId, stageId: r.targetId }));
+    .map((r) => ({
+      relationId: r.id,
+      leadMagnetId: r.sourceId,
+      stageId: r.targetId,
+    }));
   const elementNextStageRows = relations
     .filter(
       (r) =>
@@ -107,7 +115,11 @@ export async function GET(
         r.targetType === "stage" &&
         r.relationType === "prowadzi_do_etapu"
     )
-    .map((r) => ({ funnelElementId: r.sourceId, stageId: r.targetId }));
+    .map((r) => ({
+      relationId: r.id,
+      funnelElementId: r.sourceId,
+      stageId: r.targetId,
+    }));
 
   const [channelRows, campaignRows, leadMagnetRows] = await Promise.all([
     db

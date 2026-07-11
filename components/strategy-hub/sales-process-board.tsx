@@ -198,8 +198,8 @@ export function SalesProcessBoard({ projectId, initialData }: Props) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5 border-b border-border pb-3">
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-border pb-3">
         {data.segments.map((s) => (
           <button
             key={s.id}
@@ -234,8 +234,8 @@ export function SalesProcessBoard({ projectId, initialData }: Props) {
           .
         </div>
       ) : (
-        <div className="overflow-x-auto pb-3">
-          <div className="flex min-w-max items-stretch gap-0">
+        <div className="min-h-0 flex-1 overflow-x-auto pb-1">
+          <div className="flex h-full min-w-max items-stretch gap-0">
             {stages.map((stage, i) => {
               const marketingOwned = stage.ownerSide === "marketing";
               const stageActivities = data.activities
@@ -269,7 +269,7 @@ export function SalesProcessBoard({ projectId, initialData }: Props) {
 
                   <div
                     className={cn(
-                      "flex w-[280px] shrink-0 flex-col gap-2.5 rounded-xl border border-border bg-card/40 p-4",
+                      "flex h-full min-h-0 w-[280px] shrink-0 flex-col gap-2.5 overflow-y-auto rounded-xl border border-border bg-card/40 p-4",
                       marketingOwned && "opacity-60"
                     )}
                   >

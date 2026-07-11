@@ -37,8 +37,8 @@ export default async function MarketJourneyPage({ params, searchParams }: Props)
   const initialView = await getJourneyView(id, segment ?? null);
 
   return (
-    <div className="w-full min-w-0 space-y-4">
-      <div className="flex items-center gap-2">
+    <div className="flex h-full min-h-[540px] w-full min-w-0 flex-col gap-3">
+      <div className="flex shrink-0 items-center gap-2">
         <Milestone className="size-5 text-brand" />
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
@@ -50,7 +50,9 @@ export default async function MarketJourneyPage({ params, searchParams }: Props)
           </p>
         </div>
       </div>
-      <JourneyDesigner projectId={id} initialView={initialView} />
+      <div className="min-h-0 flex-1">
+        <JourneyDesigner projectId={id} initialView={initialView} />
+      </div>
     </div>
   );
 }

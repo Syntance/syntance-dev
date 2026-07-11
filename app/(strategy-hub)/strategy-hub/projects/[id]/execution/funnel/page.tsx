@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { getProjectById } from "@/lib/strategy-hub/context";
-import { FunnelClient } from "../../funnel/funnel-client";
+import { FunnelWorkspace } from "@/components/strategy-hub/funnel-workspace";
 
-export const metadata = { title: "Lejek i kanały" };
+export const metadata = { title: "Lejek marketingowy" };
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -20,5 +20,5 @@ export default async function FunnelPage({ params }: Props) {
 
   if (!project) notFound();
 
-  return <FunnelClient projectId={id} projectName={project.name} />;
+  return <FunnelWorkspace projectId={id} projectName={project.name} />;
 }

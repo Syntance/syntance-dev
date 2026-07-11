@@ -1,0 +1,731 @@
+[
+  {
+    "id": "8b78f03d-2892-47e3-a39b-b5906fbf13dc",
+    "scope": "global",
+    "config": {
+      "alerts": {
+        "kpiBelowPct": 80,
+        "kpiBelowDays": 14,
+        "syncFailThreshold": 3,
+        "domainExpiringDays": 30
+      },
+      "modules": [
+        {
+          "key": "discovery",
+          "lock": {
+            "enabled": false,
+            "requiresUpstream": []
+          },
+          "label": "Discovery",
+          "onMap": false,
+          "stale": {
+            "enabled": false
+          },
+          "criteria": [
+            {
+              "id": "disc_questions",
+              "label": "≥5 pytań discovery",
+              "entity": "projectQuestions",
+              "metric": "count_gte",
+              "target": 5,
+              "weight": 0.5
+            },
+            {
+              "id": "disc_materials",
+              "label": "≥2 materiały",
+              "entity": "projectMaterials",
+              "metric": "count_gte",
+              "target": 2,
+              "weight": 0.5
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": true,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "brand",
+          "lock": {
+            "enabled": false,
+            "requiresUpstream": []
+          },
+          "label": "Marka",
+          "onMap": false,
+          "stale": {
+            "enabled": false
+          },
+          "criteria": [
+            {
+              "id": "brand_mission",
+              "field": "missionMd",
+              "label": "Misja wypełniona",
+              "entity": "brandIdentity",
+              "metric": "field_filled",
+              "weight": 0.25
+            },
+            {
+              "id": "brand_vision",
+              "field": "visionMd",
+              "label": "Wizja wypełniona",
+              "entity": "brandIdentity",
+              "metric": "field_filled",
+              "weight": 0.25
+            },
+            {
+              "id": "brand_tov",
+              "field": "toneOfVoiceMd",
+              "label": "Tone of voice",
+              "entity": "brandIdentity",
+              "metric": "field_filled",
+              "weight": 0.25
+            },
+            {
+              "id": "brand_visual",
+              "label": "Paleta wizualna",
+              "entity": "brandVisual",
+              "metric": "custom",
+              "weight": 0.25
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": true,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "fundament",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": []
+          },
+          "label": "Fundament",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "fund_problems",
+              "label": "Problemy / ambicje",
+              "entity": "businessProblems",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 0.25
+            },
+            {
+              "id": "fund_uvp",
+              "field": "coreUvpMd",
+              "label": "UVP core",
+              "entity": "uvp",
+              "metric": "field_filled",
+              "weight": 0.25
+            },
+            {
+              "id": "fund_competitors",
+              "label": "Konkurencja",
+              "entity": "competitors",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 0.25
+            },
+            {
+              "id": "fund_objections",
+              "label": "Obiekcje",
+              "entity": "objections",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 0.25
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": true,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "segmenty",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "fundament"
+            ]
+          },
+          "label": "Segmenty",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "map_seg_count",
+              "label": "≥3 segmenty",
+              "entity": "segments",
+              "metric": "count_gte",
+              "target": 3,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": true,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "lejek",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "segmenty"
+            ]
+          },
+          "label": "Lejek",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "lejek_stages",
+              "label": "Etapy zakupu",
+              "entity": "purchaseStages",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 0.3333333333333333
+            },
+            {
+              "id": "lejek_elements",
+              "label": "Elementy lejka",
+              "entity": "funnelElements",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 0.3333333333333333
+            },
+            {
+              "id": "lejek_flows",
+              "label": "User flows",
+              "entity": "userFlows",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 0.3333333333333333
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": true,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "kanaly",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "lejek"
+            ]
+          },
+          "label": "Kanały",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "map_channels",
+              "label": "≥4 kanały",
+              "entity": "channels",
+              "metric": "count_gte",
+              "target": 4,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": true,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "przekaz",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "lejek"
+            ]
+          },
+          "label": "Przekaz",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "przekaz_pitches",
+              "label": "Pitche",
+              "entity": "salesPitches",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 0.25
+            },
+            {
+              "id": "przekaz_scripts",
+              "label": "Skrypty",
+              "entity": "salesScripts",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 0.25
+            },
+            {
+              "id": "przekaz_lead_magnets",
+              "label": "Lead magnety",
+              "entity": "leadMagnets",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 0.25
+            },
+            {
+              "id": "przekaz_copy",
+              "label": "Wytyczne copy",
+              "entity": "copyGuidelines",
+              "metric": "custom",
+              "weight": 0.25
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": true,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "strona",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "segmenty",
+              "lejek"
+            ]
+          },
+          "label": "Strona",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "map_pages",
+              "label": "≥4 podstrony",
+              "entity": "pages",
+              "metric": "count_gte",
+              "target": 4,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": true,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "kpi",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "kanaly",
+              "strona"
+            ]
+          },
+          "label": "KPI",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "map_kpi_count",
+              "label": "≥4 wskaźniki",
+              "entity": "kpis",
+              "metric": "count_gte",
+              "target": 4,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": true,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "kryteria_rynku",
+          "lock": {
+            "enabled": false,
+            "requiresUpstream": []
+          },
+          "label": "Kryteria segmentacji rynku",
+          "onMap": true,
+          "stale": {
+            "enabled": false
+          },
+          "criteria": [
+            {
+              "id": "kryteria_dimensions",
+              "label": "Wymiary segmentacji zdefiniowane",
+              "metric": "custom",
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": false,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "buyer_journey",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "segmenty"
+            ]
+          },
+          "label": "Mapa myśli klienta (buyer journey)",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "buyer_journey_count",
+              "label": "≥1 etap mapy myśli",
+              "entity": "buyerJourneyStages",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": false,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "pitche",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "segmenty",
+              "fundament"
+            ]
+          },
+          "label": "Pitche sprzedażowe",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "pitche_count",
+              "label": "≥1 pitch",
+              "entity": "salesPitches",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": false,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "sekcje",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "strona"
+            ]
+          },
+          "label": "Sekcje podstron",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "sekcje_count",
+              "label": "≥1 sekcja",
+              "entity": "pageSections",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": false,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "seo",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "strona"
+            ]
+          },
+          "label": "SEO / słowa kluczowe",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "seo_count",
+              "label": "≥1 słowo kluczowe",
+              "entity": "seoKeywords",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": false,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "geo",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "strona",
+              "seo"
+            ]
+          },
+          "label": "GEO / AEO (widoczność w AI)",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "geo_count",
+              "label": "≥1 asset GEO",
+              "entity": "geoAssets",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": false,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "oferta",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "fundament",
+              "segmenty"
+            ]
+          },
+          "label": "Oferta",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "oferta_count",
+              "label": "≥1 oferta",
+              "entity": "offers",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": false,
+          "inProgressThreshold": 1
+        },
+        {
+          "key": "kampanie",
+          "lock": {
+            "enabled": true,
+            "requiresUpstream": [
+              "lejek",
+              "kanaly",
+              "oferta"
+            ]
+          },
+          "label": "Kampanie marketingowe",
+          "onMap": true,
+          "stale": {
+            "enabled": true
+          },
+          "criteria": [
+            {
+              "id": "kampanie_count",
+              "label": "≥1 kampania",
+              "entity": "campaigns",
+              "metric": "count_gte",
+              "target": 1,
+              "weight": 1
+            }
+          ],
+          "readyThreshold": 80,
+          "visibleInClient": false,
+          "inProgressThreshold": 1
+        }
+      ],
+      "palette": {
+        "geo": "#22d3ee",
+        "kpi": "#f472b6",
+        "seo": "#facc15",
+        "flow": "#38bdf8",
+        "goal": "#c084fc",
+        "page": "#475569",
+        "stage": "#60a5fa",
+        "channel": "#a16207",
+        "element": "#34d399",
+        "problem": "#fb923c",
+        "campaign": "#a78bfa",
+        "objection": "#f87171"
+      },
+      "version": 2,
+      "connections": [
+        {
+          "to": "segmenty",
+          "from": "fundament"
+        },
+        {
+          "to": "lejek",
+          "from": "segmenty"
+        },
+        {
+          "to": "kanaly",
+          "from": "lejek"
+        },
+        {
+          "to": "przekaz",
+          "from": "lejek"
+        },
+        {
+          "to": "strona",
+          "from": "segmenty"
+        },
+        {
+          "to": "strona",
+          "from": "lejek"
+        },
+        {
+          "to": "kpi",
+          "from": "kanaly"
+        },
+        {
+          "to": "kpi",
+          "from": "strona"
+        }
+      ],
+      "correlations": [
+        {
+          "id": "stage_element",
+          "label": "wywołuje",
+          "required": false,
+          "sourceType": "stage",
+          "targetType": "element",
+          "defaultStrength": "strong"
+        },
+        {
+          "id": "problem_element",
+          "label": "adresuje",
+          "required": false,
+          "sourceType": "problem",
+          "targetType": "element",
+          "defaultStrength": "normal"
+        },
+        {
+          "id": "objection_element",
+          "label": "zbija",
+          "required": false,
+          "sourceType": "objection",
+          "targetType": "element",
+          "defaultStrength": "weak"
+        },
+        {
+          "id": "goal_element",
+          "label": "odpowiada na",
+          "required": false,
+          "sourceType": "goal",
+          "targetType": "element",
+          "defaultStrength": "normal"
+        },
+        {
+          "id": "element_flow",
+          "label": "realizowany przez",
+          "required": true,
+          "sourceType": "element",
+          "targetType": "flow",
+          "defaultStrength": "normal"
+        },
+        {
+          "id": "element_seo",
+          "label": "targetuje",
+          "required": false,
+          "sourceType": "element",
+          "targetType": "seo",
+          "defaultStrength": "weak"
+        },
+        {
+          "id": "element_page",
+          "label": "ląduje na",
+          "required": false,
+          "sourceType": "element",
+          "targetType": "page",
+          "defaultStrength": "normal"
+        },
+        {
+          "id": "element_channel",
+          "label": "publikowany w",
+          "required": false,
+          "sourceType": "element",
+          "targetType": "channel",
+          "defaultStrength": "normal"
+        },
+        {
+          "id": "element_campaign",
+          "label": "promowany przez",
+          "required": false,
+          "sourceType": "element",
+          "targetType": "campaign",
+          "defaultStrength": "normal"
+        },
+        {
+          "id": "element_geo",
+          "label": "cytowalny w AI przez",
+          "required": false,
+          "sourceType": "element",
+          "targetType": "geo",
+          "defaultStrength": "normal"
+        },
+        {
+          "id": "element_kpi",
+          "label": "mierzony przez",
+          "required": true,
+          "sourceType": "element",
+          "targetType": "kpi",
+          "defaultStrength": "strong"
+        },
+        {
+          "id": "flow_page",
+          "label": "ląduje na",
+          "required": false,
+          "sourceType": "flow",
+          "targetType": "page",
+          "defaultStrength": "normal"
+        },
+        {
+          "id": "page_seo",
+          "label": "targetuje",
+          "required": false,
+          "sourceType": "page",
+          "targetType": "seo",
+          "defaultStrength": "weak"
+        }
+      ],
+      "presentationOrder": [
+        "fundament",
+        "segmenty",
+        "lejek",
+        "kanaly",
+        "przekaz",
+        "strona",
+        "kpi"
+      ]
+    },
+    "updatedAt": "2026-07-03T08:37:01.537Z"
+  }
+]
