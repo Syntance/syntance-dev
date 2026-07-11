@@ -33,6 +33,7 @@ const STAGE_ORDER: PipelineStageKey[] = [
   "lejek",
   "kanaly",
   "przekaz",
+  "sprzedaz",
   "strona",
   "kpi",
 ];
@@ -45,6 +46,7 @@ const STAGE_LABELS: Record<PipelineStageKey, string> = {
   lejek: "Lejek",
   kanaly: "Kanały",
   przekaz: "Przekaz",
+  sprzedaz: "Sprzedaż",
   strona: "Strona",
   kpi: "KPI",
 };
@@ -56,6 +58,7 @@ const MODULE_FOR_STAGE: Partial<Record<PipelineStageKey, string>> = {
   lejek: "lejek",
   kanaly: "kanaly",
   przekaz: "przekaz",
+  sprzedaz: "sprzedaz",
   strona: "strona",
   kpi: "kpi",
 };

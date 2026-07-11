@@ -15,6 +15,7 @@ import {
   salesPitches,
   salesScripts,
   leadMagnets,
+  salesActivities,
   copyGuidelines,
   pages,
   navItems,
@@ -130,6 +131,7 @@ export async function getStrategyMapData(
     buyerJourneyRows,
     pageSectionRows,
     offerRows,
+    salesActivityRows,
   ] = await Promise.all([
     db
       .select()
@@ -267,6 +269,20 @@ export async function getStrategyMapData(
       .select({ id: offers.id })
       .from(offers)
       .where(and(eq(offers.projectId, projectId), isNull(offers.deletedAt))),
+    db
+      .select({
+        id: salesActivities.id,
+        name: salesActivities.name,
+        type: salesActivities.type,
+        stageId: salesActivities.stageId,
+        reviewFlag: salesActivities.reviewFlag,
+      })
+      .from(salesActivities)
+      .innerJoin(purchaseStages, eq(salesActivities.stageId, purchaseStages.id))
+      .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
+      .where(
+        and(eq(segments.projectId, projectId), isNull(salesActivities.deletedAt))
+      ),
   ]);
 
   const uvpData = uvpRow[0];
@@ -297,6 +313,7 @@ export async function getStrategyMapData(
     geoAssetCount: geoAssetRows.length,
     offerCount: offerRows.length,
     campaignCount: campaignRows.length,
+    salesActivityCount: salesActivityRows.length,
     marketCriteriaFilled: Array.isArray(marketCriteriaRow[0]?.dimensions)
       ? (marketCriteriaRow[0]!.dimensions as unknown[]).length > 0
       : false,
@@ -323,6 +340,7 @@ export async function getStrategyMapData(
     fundament: objectionRows.some((r) => r.reviewFlag),
     segmenty: segmentRows.some((r) => r.reviewFlag),
     lejek: elementRows.some((r) => r.reviewFlag),
+    sprzedaz: salesActivityRows.some((r) => r.reviewFlag),
     strona: pageRows.some((r) => r.reviewFlag),
     kpi: kpiRows.some((r) => r.reviewFlag),
   };
@@ -346,6 +364,7 @@ export async function getStrategyMapData(
   const lejekSt = statusOf("lejek");
   const kanalySt = statusOf("kanaly");
   const przekazSt = statusOf("przekaz");
+  const sprzedazSt = statusOf("sprzedaz");
   const stronaSt = statusOf("strona");
   const kpiSt = statusOf("kpi");
 
@@ -538,6 +557,34 @@ export async function getStrategyMapData(
       ],
     },
     {
+      key: "sprzedaz",
+      label: "Sprzedaż",
+      icon: "🤝",
+      status: sprzedazSt.state,
+      score: sprzedazSt.score,
+      locked: sprzedazSt.locked,
+      blockedBy: sprzedazSt.blockedBy,
+      href: projectModuleHref(projectId, "sprzedaz"),
+      subcategories: [
+        {
+          id: "akcje-sprzedazowe",
+          label: "Akcje procesu sprzedaży",
+          count: salesActivityRows.length,
+          items: toLeaves(salesActivityRows, (a) => ({
+            id: a.id,
+            label: a.name,
+            note: a.type,
+          })),
+        },
+        {
+          id: "pitche-sprzedaz",
+          label: "Pitche",
+          count: pitchRows.length,
+          items: toLeaves(pitchRows, (p) => ({ id: p.id, label: p.title })),
+        },
+      ],
+    },
+    {
       key: "strona",
       label: "Strona",
       icon: "🌐",
@@ -683,6 +730,7 @@ const NODE_MODULE: Record<StrategyNodeKey, string> = {
   lejek: "funnel",
   kanaly: "funnel",
   przekaz: "sales",
+  sprzedaz: "sales",
   strona: "website",
   kpi: "kpi",
 };

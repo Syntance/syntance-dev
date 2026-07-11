@@ -34,6 +34,10 @@ const GLYPHS: Record<StrategyArea, React.ReactNode> = {
   przekaz: (
     <path d="M-5 -3 C-2 -5 2 -1 5 -3 M-5 1 C-2 -1 2 3 5 1 M-5 5 C-2 3 2 7 5 5" />
   ),
+  // dwa groty spotykające się (domknięcie transakcji)
+  sprzedaz: (
+    <path d="M-5.5 -3 L-1 0 L-5.5 3 M5.5 -3 L1 0 L5.5 3 M-1 0 H1" />
+  ),
   // ramka z linią hero
   strona: (
     <>

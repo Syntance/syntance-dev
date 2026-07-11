@@ -70,6 +70,7 @@ export const AREA_META: Record<
   lejek: { label: "Lejek", color: "#34d399", hrefSegment: "execution/funnel" },
   kanaly: { label: "Kanały", color: "#a16207", hrefSegment: "execution/channels" },
   przekaz: { label: "Przekaz", color: "#fb923c", hrefSegment: "execution/copy" },
+  sprzedaz: { label: "Sprzedaż", color: "#2dd4bf", hrefSegment: "execution/sales" },
   strona: { label: "Strona", color: "#475569", hrefSegment: "execution/sites" },
   kpi: { label: "KPI", color: "#f472b6", hrefSegment: "measurement/kpi" },
 };

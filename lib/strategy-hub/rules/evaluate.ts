@@ -23,6 +23,8 @@ export interface CriterionContext {
   geoAssetCount?: number;
   offerCount?: number;
   campaignCount?: number;
+  /** Logika Negacza — akcje procesu sprzedaży (moduł „sprzedaz"). */
+  salesActivityCount?: number;
   marketCriteriaFilled?: boolean;
   /** Faza 11 (M3) — reguła mierzalności: udział KPI z ustawionym `event_key` (0–1). */
   kpiMeasurableRatio?: number;
@@ -80,6 +82,7 @@ function entityCount(entity: string | undefined, ctx: CriterionContext): number 
     geoAssets: ctx.geoAssetCount ?? 0,
     offers: ctx.offerCount ?? 0,
     campaigns: ctx.campaignCount ?? 0,
+    salesActivities: ctx.salesActivityCount ?? 0,
   };
   return counts[entity] ?? 0;
 }

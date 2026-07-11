@@ -6,5 +6,5 @@ interface Props {
 
 export default async function SalesRedirect({ params }: Props) {
   const { id } = await params;
-  redirect(`/strategy-hub/projects/${id}/execution/copy`);
+  redirect(`/strategy-hub/projects/${id}/execution/sales`);
 }

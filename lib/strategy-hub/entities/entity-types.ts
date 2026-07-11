@@ -27,6 +27,7 @@ export type EntityTypeKey =
   | "sales_pitch"
   | "sales_script"
   | "lead_magnet"
+  | "sales_activity"
   | "section"
   | "site";
 
@@ -36,6 +37,7 @@ export type StrategyArea =
   | "lejek"
   | "kanaly"
   | "przekaz"
+  | "sprzedaz"
   | "strona"
   | "kpi";
 
@@ -197,6 +199,14 @@ export const ENTITY_TYPE_META: Record<EntityTypeKey, EntityTypeMeta> = {
     registryKey: "lead-magnets",
     href: (projectId) => hubPath(projectId, "execution/copy"),
   },
+  sales_activity: {
+    label: "Akcja sprzedażowa",
+    labelPlural: "Akcje sprzedażowe",
+    color: "#2dd4bf",
+    area: "sprzedaz",
+    registryKey: null,
+    href: (projectId) => hubPath(projectId, "execution/sales"),
+  },
   section: {
     label: "Sekcja strony",
     labelPlural: "Sekcje stron",
@@ -237,6 +247,8 @@ export const RELATION_TYPES = {
   wspiera: { label: "wspiera" },
   konkuruje_z: { label: "konkuruje z" },
   powiazany_z: { label: "powiązany z" },
+  uzywany_w_etapie: { label: "używany w etapie" },
+  prowadzi_do_etapu: { label: "prowadzi do etapu" },
 } as const;
 
 export type RelationTypeKey = keyof typeof RELATION_TYPES;
@@ -275,6 +287,7 @@ export const AREA_DEPENDENCIES: Record<StrategyArea, StrategyArea[]> = {
   lejek: ["segmenty"],
   kanaly: ["lejek"],
   przekaz: ["lejek"],
+  sprzedaz: ["segmenty", "lejek"],
   strona: ["segmenty", "lejek"],
   kpi: ["kanaly", "strona"],
 };

@@ -28,6 +28,8 @@ const ENTITY_TO_MODULE: Record<string, string> = {
   "sales-pitches": "przekaz",
   "sales-scripts": "przekaz",
   "lead-magnets": "przekaz",
+  "sales-activities": "sprzedaz",
+  salesActivities: "sprzedaz",
   pages: "strona",
   "seo-keywords": "strona",
   kpis: "kpi",
@@ -38,6 +40,7 @@ const MODULE_REVIEW_TABLES: Record<string, string[]> = {
   fundament: ["objections"],
   segmenty: ["segments"],
   lejek: ["funnelElements"],
+  sprzedaz: ["salesActivities"],
   strona: ["pages"],
   kpi: ["kpis"],
 };
@@ -45,6 +48,10 @@ const MODULE_REVIEW_TABLES: Record<string, string[]> = {
 /**
  * Tabele encji downstream, którym należy ustawić `review_flag = true`
  * po zmianie encji `changedEntityKey`. Zwraca klucze tabel (unikalne).
+ *
+ * Wyjątek (logika Negacza): zmiana ETAPU ZAKUPU flaguje też encje własnego
+ * modułu — elementy lejka odpowiadają na konkretny etap, więc zmiana etapu
+ * (pytania/trigger/obiekcje) unieważnia treści, nie tylko downstream.
  */
 export function reviewTablesOnChange(
   rules: RulesConfig,
@@ -53,7 +60,9 @@ export function reviewTablesOnChange(
   const moduleKey = ENTITY_TO_MODULE[changedEntityKey];
   if (!moduleKey) return [];
   const tables = new Set<string>();
-  for (const mod of downstreamOf(rules, moduleKey)) {
+  const modules = downstreamOf(rules, moduleKey);
+  if (changedEntityKey === "purchase-stages") modules.push(moduleKey);
+  for (const mod of modules) {
     for (const t of MODULE_REVIEW_TABLES[mod] ?? []) tables.add(t);
   }
   return [...tables];

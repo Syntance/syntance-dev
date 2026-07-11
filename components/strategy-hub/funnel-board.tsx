@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -20,26 +20,53 @@ import { LayoutGrid, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { upsertFunnelElement } from "@/lib/strategy-hub/actions";
 
-const PHASES = [
-  { key: "TOFU", label: "TOFU — Świadomość", color: "#60a5fa" },
-  { key: "MOFU", label: "MOFU — Rozważanie", color: "#a78bfa" },
-  { key: "BOFU", label: "BOFU — Decyzja", color: "#34d399" },
-  { key: "retention", label: "Retencja", color: "#fbbf24" },
-] as const;
-type Phase = (typeof PHASES)[number]["key"];
+/**
+ * Funnel Board 2.0 (logika Negacza): kolumny = etapy zakupu WYBRANEGO segmentu
+ * (purchaseStages wg orderIdx) — nie hardcodowane fazy TOFU/MOFU/BOFU.
+ * Faza etapu jest tylko kolorowym tagiem nagłówka kolumny.
+ *
+ * Drag klocka między kolumnami = zmiana stage_id wprost.
+ * Drag-connect:
+ *   element → kanał (prawa szyna)      = relacja „publikowany w"
+ *   element → kampania (lewa szyna)    = relacja „promowany przez"
+ *   element → nagłówek etapu           = relacja „prowadzi do etapu" (wyjście CTA)
+ *   lead magnet → nagłówek etapu       = relacja „używany w etapie"
+ * Pusta kolumna = ghost-cell luki (klik tworzy pierwszą treść etapu).
+ */
 
-const COL_WIDTH = 260;
+const PHASE_TINTS: Record<string, string> = {
+  TOFU: "#60a5fa",
+  MOFU: "#a78bfa",
+  BOFU: "#34d399",
+  retention: "#fbbf24",
+};
+
+function phaseTint(phase: string | null): string | null {
+  if (!phase) return null;
+  const v = phase.toLowerCase();
+  if (v.includes("tofu") || v.includes("świado")) return PHASE_TINTS.TOFU;
+  if (v.includes("mofu") || v.includes("rozważ")) return PHASE_TINTS.MOFU;
+  if (v.includes("bofu") || v.includes("decyz")) return PHASE_TINTS.BOFU;
+  if (v.includes("reten") || v.includes("loja")) return PHASE_TINTS.retention;
+  return null;
+}
+
+const COL_WIDTH = 250;
 const COL_GAP = 40;
-const COL_X = (i: number) => 40 + i * (COL_WIDTH + COL_GAP);
-const CHANNEL_COL_X = COL_X(PHASES.length) + 40;
+const LEFT_RAIL_WIDTH = 200;
+const LEFT_RAIL_X = 20;
+const COLS_START_X = LEFT_RAIL_X + LEFT_RAIL_WIDTH + 60;
+const COL_X = (i: number) => COLS_START_X + i * (COL_WIDTH + COL_GAP);
 const ROW_HEIGHT = 76;
-const ROW_START_Y = 90;
+const ROW_START_Y = 96;
 
 interface StageRow {
   id: string;
   segmentId: string;
   name: string;
   phase: string | null;
+  orderIdx: number | null;
+  ownerSide: string;
 }
 interface ElementRow {
   id: string;
@@ -58,6 +85,17 @@ interface ChannelRow {
   name: string;
   icon: string | null;
 }
+interface CampaignRow {
+  id: string;
+  name: string;
+  segmentId: string | null;
+  stageId: string | null;
+}
+interface LeadMagnetRow {
+  id: string;
+  name: string;
+  segmentId: string | null;
+}
 interface SegmentRow {
   id: string;
   name: string;
@@ -68,14 +106,19 @@ interface BoardData {
   stages: StageRow[];
   elements: ElementRow[];
   elementChannels: { funnelElementId: string; channelId: string }[];
+  elementCampaigns: { funnelElementId: string; campaignId: string }[];
+  magnetStages: { leadMagnetId: string; stageId: string }[];
+  elementNextStages: { funnelElementId: string; stageId: string }[];
   channels: ChannelRow[];
+  campaigns: CampaignRow[];
+  leadMagnets: LeadMagnetRow[];
 }
 
-function phaseAt(x: number): Phase | null {
-  for (let i = 0; i < PHASES.length; i++) {
+function stageIndexAt(x: number, stageCount: number): number | null {
+  for (let i = 0; i < stageCount; i++) {
     const left = COL_X(i) - COL_GAP / 2;
     const right = COL_X(i) + COL_WIDTH + COL_GAP / 2;
-    if (x >= left && x < right) return PHASES[i].key;
+    if (x >= left && x < right) return i;
   }
   return null;
 }
@@ -90,13 +133,9 @@ export function FunnelBoard({
   const isEditor = mode === "editor";
   const [data, setData] = useState<BoardData | null>(null);
   const [segmentId, setSegmentId] = useState<string>("");
-  const [visiblePhases, setVisiblePhases] = useState<Set<Phase>>(
-    () => new Set(PHASES.map((p) => p.key))
-  );
   const [warning, setWarning] = useState<string | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const layoutSeq = useRef(0);
 
   const refresh = useCallback(async () => {
     const url = `/api/strategy-hub/projects/${projectId}/funnel-board`;
@@ -117,24 +156,39 @@ export function FunnelBoard({
     })();
   }, [refresh]);
 
+  const stagesForSegment = useMemo(
+    () =>
+      (data?.stages ?? [])
+        .filter((s) => s.segmentId === segmentId)
+        .sort((a, b) => (a.orderIdx ?? 0) - (b.orderIdx ?? 0)),
+    [data, segmentId]
+  );
+
   const buildGraph = useCallback(
-    (d: BoardData, segId: string, phases: Set<Phase>, editable: boolean) => {
+    (d: BoardData, stages: StageRow[], editable: boolean) => {
       const nextNodes: Node[] = [];
       const nextEdges: Edge[] = [];
+      const stageIds = new Set(stages.map((s) => s.id));
+      const elementsForSegment = d.elements.filter((e) => stageIds.has(e.stageId));
+      const elementIds = new Set(elementsForSegment.map((e) => e.id));
 
-      PHASES.forEach((p, i) => {
-        if (!phases.has(p.key)) return;
+      // Kolumny = etapy zakupu segmentu.
+      stages.forEach((stage, i) => {
+        const tint = phaseTint(stage.phase);
+        const salesOwned = stage.ownerSide === "sales" || stage.ownerSide === "shared";
         nextNodes.push({
-          id: `col-${p.key}`,
+          id: `col-${stage.id}`,
           position: { x: COL_X(i), y: 0 },
-          data: { label: p.label },
+          data: {
+            label: `${i + 1}. ${stage.name}${tint && stage.phase ? `  ·  ${stage.phase}` : ""}${salesOwned ? "  🤝" : ""}`,
+          },
           draggable: false,
-          selectable: false,
+          connectable: editable,
           type: "default",
           style: {
-            background: `${p.color}14`,
-            border: `1px dashed ${p.color}66`,
-            color: p.color,
+            background: tint ? `${tint}14` : "var(--muted)",
+            border: `1px dashed ${tint ?? "var(--border)"}`,
+            color: tint ?? "var(--foreground)",
             borderRadius: 10,
             fontSize: 11,
             fontWeight: 700,
@@ -145,24 +199,18 @@ export function FunnelBoard({
         });
       });
 
-      const stagesForSegment = d.stages.filter((s) => s.segmentId === segId);
-      const elementsForSegment = d.elements.filter((e) => e.segmentId === segId);
-      const stageById = new Map(stagesForSegment.map((s) => [s.id, s]));
-
-      const byPhase = new Map<Phase, ElementRow[]>();
+      const byStage = new Map<string, ElementRow[]>();
       for (const el of elementsForSegment) {
-        const stage = stageById.get(el.stageId);
-        const phase = stage?.phase as Phase | undefined;
-        if (!phase || !phases.has(phase)) continue;
-        if (!byPhase.has(phase)) byPhase.set(phase, []);
-        byPhase.get(phase)!.push(el);
+        if (!byStage.has(el.stageId)) byStage.set(el.stageId, []);
+        byStage.get(el.stageId)!.push(el);
       }
 
-      PHASES.forEach((p, colIdx) => {
-        if (!phases.has(p.key)) return;
-        const list = (byPhase.get(p.key) ?? []).sort(
+      let maxRows = 0;
+      stages.forEach((stage, colIdx) => {
+        const list = (byStage.get(stage.id) ?? []).sort(
           (a, b) => (a.position ?? 0) - (b.position ?? 0)
         );
+        maxRows = Math.max(maxRows, list.length);
         list.forEach((el, rowIdx) => {
           nextNodes.push({
             id: el.id,
@@ -181,18 +229,69 @@ export function FunnelBoard({
             },
           });
         });
+
+        if (editable && list.length === 0) {
+          // Ghost-cell luki: etap bez żadnej odpowiedzi treścią.
+          nextNodes.push({
+            id: `ghost-${stage.id}`,
+            position: { x: COL_X(colIdx), y: ROW_START_Y },
+            data: { label: "⚠ luka: brak treści — kliknij, aby dodać" },
+            draggable: false,
+            selectable: false,
+            connectable: false,
+            type: "default",
+            style: {
+              background: "transparent",
+              border: "1px dashed #f59e0b99",
+              color: "#d97706",
+              borderRadius: 10,
+              fontSize: 11,
+              width: COL_WIDTH,
+              padding: "10px 10px",
+              textAlign: "center",
+              cursor: "pointer",
+            },
+          });
+        }
       });
 
-      // Kanały (kolumna po prawej) — cel drag-connect element→kanał.
+      if (isEditorAddRow(editable)) {
+        const addY = ROW_START_Y + Math.max(maxRows, 1) * ROW_HEIGHT + 12;
+        stages.forEach((stage, colIdx) => {
+          nextNodes.push({
+            id: `add-${stage.id}`,
+            position: { x: COL_X(colIdx), y: addY },
+            data: { label: "+ dodaj treść" },
+            draggable: false,
+            selectable: false,
+            connectable: false,
+            type: "default",
+            style: {
+              background: "transparent",
+              border: "1px dashed var(--border)",
+              color: "var(--muted-foreground)",
+              borderRadius: 8,
+              fontSize: 11,
+              width: COL_WIDTH,
+              padding: "6px 8px",
+              textAlign: "center",
+              cursor: "pointer",
+            },
+          });
+        });
+      }
+
+      // Prawa szyna: kanały.
+      const channelColX = COL_X(stages.length) + 40;
       const usedChannelIds = new Set(
         d.elementChannels
-          .filter((ec) => elementsForSegment.some((e) => e.id === ec.funnelElementId))
+          .filter((ec) => elementIds.has(ec.funnelElementId))
           .map((ec) => ec.channelId)
       );
       d.channels.forEach((c, i) => {
         nextNodes.push({
           id: `ch-${c.id}`,
-          position: { x: CHANNEL_COL_X, y: ROW_START_Y + i * 56 },
+          position: { x: channelColX, y: ROW_START_Y + i * 56 },
           data: { label: `${c.icon ?? "📣"} ${c.name}` },
           draggable: false,
           type: "default",
@@ -209,13 +308,117 @@ export function FunnelBoard({
         });
       });
 
+      // Lewa szyna: kampanie + lead magnety segmentu.
+      const railCampaigns = d.campaigns.filter(
+        (c) => !c.segmentId || c.segmentId === segmentIdOf(stages)
+      );
+      const railMagnets = d.leadMagnets.filter(
+        (m) => !m.segmentId || m.segmentId === segmentIdOf(stages)
+      );
+      const usedCampaignIds = new Set(
+        d.elementCampaigns
+          .filter((ec) => elementIds.has(ec.funnelElementId))
+          .map((ec) => ec.campaignId)
+      );
+      const usedMagnetIds = new Set(
+        d.magnetStages.filter((ms) => stageIds.has(ms.stageId)).map((ms) => ms.leadMagnetId)
+      );
+
+      let railY = ROW_START_Y;
+      if (railCampaigns.length > 0) {
+        nextNodes.push(railHeader("rail-camp", "🟪 Kampanie", LEFT_RAIL_X, railY - 34));
+      }
+      railCampaigns.forEach((c) => {
+        nextNodes.push({
+          id: `camp-${c.id}`,
+          position: { x: LEFT_RAIL_X, y: railY },
+          data: { label: c.name },
+          draggable: false,
+          type: "default",
+          style: {
+            background: usedCampaignIds.has(c.id) ? "var(--card)" : "transparent",
+            border: "1px solid #a78bfa66",
+            color: "var(--foreground)",
+            borderRadius: 8,
+            fontSize: 11,
+            width: LEFT_RAIL_WIDTH,
+            padding: "6px 8px",
+            opacity: usedCampaignIds.has(c.id) ? 1 : 0.6,
+          },
+        });
+        railY += 52;
+      });
+      if (railMagnets.length > 0) {
+        railY += 30;
+        nextNodes.push(railHeader("rail-lm", "🧲 Lead magnety", LEFT_RAIL_X, railY - 34));
+      }
+      railMagnets.forEach((m) => {
+        nextNodes.push({
+          id: `lm-${m.id}`,
+          position: { x: LEFT_RAIL_X, y: railY },
+          data: { label: m.name },
+          draggable: false,
+          type: "default",
+          style: {
+            background: usedMagnetIds.has(m.id) ? "var(--card)" : "transparent",
+            border: "1px solid #fdba7466",
+            color: "var(--foreground)",
+            borderRadius: 8,
+            fontSize: 11,
+            width: LEFT_RAIL_WIDTH,
+            padding: "6px 8px",
+            opacity: usedMagnetIds.has(m.id) ? 1 : 0.6,
+          },
+        });
+        railY += 52;
+      });
+
+      // Krawędzie.
       for (const ec of d.elementChannels) {
-        if (!elementsForSegment.some((e) => e.id === ec.funnelElementId)) continue;
+        if (!elementIds.has(ec.funnelElementId)) continue;
         nextEdges.push({
           id: `ec-${ec.funnelElementId}-${ec.channelId}`,
           source: ec.funnelElementId,
           target: `ch-${ec.channelId}`,
+          label: "publikowany w",
+          labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
           style: { stroke: "var(--border)", strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed },
+        });
+      }
+      for (const ec of d.elementCampaigns) {
+        if (!elementIds.has(ec.funnelElementId)) continue;
+        nextEdges.push({
+          id: `ecmp-${ec.funnelElementId}-${ec.campaignId}`,
+          source: ec.funnelElementId,
+          target: `camp-${ec.campaignId}`,
+          label: "promowany przez",
+          labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
+          style: { stroke: "#a78bfa88", strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed },
+        });
+      }
+      for (const ms of d.magnetStages) {
+        if (!stageIds.has(ms.stageId)) continue;
+        nextEdges.push({
+          id: `ms-${ms.leadMagnetId}-${ms.stageId}`,
+          source: `lm-${ms.leadMagnetId}`,
+          target: `col-${ms.stageId}`,
+          label: "używany w etapie",
+          labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
+          style: { stroke: "#fdba7488", strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed },
+        });
+      }
+      for (const ns of d.elementNextStages) {
+        if (!elementIds.has(ns.funnelElementId) || !stageIds.has(ns.stageId)) continue;
+        nextEdges.push({
+          id: `next-${ns.funnelElementId}-${ns.stageId}`,
+          source: ns.funnelElementId,
+          target: `col-${ns.stageId}`,
+          label: "prowadzi do etapu",
+          labelStyle: { fontSize: 9, fill: "var(--muted-foreground)" },
+          style: { stroke: "#34d39988", strokeWidth: 1.5, strokeDasharray: "4 3" },
           markerEnd: { type: MarkerType.ArrowClosed },
         });
       }
@@ -227,14 +430,44 @@ export function FunnelBoard({
 
   useEffect(() => {
     if (!data || !segmentId) return;
-    const g = buildGraph(data, segmentId, visiblePhases, isEditor);
+    const g = buildGraph(data, stagesForSegment, isEditor);
     setNodes(g.nodes);
     setEdges(g.edges);
-  }, [data, segmentId, visiblePhases, buildGraph, setNodes, setEdges, isEditor]);
+  }, [data, segmentId, stagesForSegment, buildGraph, setNodes, setEdges, isEditor]);
 
-  const elementIds = useMemo(
-    () => new Set((data?.elements ?? []).filter((e) => e.segmentId === segmentId).map((e) => e.id)),
-    [data, segmentId]
+  const elementIds = useMemo(() => {
+    const stageIds = new Set(stagesForSegment.map((s) => s.id));
+    return new Set(
+      (data?.elements ?? []).filter((e) => stageIds.has(e.stageId)).map((e) => e.id)
+    );
+  }, [data, stagesForSegment]);
+
+  const createElement = useCallback(
+    async (stageId: string) => {
+      const stage = stagesForSegment.find((s) => s.id === stageId);
+      if (!stage) return;
+      await upsertFunnelElement({
+        projectId,
+        name: "Nowa treść",
+        stageId,
+        segmentId: stage.segmentId,
+        position: (data?.elements ?? []).filter((e) => e.stageId === stageId).length,
+      });
+      await refresh();
+    },
+    [projectId, stagesForSegment, data, refresh]
+  );
+
+  const onNodeClick = useCallback(
+    (_evt: React.MouseEvent, node: Node) => {
+      if (!isEditor) return;
+      if (node.id.startsWith("ghost-")) {
+        void createElement(node.id.replace(/^ghost-/, ""));
+      } else if (node.id.startsWith("add-")) {
+        void createElement(node.id.replace(/^add-/, ""));
+      }
+    },
+    [isEditor, createElement]
   );
 
   const onNodeDragStop: OnNodeDrag = useCallback(
@@ -242,24 +475,12 @@ export function FunnelBoard({
       if (!isEditor || !data || !elementIds.has(node.id)) return;
       const el = data.elements.find((e) => e.id === node.id);
       if (!el) return;
-      const currentStage = data.stages.find((s) => s.id === el.stageId);
-      const targetPhase = phaseAt(node.position.x + COL_WIDTH / 2);
 
-      if (!targetPhase || targetPhase === currentStage?.phase) {
-        // Powrót do siatki (brak realnej zmiany kolumny) — pełny rebuild z aktualnych danych.
-        const g = buildGraph(data, segmentId, visiblePhases, isEditor);
-        setNodes(g.nodes);
-        return;
-      }
+      const targetIdx = stageIndexAt(node.position.x + COL_WIDTH / 2, stagesForSegment.length);
+      const targetStage = targetIdx !== null ? stagesForSegment[targetIdx] : null;
 
-      const targetStage = data.stages.find(
-        (s) => s.segmentId === segmentId && s.phase === targetPhase
-      );
-      if (!targetStage) {
-        setWarning(
-          `Brak etapu „${PHASES.find((p) => p.key === targetPhase)?.label}" dla tego segmentu — utwórz go najpierw w zakładce Lejek.`
-        );
-        const g = buildGraph(data, segmentId, visiblePhases, isEditor);
+      if (!targetStage || targetStage.id === el.stageId) {
+        const g = buildGraph(data, stagesForSegment, isEditor);
         setNodes(g.nodes);
         return;
       }
@@ -280,47 +501,101 @@ export function FunnelBoard({
       });
       await refresh();
     },
-    [data, elementIds, segmentId, visiblePhases, buildGraph, setNodes, projectId, refresh, isEditor]
+    [data, elementIds, stagesForSegment, buildGraph, setNodes, projectId, refresh, isEditor]
+  );
+
+  const postRelation = useCallback(
+    async (
+      source: { type: string; id: string },
+      target: { type: string; id: string },
+      relationType: string
+    ) => {
+      try {
+        await fetch(`/api/strategy-hub/projects/${projectId}/relations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source, target, relationType }),
+          signal: AbortSignal.timeout(8000),
+        });
+      } finally {
+        await refresh();
+      }
+    },
+    [projectId, refresh]
   );
 
   const onConnect = useCallback(
     async (conn: Connection) => {
       if (!isEditor || !conn.source || !conn.target) return;
-      const isElementToChannel = elementIds.has(conn.source) && conn.target.startsWith("ch-");
-      if (!isElementToChannel) return;
-      setEdges((eds) => addEdge({ ...conn, markerEnd: { type: MarkerType.ArrowClosed } }, eds));
-      const channelId = conn.target.replace(/^ch-/, "");
-      try {
-        await fetch(
-          `/api/strategy-hub/projects/${projectId}/funnel-elements/${conn.source}/relations`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              channelIds: Array.from(
-                new Set([
-                  ...(data?.elementChannels
-                    .filter((ec) => ec.funnelElementId === conn.source)
-                    .map((ec) => ec.channelId) ?? []),
-                  channelId,
-                ])
-              ),
-            }),
-          }
+      const src = conn.source;
+      const tgt = conn.target;
+
+      // element → kanał = „publikowany w" (istniejący endpoint relacji elementu).
+      if (elementIds.has(src) && tgt.startsWith("ch-")) {
+        setEdges((eds) => addEdge({ ...conn, markerEnd: { type: MarkerType.ArrowClosed } }, eds));
+        const channelId = tgt.replace(/^ch-/, "");
+        try {
+          await fetch(
+            `/api/strategy-hub/projects/${projectId}/funnel-elements/${src}/relations`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                channelIds: Array.from(
+                  new Set([
+                    ...(data?.elementChannels
+                      .filter((ec) => ec.funnelElementId === src)
+                      .map((ec) => ec.channelId) ?? []),
+                    channelId,
+                  ])
+                ),
+              }),
+            }
+          );
+        } finally {
+          await refresh();
+        }
+        return;
+      }
+
+      // element → kampania = „promowany przez".
+      if (elementIds.has(src) && tgt.startsWith("camp-")) {
+        await postRelation(
+          { type: "element", id: src },
+          { type: "campaign", id: tgt.replace(/^camp-/, "") },
+          "promowany_przez"
         );
-      } finally {
-        await refresh();
+        return;
+      }
+
+      // element → nagłówek etapu = „prowadzi do etapu" (wyjście CTA do przodu).
+      if (elementIds.has(src) && tgt.startsWith("col-")) {
+        await postRelation(
+          { type: "element", id: src },
+          { type: "stage", id: tgt.replace(/^col-/, "") },
+          "prowadzi_do_etapu"
+        );
+        return;
+      }
+
+      // lead magnet → nagłówek etapu = „używany w etapie".
+      if (src.startsWith("lm-") && tgt.startsWith("col-")) {
+        await postRelation(
+          { type: "lead_magnet", id: src.replace(/^lm-/, "") },
+          { type: "stage", id: tgt.replace(/^col-/, "") },
+          "uzywany_w_etapie"
+        );
+        return;
       }
     },
-    [elementIds, projectId, data, setEdges, refresh, isEditor]
+    [isEditor, elementIds, projectId, data, setEdges, refresh, postRelation]
   );
 
   const autoLayout = useCallback(() => {
     if (!data || !segmentId) return;
-    layoutSeq.current += 1;
-    const g = buildGraph(data, segmentId, visiblePhases, isEditor);
+    const g = buildGraph(data, stagesForSegment, isEditor);
     setNodes(g.nodes);
-  }, [data, segmentId, visiblePhases, buildGraph, setNodes, isEditor]);
+  }, [data, segmentId, stagesForSegment, buildGraph, setNodes, isEditor]);
 
   useEffect(() => {
     if (!isEditor) return;
@@ -333,16 +608,6 @@ export function FunnelBoard({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [autoLayout, isEditor]);
-
-  const togglePhase = (p: Phase) => {
-    setVisiblePhases((prev) => {
-      const next = new Set(prev);
-      if (next.has(p) && next.size === 1) return prev; // zawsze ≥1 faza widoczna
-      if (next.has(p)) next.delete(p);
-      else next.add(p);
-      return next;
-    });
-  };
 
   if (!data) {
     return (
@@ -372,27 +637,15 @@ export function FunnelBoard({
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1.5">
-          {PHASES.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => togglePhase(p.key)}
-              className={cn(
-                "rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors",
-                visiblePhases.has(p.key) ? "text-white" : "border-border text-muted-foreground/50"
-              )}
-              style={visiblePhases.has(p.key) ? { background: p.color, borderColor: p.color } : undefined}
-              title={visiblePhases.has(p.key) ? `Ukryj ${p.key}` : `Pokaż ${p.key}`}
-            >
-              {p.key}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">
+            kolumny = etapy zakupu segmentu (edytuj w Podróży zakupowej)
+          </span>
           {isEditor && (
             <button
               type="button"
               onClick={autoLayout}
-              className="ml-1 flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
+              className="flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
               title="Auto-layout (⌘L)"
             >
               <LayoutGrid className="size-3" />
@@ -402,6 +655,14 @@ export function FunnelBoard({
         </div>
       </div>
 
+      {stagesForSegment.length === 0 && segmentId && (
+        <div className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-500">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          Ten segment nie ma jeszcze etapów zakupu — zdefiniuj podróż zakupową w
+          module Rynek → Podróż zakupowa.
+        </div>
+      )}
+
       {warning && (
         <div className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-500">
           <AlertTriangle className="size-3.5 shrink-0" />
@@ -409,13 +670,14 @@ export function FunnelBoard({
         </div>
       )}
 
-      <div className="h-[520px] w-full rounded-xl border border-border overflow-hidden bg-card/20">
+      <div className="h-[560px] w-full rounded-xl border border-border overflow-hidden bg-card/20">
         <ReactFlow
           nodes={nodes}
           edges={edges}
           onNodesChange={isEditor ? onNodesChange : undefined}
           onEdgesChange={isEditor ? onEdgesChange : undefined}
           onNodeDragStop={isEditor ? onNodeDragStop : undefined}
+          onNodeClick={isEditor ? onNodeClick : undefined}
           onConnect={isEditor ? onConnect : undefined}
           fitView
           proOptions={{ hideAttribution: true }}
@@ -429,4 +691,35 @@ export function FunnelBoard({
       </div>
     </div>
   );
+}
+
+function segmentIdOf(stages: StageRow[]): string | null {
+  return stages[0]?.segmentId ?? null;
+}
+
+function isEditorAddRow(editable: boolean): boolean {
+  return editable;
+}
+
+function railHeader(id: string, label: string, x: number, y: number): Node {
+  return {
+    id,
+    position: { x, y },
+    data: { label },
+    draggable: false,
+    selectable: false,
+    connectable: false,
+    type: "default",
+    style: {
+      background: "transparent",
+      border: "none",
+      color: "var(--muted-foreground)",
+      fontSize: 10,
+      fontWeight: 700,
+      width: LEFT_RAIL_WIDTH,
+      padding: 0,
+      textAlign: "left",
+      boxShadow: "none",
+    },
+  };
 }

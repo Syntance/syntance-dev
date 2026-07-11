@@ -20,6 +20,7 @@ import {
   funnelElementEvents,
   userFlows,
   leadMagnets,
+  salesActivities,
   copyGuidelines,
 } from "@/db/schema";
 import { eq, isNull, and, count } from "drizzle-orm";
@@ -70,6 +71,8 @@ function buildHint(key: string, ctx: CriterionContext, score: number): string {
       return `${ctx.chN} kanałów`;
     case "przekaz":
       return `${ctx.pitchN} pitchów · ${ctx.scriptN} skryptów`;
+    case "sprzedaz":
+      return `${ctx.salesActivityCount ?? 0} akcji · ${ctx.pitchN} pitchów`;
     case "strona":
       return `${ctx.pageN} podstron`;
     case "kpi":
@@ -114,6 +117,7 @@ export async function computeProjectHealth(
     [stageCount],
     [flowCount],
     [leadMagnetCount],
+    [salesActivityCount],
     elementRows,
     elEventRows,
   ] = await Promise.all([
@@ -223,6 +227,14 @@ export async function computeProjectHealth(
         and(eq(leadMagnets.projectId, projectId), isNull(leadMagnets.deletedAt))
       ),
     db
+      .select({ count: count() })
+      .from(salesActivities)
+      .innerJoin(purchaseStages, eq(salesActivities.stageId, purchaseStages.id))
+      .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
+      .where(
+        and(eq(segments.projectId, projectId), isNull(salesActivities.deletedAt))
+      ),
+    db
       .select({ id: funnelElements.id, cta: funnelElements.cta })
       .from(funnelElements)
       .innerJoin(purchaseStages, eq(funnelElements.stageId, purchaseStages.id))
@@ -249,6 +261,7 @@ export async function computeProjectHealth(
     elementCount: elementRows.length,
     flowCount: flowCount?.count ?? 0,
     leadMagnetCount: leadMagnetCount?.count ?? 0,
+    salesActivityCount: salesActivityCount?.count ?? 0,
     brandIdentity: identity ?? null,
     brandVisual: visual ?? null,
     uvp: uvpRow ?? null,

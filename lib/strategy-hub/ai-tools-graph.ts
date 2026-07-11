@@ -37,6 +37,7 @@ const strategyAreas = [
   "lejek",
   "kanaly",
   "przekaz",
+  "sprzedaz",
   "strona",
   "kpi",
 ] as const satisfies readonly StrategyArea[];

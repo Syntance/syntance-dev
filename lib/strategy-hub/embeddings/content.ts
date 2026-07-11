@@ -29,6 +29,7 @@ const TEXT_FIELDS: Partial<Record<EntityTypeKey, string[]>> = {
   sales_pitch: ["title", "pitchMd", "context"],
   sales_script: ["name", "scriptMd", "context"],
   lead_magnet: ["name", "descriptionMd", "format"],
+  sales_activity: ["name", "type", "notesMd", "toolsMd"],
   section: ["name", "purposeMd", "copyMd"],
   geo_query: ["query", "intent", "stage"],
   site: ["name", "domain", "type"],

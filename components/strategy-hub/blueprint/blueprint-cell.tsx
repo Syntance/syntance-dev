@@ -8,6 +8,7 @@ import type { BlueprintCellItem, BlueprintRow } from "@/lib/strategy-hub/bluepri
 const ROW_LABELS: Record<BlueprintRow, string> = {
   tresci: "TREŚCI",
   kanaly: "KANAŁY",
+  sprzedaz: "SPRZEDAŻ",
   strona: "STRONA",
   kpi: "KPI",
 };
@@ -15,6 +16,7 @@ const ROW_LABELS: Record<BlueprintRow, string> = {
 const ROW_COLORS: Record<BlueprintRow, string> = {
   tresci: "#34D399",
   kanaly: "#C9955C",
+  sprzedaz: "#2DD4BF",
   strona: "#94A3B8",
   kpi: "#F472B6",
 };

@@ -23,6 +23,7 @@ import {
   pageSections,
   sites,
   geoQueries,
+  salesActivities,
 } from "@/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import {
@@ -66,6 +67,7 @@ const AREA_VISIBILITY_MODULE: Record<StrategyArea, string> = {
   lejek: "funnel",
   kanaly: "funnel",
   przekaz: "sales",
+  sprzedaz: "sales",
   strona: "website",
   kpi: "kpi",
 };
@@ -165,6 +167,7 @@ export async function getConstellationData(
     sectionRows,
     siteRows,
     geoQueryRows,
+    salesActivityRows,
     semanticRelations,
   ] = await Promise.all([
     db
@@ -306,6 +309,18 @@ export async function getConstellationData(
       })
       .from(geoQueries)
       .where(and(eq(geoQueries.projectId, projectId), isNull(geoQueries.deletedAt))),
+    db
+      .select({
+        id: salesActivities.id,
+        name: salesActivities.name,
+        stageId: salesActivities.stageId,
+      })
+      .from(salesActivities)
+      .innerJoin(purchaseStages, eq(salesActivities.stageId, purchaseStages.id))
+      .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
+      .where(
+        and(eq(segments.projectId, projectId), isNull(salesActivities.deletedAt))
+      ),
     listRelations(projectId),
   ]);
 
@@ -327,6 +342,7 @@ export async function getConstellationData(
     elementCount: elementRows.length,
     flowCount: flowRows.length,
     leadMagnetCount: leadMagnetRows.length,
+    salesActivityCount: salesActivityRows.length,
     brandIdentity: null,
     brandVisual: null,
     uvp: null,
@@ -425,6 +441,7 @@ export async function getConstellationData(
   for (const gq of geoQueryRows) {
     pushRaw("geo_query", gq.id, gq.query.slice(0, 60));
   }
+  for (const sa of salesActivityRows) pushRaw("sales_activity", sa.id, sa.name);
 
   const entityNodeIds = new Set<string>();
 

@@ -11,13 +11,14 @@ import { ENTITY_TYPE_META } from "@/lib/strategy-hub/entities/entity-types";
  */
 export type NodeStatus = "ready" | "in_progress" | "empty" | "review";
 
-/** Klucze 7 węzłów strategicznych na mapie makro. */
+/** Klucze węzłów strategicznych na mapie makro. */
 export type StrategyNodeKey =
   | "fundament"
   | "segmenty"
   | "lejek"
   | "kanaly"
   | "przekaz"
+  | "sprzedaz"
   | "strona"
   | "kpi";
 
@@ -195,6 +196,7 @@ const STRATEGY_NODE_KEY_SET = new Set<string>([
   "lejek",
   "kanaly",
   "przekaz",
+  "sprzedaz",
   "strona",
   "kpi",
 ]);

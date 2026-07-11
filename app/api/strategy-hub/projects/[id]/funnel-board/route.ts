@@ -6,13 +6,17 @@ import {
   purchaseStages,
   funnelElements,
   channels,
+  campaigns,
+  leadMagnets,
 } from "@/db/schema";
 import { eq, and, isNull, inArray } from "drizzle-orm";
 import { listRelations } from "@/lib/strategy-hub/relations/store";
 
 /**
- * Dane dla Funnel Flow Builder (spec: „Płótno z 4 kolumnami TOFU/MOFU/BOFU/
- * Retencja per segment, etapy i elementy jako nody, drag = zmiana stage_id").
+ * Dane dla Funnel Board 2.0 (logika Negacza): kolumny = etapy zakupu wybranego
+ * segmentu (purchaseStages wg orderIdx), elementy jako nody, drag = zmiana
+ * stage_id wprost. Szyny: kanały (publikowany_w), kampanie (promowany_przez),
+ * lead magnety (uzywany_w_etapie), wyjścia elementów (prowadzi_do_etapu).
  */
 export async function GET(
   _req: NextRequest,
@@ -37,6 +41,8 @@ export async function GET(
           segmentId: purchaseStages.segmentId,
           name: purchaseStages.name,
           phase: purchaseStages.phase,
+          orderIdx: purchaseStages.orderIdx,
+          ownerSide: purchaseStages.ownerSide,
         })
         .from(purchaseStages)
         .where(
@@ -78,17 +84,65 @@ export async function GET(
       funnelElementId: r.sourceId,
       channelId: r.targetId,
     }));
+  const elementCampaignRows = relations
+    .filter(
+      (r) =>
+        r.sourceType === "element" &&
+        r.targetType === "campaign" &&
+        r.relationType === "promowany_przez"
+    )
+    .map((r) => ({ funnelElementId: r.sourceId, campaignId: r.targetId }));
+  const magnetStageRows = relations
+    .filter(
+      (r) =>
+        r.sourceType === "lead_magnet" &&
+        r.targetType === "stage" &&
+        r.relationType === "uzywany_w_etapie"
+    )
+    .map((r) => ({ leadMagnetId: r.sourceId, stageId: r.targetId }));
+  const elementNextStageRows = relations
+    .filter(
+      (r) =>
+        r.sourceType === "element" &&
+        r.targetType === "stage" &&
+        r.relationType === "prowadzi_do_etapu"
+    )
+    .map((r) => ({ funnelElementId: r.sourceId, stageId: r.targetId }));
 
-  const channelRows = await db
-    .select({ id: channels.id, name: channels.name, icon: channels.icon })
-    .from(channels)
-    .where(and(eq(channels.projectId, projectId), isNull(channels.deletedAt)));
+  const [channelRows, campaignRows, leadMagnetRows] = await Promise.all([
+    db
+      .select({ id: channels.id, name: channels.name, icon: channels.icon })
+      .from(channels)
+      .where(and(eq(channels.projectId, projectId), isNull(channels.deletedAt))),
+    db
+      .select({
+        id: campaigns.id,
+        name: campaigns.name,
+        segmentId: campaigns.segmentId,
+        stageId: campaigns.stageId,
+      })
+      .from(campaigns)
+      .where(and(eq(campaigns.projectId, projectId), isNull(campaigns.deletedAt))),
+    db
+      .select({
+        id: leadMagnets.id,
+        name: leadMagnets.name,
+        segmentId: leadMagnets.segmentId,
+      })
+      .from(leadMagnets)
+      .where(and(eq(leadMagnets.projectId, projectId), isNull(leadMagnets.deletedAt))),
+  ]);
 
   return NextResponse.json({
     segments: segmentRows,
     stages: stageRows,
     elements: elementRows,
     elementChannels: elementChannelRows,
+    elementCampaigns: elementCampaignRows,
+    magnetStages: magnetStageRows,
+    elementNextStages: elementNextStageRows,
     channels: channelRows,
+    campaigns: campaignRows,
+    leadMagnets: leadMagnetRows,
   });
 }

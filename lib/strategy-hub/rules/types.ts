@@ -61,6 +61,29 @@ const AlertsSchema = z.object({
 
 const PaletteSchema = z.record(z.string(), z.string());
 
+/**
+ * Gap engine podróży zakupowej (logika Negacza): które odpowiedzi na etap
+ * są wymagane, żeby etap nie liczył się jako luka strategii.
+ */
+const JourneyCoverageSchema = z
+  .object({
+    requireContent: z.boolean().default(true),
+    requireChannel: z.boolean().default(true),
+    requireSales: z.boolean().default(true),
+    requireExit: z.boolean().default(true),
+    requireKpi: z.boolean().default(true),
+    /** Etapy retencyjne nie wymagają kanału akwizycji. */
+    retentionSkipsChannel: z.boolean().default(true),
+  })
+  .default({
+    requireContent: true,
+    requireChannel: true,
+    requireSales: true,
+    requireExit: true,
+    requireKpi: true,
+    retentionSkipsChannel: true,
+  });
+
 export const RulesConfigSchema = z.object({
   // Wersja informacyjna (2 = po scaleniu taksonomii). Celowo `number`, nie
   // `literal`: stare zapisane configi (v1) nie mogą wywalać `resolveRules`.
@@ -71,9 +94,11 @@ export const RulesConfigSchema = z.object({
   correlations: z.array(CorrelationSchema),
   alerts: AlertsSchema,
   palette: PaletteSchema,
+  journeyCoverage: JourneyCoverageSchema,
 });
 
 export type HealthCriterion = z.infer<typeof HealthCriterionSchema>;
+export type JourneyCoverageConfig = z.infer<typeof JourneyCoverageSchema>;
 export type ModuleRule = z.infer<typeof ModuleRuleSchema>;
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type Correlation = z.infer<typeof CorrelationSchema>;

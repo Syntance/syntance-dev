@@ -11,6 +11,10 @@ import {
   pages,
   pageSections,
   userFlows,
+  salesActivities,
+  salesPitches,
+  salesScripts,
+  leadMagnets,
 } from "@/db/schema";
 import {
   ENTITY_TYPE_META,
@@ -175,6 +179,10 @@ export async function getBlueprint(
     flowRows,
     pageRows,
     sectionRows,
+    salesActivityRows,
+    pitchRows,
+    scriptRows,
+    magnetRows,
   ] = await Promise.all([
     db
       .select({
@@ -184,6 +192,7 @@ export async function getBlueprint(
         orderIdx: purchaseStages.orderIdx,
         trigger: purchaseStages.trigger,
         questions: purchaseStages.questions,
+        ownerSide: purchaseStages.ownerSide,
       })
       .from(purchaseStages)
       .where(
@@ -238,6 +247,41 @@ export async function getBlueprint(
       .from(pageSections)
       .innerJoin(pages, eq(pageSections.pageId, pages.id))
       .where(and(eq(pages.projectId, projectId), isNull(pageSections.deletedAt))),
+    db
+      .select({
+        id: salesActivities.id,
+        name: salesActivities.name,
+        stageId: salesActivities.stageId,
+        reviewFlag: salesActivities.reviewFlag,
+      })
+      .from(salesActivities)
+      .innerJoin(purchaseStages, eq(salesActivities.stageId, purchaseStages.id))
+      .where(
+        and(
+          eq(purchaseStages.segmentId, selectedRow.id),
+          isNull(salesActivities.deletedAt),
+          isNull(purchaseStages.deletedAt)
+        )
+      )
+      .orderBy(asc(salesActivities.orderIdx)),
+    db
+      .select({ id: salesPitches.id, title: salesPitches.title })
+      .from(salesPitches)
+      .where(
+        and(eq(salesPitches.projectId, projectId), isNull(salesPitches.deletedAt))
+      ),
+    db
+      .select({ id: salesScripts.id, name: salesScripts.name })
+      .from(salesScripts)
+      .where(
+        and(eq(salesScripts.projectId, projectId), isNull(salesScripts.deletedAt))
+      ),
+    db
+      .select({ id: leadMagnets.id, name: leadMagnets.name })
+      .from(leadMagnets)
+      .where(
+        and(eq(leadMagnets.projectId, projectId), isNull(leadMagnets.deletedAt))
+      ),
   ]);
 
   const labels = labelMap(
@@ -255,6 +299,18 @@ export async function getBlueprint(
     list.push(el);
     elementsByStage.set(el.stageId, list);
   }
+
+  const activitiesByStage = new Map<string, typeof salesActivityRows>();
+  for (const a of salesActivityRows) {
+    const list = activitiesByStage.get(a.stageId) ?? [];
+    list.push(a);
+    activitiesByStage.set(a.stageId, list);
+  }
+
+  const attachmentLabels = new Map<string, string>();
+  for (const p of pitchRows) attachmentLabels.set(refKey("sales_pitch", p.id), p.title);
+  for (const s of scriptRows) attachmentLabels.set(refKey("sales_script", s.id), s.name);
+  for (const m of magnetRows) attachmentLabels.set(refKey("lead_magnet", m.id), m.name);
 
   const segmentKpiIds = new Set(
     kpiRows.filter((k) => k.segmentId === selectedRow.id).map((k) => k.id)
@@ -389,18 +445,53 @@ export async function getBlueprint(
     }
     kpiItems = dedupeItems(kpiItems);
 
+    // SPRZEDAŻ: akcje handlowe etapu + materiały przypięte „uzywany_w_etapie".
+    let sprzedazItems: BlueprintCellItem[] = (activitiesByStage.get(stage.id) ?? []).map(
+      (a) => ({
+        ref: { type: "sales_activity" as const, id: a.id },
+        label: a.name,
+        color: ENTITY_TYPE_META.sales_activity.color,
+        status: a.reviewFlag ? ("review" as const) : undefined,
+      })
+    );
+    for (const r of relations) {
+      if (r.relationType !== "uzywany_w_etapie") continue;
+      if (r.targetType !== "stage" || r.targetId !== stage.id) continue;
+      const st = r.sourceType;
+      if (st !== "sales_pitch" && st !== "sales_script" && st !== "lead_magnet") {
+        continue;
+      }
+      sprzedazItems.push({
+        ref: { type: st, id: r.sourceId },
+        label: attachmentLabels.get(refKey(st, r.sourceId)) ?? ENTITY_TYPE_META[st].label,
+        color: ENTITY_TYPE_META[st].color,
+        viaLabel: relationLabel(r.relationType),
+      });
+    }
+    sprzedazItems = dedupeItems(sprzedazItems);
+
     const cells: Record<BlueprintRow, BlueprintCellItem[]> = {
       tresci,
       kanaly,
+      sprzedaz: sprzedazItems,
       strona,
       kpi: kpiItems,
     };
 
     const gaps: BlueprintRow[] = [];
     const retention = isRetentionPhase(stage.phase);
-    for (const row of ["tresci", "kanaly", "strona", "kpi"] as BlueprintRow[]) {
+    const marketingOwned = stage.ownerSide === "marketing";
+    for (const row of [
+      "tresci",
+      "kanaly",
+      "sprzedaz",
+      "strona",
+      "kpi",
+    ] as BlueprintRow[]) {
       if (cells[row].length > 0) continue;
       if (retention && (row === "kanaly" || row === "strona")) continue;
+      // Etap prowadzony przez marketing nie wymaga akcji sprzedażowej.
+      if (row === "sprzedaz" && marketingOwned) continue;
       gaps.push(row);
       gapCount += 1;
     }

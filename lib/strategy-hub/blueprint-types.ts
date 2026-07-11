@@ -1,6 +1,5 @@
 import {
   ENTITY_TYPE_META,
-  isEntityTypeKey,
   type EntityTypeKey,
 } from "@/lib/strategy-hub/entities/entity-types";
 import type { NodeStatus } from "@/lib/strategy-hub/strategy-map-types";
@@ -13,7 +12,7 @@ export interface BlueprintCellItem {
   viaLabel?: string;
 }
 
-export type BlueprintRow = "tresci" | "kanaly" | "strona" | "kpi";
+export type BlueprintRow = "tresci" | "kanaly" | "sprzedaz" | "strona" | "kpi";
 
 export interface BlueprintStageColumn {
   stage: {
@@ -48,6 +47,7 @@ export interface BlueprintData {
 const ROW_AREA: Record<BlueprintRow, string> = {
   tresci: "lejek",
   kanaly: "kanaly",
+  sprzedaz: "sprzedaz",
   strona: "strona",
   kpi: "kpi",
 };

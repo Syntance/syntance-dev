@@ -16,10 +16,12 @@ import { listRelations, createRelation } from "@/lib/strategy-hub/relations/stor
  * Silnik automatycznego wnioskowania relacji lejka.
  *
  * Idea: użytkownik nie musi ręcznie spinać każdej krawędzi grafu wpływu.
- * Na podstawie wspólnego segmentu i etapu (fazy) proponujemy powiązania:
- *   element → kampania   (segment + etap się zgadzają)        „promowany przez"
- *   element → kanał      (kanał ma aktywność w segmencie+etapie) „publikowany w"
- *   element → KPI        (KPI przypisany do segmentu elementu)   „mierzony przez"
+ * Dopasowanie PO KONKRETNYM ETAPIE ZAKUPU (stageId — logika Negacza);
+ * faza TOFU/MOFU/BOFU zostaje tylko jako fallback dla rekordów legacy
+ * bez przypiętego stage_id:
+ *   element → kampania   (ten sam etap / legacy: segment+faza)   „promowany przez"
+ *   element → kanał      (aktywność kanału w etapie / legacy)     „publikowany w"
+ *   element → KPI        (KPI przypisany do segmentu elementu)    „mierzony przez"
  *
  * Zwracamy WYŁĄCZNIE nowe (jeszcze niepołączone) sugestie + uzasadnienie,
  * żeby pokazać podgląd przed zapisem. Zapis jest addytywny (nie kasuje istniejących).
@@ -57,6 +59,7 @@ function normalizePhase(raw: string | null | undefined): string | null {
 interface ElementCtx {
   id: string;
   name: string;
+  stageId: string;
   segmentId: string | null;
   segmentLabel: string | null;
   phase: string | null;
@@ -67,6 +70,7 @@ async function loadElements(projectId: string): Promise<ElementCtx[]> {
     .select({
       id: funnelElements.id,
       name: funnelElements.name,
+      stageId: funnelElements.stageId,
       elSegmentId: funnelElements.segmentId,
       stageSegmentId: purchaseStages.segmentId,
       phase: purchaseStages.phase,
@@ -80,6 +84,7 @@ async function loadElements(projectId: string): Promise<ElementCtx[]> {
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
+    stageId: r.stageId,
     segmentId: r.elSegmentId ?? r.stageSegmentId ?? null,
     segmentLabel: r.segmentName ?? null,
     phase: normalizePhase(r.phase),
@@ -112,6 +117,7 @@ export async function suggestFunnelRelations(
           name: campaigns.name,
           segmentId: campaigns.segmentId,
           stage: campaigns.stage,
+          stageId: campaigns.stageId,
         })
         .from(campaigns)
         .where(and(eq(campaigns.projectId, projectId), isNull(campaigns.deletedAt))),
@@ -121,6 +127,7 @@ export async function suggestFunnelRelations(
           channelName: channels.name,
           segmentId: channelActivityPlan.segmentId,
           stage: channelActivityPlan.stage,
+          stageId: channelActivityPlan.stageId,
         })
         .from(channelActivityPlan)
         .innerJoin(channels, eq(channelActivityPlan.channelId, channels.id))
@@ -157,9 +164,13 @@ export async function suggestFunnelRelations(
     const targets: SuggestedTarget[] = [];
 
     for (const c of normalizedCampaigns) {
+      // Priorytet: konkretny etap zakupu; fallback legacy: segment + faza.
+      const stageMatch = c.stageId ? c.stageId === el.stageId : null;
       const segMatch = !c.segmentId || c.segmentId === el.segmentId;
       const phaseMatch = !c.phase || !el.phase || c.phase === el.phase;
-      if (segMatch && phaseMatch && (c.segmentId || c.phase)) {
+      const legacyMatch =
+        stageMatch === null && segMatch && phaseMatch && (!!c.segmentId || !!c.phase);
+      if (stageMatch === true || legacyMatch) {
         if (
           !hasRelation.has(
             relationSetKey(el.id, "campaign", c.id, "promowany_przez")
@@ -169,9 +180,12 @@ export async function suggestFunnelRelations(
             kind: "campaign",
             targetId: c.id,
             targetLabel: c.name,
-            reason: `Wspólny ${c.segmentId ? "segment" : "etap"}${
-              c.phase ? ` (${c.phase})` : ""
-            }`,
+            reason:
+              stageMatch === true
+                ? "Ten sam etap zakupu"
+                : `Wspólny ${c.segmentId ? "segment" : "etap"}${
+                    c.phase ? ` (${c.phase})` : ""
+                  }`,
           });
         }
       }
@@ -179,9 +193,11 @@ export async function suggestFunnelRelations(
 
     const seenChannel = new Set<string>();
     for (const a of normalizedActivities) {
+      const stageMatch = a.stageId ? a.stageId === el.stageId : null;
       const segMatch = !a.segmentId || a.segmentId === el.segmentId;
       const phaseMatch = !a.phase || !el.phase || a.phase === el.phase;
-      if (segMatch && phaseMatch) {
+      const legacyMatch = stageMatch === null && segMatch && phaseMatch;
+      if (stageMatch === true || legacyMatch) {
         if (
           !hasRelation.has(
             relationSetKey(el.id, "channel", a.channelId, "publikowany_w")
@@ -193,9 +209,12 @@ export async function suggestFunnelRelations(
             kind: "channel",
             targetId: a.channelId,
             targetLabel: a.channelName,
-            reason: `Aktywność kanału w ${a.phase ?? "etapie"}${
-              a.segmentId ? " segmentu" : ""
-            }`,
+            reason:
+              stageMatch === true
+                ? "Aktywność kanału w tym etapie zakupu"
+                : `Aktywność kanału w ${a.phase ?? "etapie"}${
+                    a.segmentId ? " segmentu" : ""
+                  }`,
           });
         }
       }

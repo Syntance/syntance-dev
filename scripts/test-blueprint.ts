@@ -10,7 +10,6 @@ import {
   segments,
   purchaseStages,
   funnelElements,
-  channels,
   entityRelations,
 } from "../db/schema";
 import { eq, sql } from "drizzle-orm";

@@ -18,7 +18,7 @@ import { BlueprintCell, ROW_COLORS, ROW_LABELS } from "./blueprint-cell";
 const DISPLAY_FONT =
   "var(--font-konst, Georgia, 'Times New Roman', serif)";
 
-const ROWS: BlueprintRow[] = ["tresci", "kanaly", "strona", "kpi"];
+const ROWS: BlueprintRow[] = ["tresci", "kanaly", "sprzedaz", "strona", "kpi"];
 
 interface BlueprintViewProps {
   projectId: string;

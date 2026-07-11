@@ -5,6 +5,7 @@ import {
   objections,
   funnelElements,
   purchaseStages,
+  salesActivities,
   pages,
   kpis,
   strategicDecisions,
@@ -68,6 +69,23 @@ async function markReviewByProjectId(
         );
       return;
     }
+    case "salesActivities": {
+      // sales_activities scoped przez stage -> segment (jak funnel_elements).
+      const stageRows = await db
+        .select({ id: purchaseStages.id })
+        .from(purchaseStages)
+        .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
+        .where(and(eq(segments.projectId, projectId), isNull(purchaseStages.deletedAt)));
+      const stageIds = stageRows.map((s) => s.id);
+      if (stageIds.length === 0) return;
+      await db
+        .update(salesActivities)
+        .set({ reviewFlag: true })
+        .where(
+          and(inArray(salesActivities.stageId, stageIds), isNull(salesActivities.deletedAt))
+        );
+      return;
+    }
     default:
       return;
   }
@@ -99,6 +117,7 @@ const CLEARABLE_TABLES = {
   segments,
   objections,
   funnelElements,
+  salesActivities,
   pages,
   kpis,
   strategicDecisions,

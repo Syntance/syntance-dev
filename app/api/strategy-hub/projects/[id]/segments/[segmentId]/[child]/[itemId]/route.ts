@@ -5,6 +5,15 @@ import {
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
 import { getSegmentChild } from "@/lib/strategy-hub/entities/registry";
+import {
+  applyReviewPropagation,
+  clearReviewFlag,
+} from "@/lib/strategy-hub/rules/apply-review";
+
+/** Klucz child-route → klucz tabeli w CLEARABLE_TABLES (czyszczenie flagi po edycji). */
+const CLEARABLE_CHILD: Record<string, string> = {
+  "sales-activities": "salesActivities",
+};
 
 export async function PATCH(
   req: NextRequest,
@@ -25,6 +34,13 @@ export async function PATCH(
 
   const item = await entity.update(segmentId, itemId, parsed.data);
   if (!item) return notFound(entity.label);
+
+  // Propagacja „do przeglądu" na downstream + zdjęcie flagi z edytowanej encji
+  // (wzorzec z project-level [entity]/[itemId]; best-effort — nie blokuje zapisu).
+  await applyReviewPropagation(id, child);
+  const clearKey = CLEARABLE_CHILD[child];
+  if (clearKey) await clearReviewFlag(clearKey, itemId);
+
   return NextResponse.json({ item });
 }
 

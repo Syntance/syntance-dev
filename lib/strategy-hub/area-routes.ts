@@ -2,7 +2,7 @@
 const AREA_MODULE_KEYS = {
   foundation: ["discovery", "brand", "fundament"] as const,
   market: ["segmenty"] as const,
-  execution: ["lejek", "kanaly", "przekaz", "strona"] as const,
+  execution: ["lejek", "kanaly", "przekaz", "sprzedaz", "strona"] as const,
   measurement: ["kpi"] as const,
   info: [] as const,
   settings: [] as const,
@@ -19,6 +19,7 @@ const MODULE_ROUTE_SEGMENTS: Record<string, string> = {
   lejek: "execution/funnel",
   kanaly: "execution/channels",
   przekaz: "execution/copy",
+  sprzedaz: "execution/sales",
   strona: "execution/sites",
   kpi: "measurement/kpi",
 };
@@ -70,7 +71,8 @@ const MARKET_TABS: AreaTabDef[] = [
 const EXECUTION_TABS: AreaTabDef[] = [
   { slug: "funnel", label: "Lejek" },
   { slug: "channels", label: "Kanały" },
-  { slug: "copy", label: "Copy i sprzedaż" },
+  { slug: "copy", label: "Copy i przekaz" },
+  { slug: "sales", label: "Proces sprzedaży" },
   { slug: "sites", label: "Strony WWW" },
   { slug: "campaigns", label: "Kampanie" },
   { slug: "geo", label: "GEO / AEO" },

@@ -353,9 +353,38 @@ export const purchaseStages = pgTable(
     objections: text("objections"),
     emotionalState: text("emotional_state"),
     questions: text("questions"),
+    /** Co robi klient na tym etapie (scalone z buyer_journey_stages). */
+    clientDoesMd: text("client_does_md"),
+    /** Nasza akcja przesuwająca klienta dalej (scalone z buyer_journey_stages). */
+    ourActionMd: text("our_action_md"),
+    timeHint: varchar("time_hint", { length: 100 }),
+    /** Po czym poznajemy, że klient przeszedł do następnego etapu. */
+    exitCriterion: text("exit_criterion"),
+    /** Kto prowadzi etap: marketing | shared | sales — pierwszy etap "sales" wyznacza granicę MQL/SQL. */
+    ownerSide: varchar("owner_side", { length: 10 }).notNull().default("marketing"),
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [index("purchase_stages_segment_idx").on(t.segmentId)]
+);
+
+/** Akcje procesu sprzedaży — lustro etapu zakupu (co robi handlowiec, gdy klient jest na etapie X). */
+export const salesActivities = pgTable(
+  "sales_activities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    stageId: uuid("stage_id")
+      .notNull()
+      .references(() => purchaseStages.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    type: varchar("type", { length: 50 }),
+    notesMd: text("notes_md"),
+    toolsMd: text("tools_md"),
+    orderIdx: integer("order_idx").default(0),
+    status: varchar("status", { length: 30 }).default("planned"),
+    reviewFlag: boolean("review_flag").notNull().default(false),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("sales_activities_stage_idx").on(t.stageId)]
 );
 
 export const channels = pgTable(
@@ -943,6 +972,10 @@ export const channelActivityPlan = pgTable(
       onDelete: "set null",
     }),
     stage: varchar("stage", { length: 20 }),
+    /** Konkretny etap zakupu segmentu (zastępuje fazę `stage`; faza zostaje dla agregatów). */
+    stageId: uuid("stage_id").references(() => purchaseStages.id, {
+      onDelete: "set null",
+    }),
     whatToPublishMd: text("what_to_publish_md"),
     cadence: varchar("cadence", { length: 100 }),
     weeklyCount: integer("weekly_count"),
@@ -1395,8 +1428,16 @@ export const purchaseStagesRelations = relations(
       references: [segments.id],
     }),
     funnelElements: many(funnelElements),
+    salesActivities: many(salesActivities),
   })
 );
+
+export const salesActivitiesRelations = relations(salesActivities, ({ one }) => ({
+  stage: one(purchaseStages, {
+    fields: [salesActivities.stageId],
+    references: [purchaseStages.id],
+  }),
+}));
 
 export const funnelElementsRelations = relations(funnelElements, ({ one }) => ({
   stage: one(purchaseStages, {
@@ -1567,6 +1608,10 @@ export const channelActivityPlanRelations = relations(
     segment: one(segments, {
       fields: [channelActivityPlan.segmentId],
       references: [segments.id],
+    }),
+    stage: one(purchaseStages, {
+      fields: [channelActivityPlan.stageId],
+      references: [purchaseStages.id],
     }),
   })
 );
@@ -1803,6 +1848,10 @@ export const campaigns = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     goal: text("goal"),
     stage: varchar("stage", { length: 20 }),
+    /** Konkretny etap zakupu segmentu (zastępuje fazę `stage`; faza zostaje dla agregatów). */
+    stageId: uuid("stage_id").references(() => purchaseStages.id, {
+      onDelete: "set null",
+    }),
     channels: jsonb("channels"),
     budgetPlan: integer("budget_plan"),
     budgetSpent: integer("budget_spent"),
@@ -1847,6 +1896,10 @@ export const geoQueries = pgTable(
     query: text("query").notNull(),
     intent: varchar("intent", { length: 100 }),
     stage: varchar("stage", { length: 20 }),
+    /** Konkretny etap zakupu segmentu (zastępuje fazę `stage`; faza zostaje dla agregatów). */
+    stageId: uuid("stage_id").references(() => purchaseStages.id, {
+      onDelete: "set null",
+    }),
     citationStatus: jsonb("citation_status"),
     status: varchar("status", { length: 50 }).default("monitoring"),
     deletedAt: timestamp("deleted_at"),

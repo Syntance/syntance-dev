@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import {
   projectQuestions,
@@ -14,6 +14,8 @@ import {
   marketSegmentationCriteria,
   segments,
   buyerJourneyStages,
+  purchaseStages,
+  salesActivities,
   segmentQuickWins,
   segmentRisks,
   channels,
@@ -119,6 +121,17 @@ function compact<T extends Row>(obj: T): Partial<T> {
 /** Opcjonalne, nullowalne pole markdown/tekst. */
 const md = () => z.string().nullable().optional();
 
+/** Id aktywnych etapów zakupu segmentu (scoping akcji sprzedażowych). */
+async function segmentStageIds(segmentId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: purchaseStages.id })
+    .from(purchaseStages)
+    .where(
+      and(eq(purchaseStages.segmentId, segmentId), isNull(purchaseStages.deletedAt))
+    );
+  return rows.map((r) => r.id);
+}
+
 // ─── Discovery: schematy ─────────────────────────────────────────────────────
 
 const questionCreate = z.object({
@@ -212,6 +225,33 @@ const buyerStageCreate = z.object({
   orderIdx: z.number().int().optional(),
 });
 const buyerStagePatch = buyerStageCreate.partial();
+
+const purchaseStageCreate = z.object({
+  name: z.string().min(1).max(255),
+  phase: z.string().max(100).nullable().optional(),
+  orderIdx: z.number().int().optional(),
+  trigger: md(),
+  objections: md(),
+  emotionalState: md(),
+  questions: md(),
+  clientDoesMd: md(),
+  ourActionMd: md(),
+  timeHint: z.string().max(100).nullable().optional(),
+  exitCriterion: md(),
+  ownerSide: z.enum(["marketing", "shared", "sales"]).optional(),
+});
+const purchaseStagePatch = purchaseStageCreate.partial();
+
+const salesActivityCreate = z.object({
+  stageId: z.string().uuid(),
+  name: z.string().min(1).max(255),
+  type: z.string().max(50).nullable().optional(),
+  notesMd: md(),
+  toolsMd: md(),
+  orderIdx: z.number().int().optional(),
+  status: z.string().max(30).nullable().optional(),
+});
+const salesActivityPatch = salesActivityCreate.partial();
 
 const quickWinCreate = z.object({
   title: z.string().min(1).max(255),
@@ -1398,6 +1438,135 @@ const auditChildEntities: Record<string, ListEntityDef> = {
 // Pierwszy argument closures = segmentId (nie projectId).
 
 const segmentChildEntities: Record<string, ListEntityDef> = {
+  "purchase-stages": listDef({
+    kind: "list",
+    label: "Etap zakupu",
+    createSchema: purchaseStageCreate,
+    patchSchema: purchaseStagePatch,
+    list: (sid) =>
+      db
+        .select()
+        .from(purchaseStages)
+        .where(
+          and(eq(purchaseStages.segmentId, sid), isNull(purchaseStages.deletedAt))
+        )
+        .orderBy(asc(purchaseStages.orderIdx)),
+    create: (sid, data) =>
+      db
+        .insert(purchaseStages)
+        .values({ segmentId: sid, ...data })
+        .returning()
+        .then((r) => r[0]),
+    update: (sid, itemId, data) =>
+      db
+        .update(purchaseStages)
+        .set(compact(data))
+        .where(
+          and(eq(purchaseStages.id, itemId), eq(purchaseStages.segmentId, sid))
+        )
+        .returning()
+        .then((r) => r[0]),
+    softDelete: (sid, itemId) =>
+      db
+        .update(purchaseStages)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(eq(purchaseStages.id, itemId), eq(purchaseStages.segmentId, sid))
+        )
+        .returning({ id: purchaseStages.id })
+        .then((r) => r.length > 0),
+  }),
+
+  "sales-activities": listDef({
+    kind: "list",
+    label: "Akcja sprzedażowa",
+    createSchema: salesActivityCreate,
+    patchSchema: salesActivityPatch,
+    list: (sid) =>
+      db
+        .select({
+          id: salesActivities.id,
+          stageId: salesActivities.stageId,
+          name: salesActivities.name,
+          type: salesActivities.type,
+          notesMd: salesActivities.notesMd,
+          toolsMd: salesActivities.toolsMd,
+          orderIdx: salesActivities.orderIdx,
+          status: salesActivities.status,
+          reviewFlag: salesActivities.reviewFlag,
+        })
+        .from(salesActivities)
+        .innerJoin(purchaseStages, eq(salesActivities.stageId, purchaseStages.id))
+        .where(
+          and(
+            eq(purchaseStages.segmentId, sid),
+            isNull(salesActivities.deletedAt),
+            isNull(purchaseStages.deletedAt)
+          )
+        )
+        .orderBy(asc(salesActivities.orderIdx)),
+    create: async (sid, data) => {
+      const { stageId, ...rest } = data;
+      const stage = await db
+        .select({ id: purchaseStages.id })
+        .from(purchaseStages)
+        .where(
+          and(eq(purchaseStages.id, stageId), eq(purchaseStages.segmentId, sid))
+        )
+        .limit(1);
+      if (!stage[0]) throw new Error("Etap nie należy do tego segmentu");
+      return db
+        .insert(salesActivities)
+        .values({ stageId, ...rest })
+        .returning()
+        .then((r) => r[0]);
+    },
+    update: async (sid, itemId, data) => {
+      const patch = data;
+      if (patch.stageId) {
+        const stage = await db
+          .select({ id: purchaseStages.id })
+          .from(purchaseStages)
+          .where(
+            and(
+              eq(purchaseStages.id, patch.stageId),
+              eq(purchaseStages.segmentId, sid)
+            )
+          )
+          .limit(1);
+        if (!stage[0]) throw new Error("Etap nie należy do tego segmentu");
+      }
+      const stageIds = await segmentStageIds(sid);
+      if (stageIds.length === 0) return undefined;
+      return db
+        .update(salesActivities)
+        .set(compact(patch))
+        .where(
+          and(
+            eq(salesActivities.id, itemId),
+            inArray(salesActivities.stageId, stageIds)
+          )
+        )
+        .returning()
+        .then((r) => r[0]);
+    },
+    softDelete: async (sid, itemId) => {
+      const stageIds = await segmentStageIds(sid);
+      if (stageIds.length === 0) return false;
+      return db
+        .update(salesActivities)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            eq(salesActivities.id, itemId),
+            inArray(salesActivities.stageId, stageIds)
+          )
+        )
+        .returning({ id: salesActivities.id })
+        .then((r) => r.length > 0);
+    },
+  }),
+
   "buyer-journey": listDef({
     kind: "list",
     label: "Etap podróży",
