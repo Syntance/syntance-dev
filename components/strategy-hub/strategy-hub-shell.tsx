@@ -70,7 +70,7 @@ export function StrategyHubShell({ children }: { children: React.ReactNode }) {
           <HubOverlays>
             <SidebarProvider
               disableMobile
-              defaultOpen={false}
+              defaultOpen
               className="fixed inset-0 flex h-svh w-screen overflow-hidden bg-background"
             >
               <NavSidebar />
