@@ -77,6 +77,8 @@ async function getData(id: string) {
     ourLabel: null,
     competitorsOnQuadrant: null,
     statementMd: null,
+    nicheMd: null,
+    antiIcpMd: null,
   };
 
   return {

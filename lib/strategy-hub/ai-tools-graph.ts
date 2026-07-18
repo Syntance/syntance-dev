@@ -16,10 +16,7 @@ import {
   getSubgraph,
   type RelationRow,
 } from "@/lib/strategy-hub/relations/store";
-import {
-  entityRefSchema,
-  type EntityRef,
-} from "@/lib/strategy-hub/relations/schemas";
+import { type EntityRef } from "@/lib/strategy-hub/relations/schemas";
 
 const entityTypeKeys = Object.keys(ENTITY_TYPE_META) as [
   EntityTypeKey,
@@ -257,4 +254,3 @@ export function buildGraphTools(projectId: string): ToolSet {
   };
 }
 
-export { entityRefSchema };

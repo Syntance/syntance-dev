@@ -17,7 +17,6 @@ export interface CriterionContext {
   flowCount: number;
   leadMagnetCount: number;
   /** Faza 1 (M1) — dopełnienie macierzy 13 locków ze spec Notion. */
-  buyerJourneyStageCount?: number;
   pageSectionCount?: number;
   seoKeywordCount?: number;
   geoAssetCount?: number;
@@ -30,10 +29,27 @@ export interface CriterionContext {
   kpiMeasurableRatio?: number;
   /** Faza 11 (M3) — udział elementów lejka z CTA, powiązanych z eventem konwersji (0–1). */
   ctaMeasurableRatio?: number;
+  /**
+   * Gap engine podróży zakupowej (audyt 2026-07-17): udziały pokrytych
+   * wymaganych odpowiedzi per typ slotu (0–1), z `computeProjectCoverage`.
+   * Health mierzy „czy maszyna jest kompletna", nie „ile mamy rekordów".
+   */
+  journeyContentCoverage?: number;
+  journeyChannelCoverage?: number;
+  journeySalesCoverage?: number;
+  journeyExitCoverage?: number;
+  journeyKpiCoverage?: number;
+  journeyGapCount?: number;
   brandIdentity?: {
     missionMd?: string | null;
     visionMd?: string | null;
     toneOfVoiceMd?: string | null;
+  } | null;
+  /** B3 (logika Negacza): specjalizacja / pozycjonowanie na projekcie. */
+  positioning?: {
+    positioningStatement?: string | null;
+    nicheMd?: string | null;
+    antiIcpMd?: string | null;
   } | null;
   brandVisual?: unknown;
   businessStrategy?: {
@@ -76,7 +92,6 @@ function entityCount(entity: string | undefined, ctx: CriterionContext): number 
     funnelElements: ctx.elementCount,
     userFlows: ctx.flowCount,
     leadMagnets: ctx.leadMagnetCount,
-    buyerJourneyStages: ctx.buyerJourneyStageCount ?? 0,
     pageSections: ctx.pageSectionCount ?? 0,
     seoKeywords: ctx.seoKeywordCount ?? 0,
     geoAssets: ctx.geoAssetCount ?? 0,
@@ -129,6 +144,20 @@ function readField(
     if (field === "coreUvpMd") return o.coreUvpMd;
     return undefined;
   }
+  if (entity === "positioning") {
+    const o = ctx.positioning;
+    if (!o) return undefined;
+    switch (field) {
+      case "positioningStatement":
+        return o.positioningStatement;
+      case "nicheMd":
+        return o.nicheMd;
+      case "antiIcpMd":
+        return o.antiIcpMd;
+      default:
+        return undefined;
+    }
+  }
   return undefined;
 }
 
@@ -165,6 +194,22 @@ function evaluateCriterion(
       }
       if (criterion.id === "lejek_cta_measurable") {
         return Math.round((ctx.ctaMeasurableRatio ?? 0) * 100);
+      }
+      // Gap engine podróży zakupowej — pokrycie etapów odpowiedziami (0–1).
+      if (criterion.id === "journey_content_coverage") {
+        return Math.round((ctx.journeyContentCoverage ?? 0) * 100);
+      }
+      if (criterion.id === "journey_channel_coverage") {
+        return Math.round((ctx.journeyChannelCoverage ?? 0) * 100);
+      }
+      if (criterion.id === "journey_sales_coverage") {
+        return Math.round((ctx.journeySalesCoverage ?? 0) * 100);
+      }
+      if (criterion.id === "journey_exit_coverage") {
+        return Math.round((ctx.journeyExitCoverage ?? 0) * 100);
+      }
+      if (criterion.id === "journey_kpi_coverage") {
+        return Math.round((ctx.journeyKpiCoverage ?? 0) * 100);
       }
       return 0;
     }

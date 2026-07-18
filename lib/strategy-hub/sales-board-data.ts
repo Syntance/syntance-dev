@@ -8,6 +8,7 @@ import {
   salesPitches,
   salesScripts,
   leadMagnets,
+  objections,
 } from "@/db/schema";
 import { listRelations } from "@/lib/strategy-hub/relations/store";
 
@@ -17,7 +18,7 @@ import { listRelations } from "@/lib/strategy-hub/relations/store";
  * pitche/skrypty/magnety przypięte relacją „uzywany_w_etapie".
  */
 
-export interface SalesBoardStage {
+interface SalesBoardStage {
   id: string;
   name: string;
   orderIdx: number;
@@ -27,7 +28,7 @@ export interface SalesBoardStage {
   exitCriterion: string | null;
 }
 
-export interface SalesBoardActivity {
+interface SalesBoardActivity {
   id: string;
   stageId: string;
   name: string;
@@ -40,12 +41,31 @@ export interface SalesBoardActivity {
 
 export type AttachmentType = "sales_pitch" | "sales_script" | "lead_magnet";
 
-export interface StageAttachment {
+interface StageAttachment {
   relationId: string;
   stageId: string;
   type: AttachmentType;
   id: string;
   label: string;
+}
+
+interface ObjectionAnswer {
+  relationId: string;
+  type: AttachmentType;
+  id: string;
+  label: string;
+}
+
+/**
+ * Obiekcja segmentu z odpowiedziami sprzedaży (spec 12 §4.3): odpowiedź =
+ * `responseMd` na encji LUB materiał przypięty relacją `oslabia`.
+ * Obiekcja bez żadnej odpowiedzi = luka procesu sprzedaży.
+ */
+interface SegmentObjection {
+  id: string;
+  objectionMd: string;
+  hasResponse: boolean;
+  answers: ObjectionAnswer[];
 }
 
 export interface SalesBoardData {
@@ -56,6 +76,7 @@ export interface SalesBoardData {
   attachments: StageAttachment[];
   /** Materiały projektu do przypinania (pitche/skrypty/magnety). */
   library: { type: AttachmentType; id: string; label: string }[];
+  objections: SegmentObjection[];
 }
 
 const ATTACHMENT_TYPES: AttachmentType[] = [
@@ -126,6 +147,7 @@ export async function getSalesBoard(
       activities: [],
       attachments: [],
       library,
+      objections: [],
     };
   }
 
@@ -187,6 +209,46 @@ export async function getSalesBoard(
     });
   }
 
+  // Obiekcje segmentu (+ projektowe bez segmentu) z odpowiedziami sprzedaży.
+  const objectionRows = await db
+    .select({
+      id: objections.id,
+      objectionMd: objections.objectionMd,
+      responseMd: objections.responseMd,
+      segmentId: objections.segmentId,
+    })
+    .from(objections)
+    .where(
+      and(eq(objections.projectId, projectId), isNull(objections.deletedAt))
+    )
+    .orderBy(asc(objections.orderIdx), asc(objections.createdAt));
+
+  const relevantObjections = objectionRows.filter(
+    (o) => o.segmentId === null || o.segmentId === selected.id
+  );
+  const objectionIds = new Set(relevantObjections.map((o) => o.id));
+  const answersByObjection = new Map<string, ObjectionAnswer[]>();
+  for (const r of relations) {
+    if (r.relationType !== "oslabia") continue;
+    if (r.targetType !== "objection" || !objectionIds.has(r.targetId)) continue;
+    if (!isAttachmentType(r.sourceType)) continue;
+    const list = answersByObjection.get(r.targetId) ?? [];
+    list.push({
+      relationId: r.id,
+      type: r.sourceType,
+      id: r.sourceId,
+      label: labelByRef.get(`${r.sourceType}:${r.sourceId}`) ?? r.sourceType,
+    });
+    answersByObjection.set(r.targetId, list);
+  }
+
+  const objectionsOut: SegmentObjection[] = relevantObjections.map((o) => ({
+    id: o.id,
+    objectionMd: o.objectionMd,
+    hasResponse: (o.responseMd ?? "").trim().length > 0,
+    answers: answersByObjection.get(o.id) ?? [],
+  }));
+
   return {
     segments: segmentsOut,
     segmentId: selected.id,
@@ -205,5 +267,6 @@ export async function getSalesBoard(
     })),
     attachments,
     library,
+    objections: objectionsOut,
   };
 }

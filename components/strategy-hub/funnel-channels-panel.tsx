@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { SectionCard } from "@/components/strategy-hub/entity-singleton";
 import { EntityCrud, type FieldDef } from "@/components/strategy-hub/entity-crud";
 import { ChannelHeatmap } from "@/components/strategy-hub/channel-heatmap";
+import { apiFetch } from "@/lib/strategy-hub/api-fetch";
 import type {
   ActivityRow,
   ChannelRow,
@@ -60,15 +61,15 @@ export function FunnelChannelsPanel({ projectId }: { projectId: string }) {
 
   const refreshViz = useCallback(async () => {
     try {
-      const [chRes, acRes] = await Promise.all([
-        fetch(channelsBase, { signal: AbortSignal.timeout(8000) }),
-        fetch(activitiesBase, { signal: AbortSignal.timeout(8000) }),
+      const [ch, ac] = await Promise.all([
+        apiFetch<{ items?: ChannelRow[] }>(channelsBase),
+        apiFetch<{ items?: ActivityRow[] }>(activitiesBase),
       ]);
-      if (chRes.ok) setChannels((await chRes.json()).items ?? []);
-      if (acRes.ok) setActivities((await acRes.json()).items ?? []);
+      setChannels(ch.items ?? []);
+      setActivities(ac.items ?? []);
       setVizKey((k) => k + 1);
-    } catch (err) {
-      console.error("viz refresh failed", err);
+    } catch {
+      // toast pokazuje apiFetch
     }
   }, [channelsBase, activitiesBase]);
 

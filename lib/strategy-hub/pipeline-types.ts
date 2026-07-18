@@ -1,6 +1,6 @@
 import type { StrategyArea } from "@/lib/strategy-hub/entities/entity-types";
 
-export type PipelineStageKey = "brief" | "research" | StrategyArea;
+export type PipelineStageKey = "brief" | "research" | "podroz" | StrategyArea;
 
 export type PipelineStageStatus =
   | "empty"
@@ -9,13 +9,13 @@ export type PipelineStageStatus =
   | "ready"
   | "locked";
 
-export interface PipelineAiAction {
+interface PipelineAiAction {
   at: string;
   summary: string;
   batchId: string | null;
 }
 
-export interface PipelineHumanGate {
+interface PipelineHumanGate {
   label: string;
   href: string;
 }

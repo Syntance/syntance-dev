@@ -7,6 +7,8 @@ import { StrategyHubHeader } from "@/components/strategy-hub/hub-header";
 import { ThemeProvider } from "@/components/strategy-hub/theme-provider";
 import { HubOverlays } from "@/components/strategy-hub/hub-overlays";
 import { AlertsToaster } from "@/components/strategy-hub/alerts-toaster";
+import { AppToaster } from "@/components/strategy-hub/app-toaster";
+import { apiFetch } from "@/lib/strategy-hub/api-fetch";
 import { MobileGate } from "@/components/strategy-hub/mobile-gate";
 import { UndoRedoProvider } from "@/components/strategy-hub/undo-redo";
 import {
@@ -34,11 +36,11 @@ function ProjectMetaLoader({ children }: { children: React.ReactNode }) {
     if (!projectId) return;
 
     const ctrl = new AbortController();
-    fetch(`/api/strategy-hub/projects/${projectId}`, { signal: ctrl.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { project?: ProjectMeta } | null) => {
-        setProject(data?.project ?? null);
-      })
+    apiFetch<{ project?: ProjectMeta }>(
+      `/api/strategy-hub/projects/${projectId}`,
+      { signal: ctrl.signal, silent: true }
+    )
+      .then((data) => setProject(data.project ?? null))
       .catch(() => {
         if (!ctrl.signal.aborted) setProject(null);
       });
@@ -80,6 +82,7 @@ export function StrategyHubShell({ children }: { children: React.ReactNode }) {
               </div>
             </SidebarProvider>
             <AlertsToaster />
+            <AppToaster />
             <MobileGate />
           </HubOverlays>
         </UndoRedoProvider>

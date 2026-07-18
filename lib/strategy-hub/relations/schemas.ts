@@ -4,7 +4,6 @@ import {
   RELATION_TYPES,
   type EntityTypeKey,
   type RelationTypeKey,
-  type StrategyArea,
 } from "@/lib/strategy-hub/entities/entity-types";
 
 const entityTypeKeys = Object.keys(ENTITY_TYPE_META) as [
@@ -66,5 +65,3 @@ export interface RelationRow {
   updatedAt: Date;
   deletedAt: Date | null;
 }
-
-export type { StrategyArea };

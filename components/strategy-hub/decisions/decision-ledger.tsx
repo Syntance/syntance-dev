@@ -202,5 +202,3 @@ export function DecisionLedger({
     </>
   );
 }
-
-export type { LedgerDecision };

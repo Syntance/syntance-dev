@@ -5,7 +5,7 @@
 import type { EntityTypeKey, StrategyArea } from "@/lib/strategy-hub/entities/entity-types";
 import type { NodeStatus } from "@/lib/strategy-hub/strategy-map-types";
 
-export type ConstellationNodeKind = "core" | "area" | "entity";
+type ConstellationNodeKind = "core" | "area" | "entity";
 
 export interface ConstellationNode {
   id: string;

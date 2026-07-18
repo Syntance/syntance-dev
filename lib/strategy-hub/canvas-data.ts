@@ -9,6 +9,7 @@ import {
   funnelElements,
   channels,
   channelActivityPlan,
+  salesActivities,
   salesPitches,
   salesScripts,
   leadMagnets,
@@ -63,11 +64,14 @@ export interface CanvasData {
     ourY: number | null;
     ourLabel: string | null;
     competitors: CanvasCompetitor[];
+    statementMd: string | null;
+    nicheMd: string | null;
   };
   segments: { items: CanvasSegment[]; total: number };
   funnel: { stages: number; elements: number };
   channels: { total: number; activities: number };
   materials: { pitches: number; scripts: number; leadMagnets: number };
+  sales: { activities: number };
   kpis: { items: CanvasKpi[]; total: number };
   website: { pages: number };
   audit: { high: number; medium: number; low: number; findings: number };
@@ -114,6 +118,7 @@ export async function getCanvasData(projectId: string): Promise<CanvasData> {
     [pitchCount],
     [scriptCount],
     [leadMagnetCount],
+    [salesActivityCount],
     kpiItems,
     [kpiCount],
     [pageCount],
@@ -199,6 +204,14 @@ export async function getCanvasData(projectId: string): Promise<CanvasData> {
       .from(leadMagnets)
       .where(and(eq(leadMagnets.projectId, pid), isNull(leadMagnets.deletedAt))),
     db
+      .select({ count: count() })
+      .from(salesActivities)
+      .innerJoin(purchaseStages, eq(salesActivities.stageId, purchaseStages.id))
+      .innerJoin(segments, eq(purchaseStages.segmentId, segments.id))
+      .where(
+        and(eq(segments.projectId, pid), isNull(salesActivities.deletedAt))
+      ),
+    db
       .select({
         id: kpis.id,
         name: kpis.name,
@@ -269,6 +282,8 @@ export async function getCanvasData(projectId: string): Promise<CanvasData> {
       ourY: positioning?.ourY ?? null,
       ourLabel: positioning?.ourLabel ?? null,
       competitors: asCompetitors(positioning?.competitorsOnQuadrant),
+      statementMd: positioning?.statementMd ?? null,
+      nicheMd: positioning?.nicheMd ?? null,
     },
     segments: { items: segItems.slice(0, 3), total: segItems.length },
     funnel: { stages: stageCount?.count ?? 0, elements: elementCount?.count ?? 0 },
@@ -278,6 +293,7 @@ export async function getCanvasData(projectId: string): Promise<CanvasData> {
       scripts: scriptCount?.count ?? 0,
       leadMagnets: leadMagnetCount?.count ?? 0,
     },
+    sales: { activities: salesActivityCount?.count ?? 0 },
     kpis: { items: kpiItems, total: kpiCount?.count ?? 0 },
     website: { pages: pageCount?.count ?? 0 },
     audit: { high, medium, low, findings: auditFindings.length },

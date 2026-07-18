@@ -21,11 +21,13 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { pluralCount } from "@/lib/strategy-hub/pluralize";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { upsertFunnelElement, deleteFunnelElement } from "@/lib/strategy-hub/actions";
 import type { CoverageKey, JourneyView } from "@/lib/strategy-hub/journey-data";
+import { COVERAGE_LABELS } from "@/lib/strategy-hub/coverage";
 import { FunnelChannelsPanel } from "./funnel-channels-panel";
 
 /**
@@ -98,14 +100,6 @@ interface BoardData {
 }
 
 // ── Słowniki UI ──────────────────────────────────────────────────────────────
-
-const COVERAGE_LABELS: Record<CoverageKey, string> = {
-  content: "Treść",
-  channel: "Kanał",
-  sales: "Sprzedaż",
-  exit: "Wyjście",
-  kpi: "KPI",
-};
 
 const FORMAT_OPTIONS = [
   "Artykuł",
@@ -563,7 +557,7 @@ export function FunnelWorkspace({ projectId, projectName }: Props) {
               {journey.gapCount > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600">
                   <AlertTriangle className="size-3" />
-                  {journey.gapCount} luk
+                  {pluralCount(journey.gapCount, "luka", "luki", "luk")}
                 </span>
               )}
             </div>
@@ -866,8 +860,9 @@ function InfluencePanel({
         hrefLabel="edytuj"
       >
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          {stages.length} etapów tego segmentu wyznacza kolumny lejka. Pytania i
-          triggery etapów widzisz w nagłówkach kolumn.
+          {pluralCount(stages.length, "etap", "etapy", "etapów")} tego segmentu
+          wyznacza kolumny lejka. Pytania i triggery etapów widzisz w nagłówkach
+          kolumn.
         </p>
       </RailSection>
 

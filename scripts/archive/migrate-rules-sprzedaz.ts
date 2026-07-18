@@ -1,12 +1,12 @@
-/**
- * Migracja zapisanych rule setów (strategy_rule_sets) — obszar „sprzedaz".
+﻿/**
+ * Migracja zapisanych rule setĂłw (strategy_rule_sets) â€” obszar â€žsprzedaz".
  *
- * deepMerge w resolve.ts nadpisuje tablicę `modules` w całości, więc zmiana
- * DEFAULT_RULES nie wystarcza — każdy zapisany config trzeba zmigrować:
- * 1. dodaje moduł "sprzedaz" (jeśli brak) po "przekaz",
- * 2. kryterium buyer_journey: buyerJourneyStages → purchaseStages (scalenie taksonomii),
- * 3. presentationOrder: wstawia "sprzedaz" po "przekaz" (jeśli brak),
- * 4. connections: lejek→sprzedaz i sprzedaz→kpi (jeśli brak).
+ * deepMerge w resolve.ts nadpisuje tablicÄ™ `modules` w caĹ‚oĹ›ci, wiÄ™c zmiana
+ * DEFAULT_RULES nie wystarcza â€” kaĹĽdy zapisany config trzeba zmigrowaÄ‡:
+ * 1. dodaje moduĹ‚ "sprzedaz" (jeĹ›li brak) po "przekaz",
+ * 2. kryterium buyer_journey: buyerJourneyStages â†’ purchaseStages (scalenie taksonomii),
+ * 3. presentationOrder: wstawia "sprzedaz" po "przekaz" (jeĹ›li brak),
+ * 4. connections: lejekâ†’sprzedaz i sprzedazâ†’kpi (jeĹ›li brak).
  * Idempotentna + backup do scripts/backups/.
  *
  * Uruchomienie: node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/migrate-rules-sprzedaz.ts
@@ -14,15 +14,15 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
-import { db } from "../db";
-import { strategyRuleSets } from "../db/schema";
-import { DEFAULT_RULES, findModuleRule } from "../lib/strategy-hub/rules/defaults";
-import { RulesConfigSchema } from "../lib/strategy-hub/rules/types";
+import { db } from "../../db";
+import { strategyRuleSets } from "../../db/schema";
+import { DEFAULT_RULES, findModuleRule } from "../../lib/strategy-hub/rules/defaults";
+import { RulesConfigSchema } from "../../lib/strategy-hub/rules/types";
 
 async function run() {
   const rows = await db.select().from(strategyRuleSets);
   if (rows.length === 0) {
-    console.log("Brak rule setów — nic do migracji.");
+    console.log("Brak rule setĂłw â€” nic do migracji.");
     process.exit(0);
   }
 
@@ -36,13 +36,13 @@ async function run() {
   console.log(`Backup: ${backupFile}`);
 
   const defaultSprzedaz = findModuleRule(DEFAULT_RULES, "sprzedaz");
-  if (!defaultSprzedaz) throw new Error("DEFAULT_RULES nie ma modułu sprzedaz");
+  if (!defaultSprzedaz) throw new Error("DEFAULT_RULES nie ma moduĹ‚u sprzedaz");
 
   let migrated = 0;
   for (const row of rows) {
     const parsed = RulesConfigSchema.safeParse(row.config);
     if (!parsed.success) {
-      console.warn(`  ! scope=${row.scope}: config nie przechodzi schematu — pomijam`);
+      console.warn(`  ! scope=${row.scope}: config nie przechodzi schematu â€” pomijam`);
       continue;
     }
     const cfg = parsed.data;
@@ -61,7 +61,7 @@ async function run() {
       for (const c of buyerJourney.criteria) {
         if (c.entity === "buyerJourneyStages") {
           c.entity = "purchaseStages";
-          c.label = "≥1 etap podróży zakupowej";
+          c.label = "â‰Ą1 etap podrĂłĹĽy zakupowej";
           changed = true;
         }
       }
@@ -88,7 +88,7 @@ async function run() {
     }
 
     if (!changed) {
-      console.log(`  = scope=${row.scope}: już zmigrowany`);
+      console.log(`  = scope=${row.scope}: juĹĽ zmigrowany`);
       continue;
     }
 
@@ -97,10 +97,10 @@ async function run() {
       .set({ config: cfg, updatedAt: new Date() })
       .where(eq(strategyRuleSets.id, row.id));
     migrated += 1;
-    console.log(`  ✓ scope=${row.scope}`);
+    console.log(`  âś“ scope=${row.scope}`);
   }
 
-  console.log(`Zmigrowano ${migrated}/${rows.length} rule setów.`);
+  console.log(`Zmigrowano ${migrated}/${rows.length} rule setĂłw.`);
   process.exit(0);
 }
 

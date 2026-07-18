@@ -1,13 +1,13 @@
-/**
- * Idempotentny seed join-tabel → entity_relations (jednorazowa migracja danych).
- * Po DROP join-tabel (0022) skrypt kończy się komunikatem — dane są już w entity_relations.
- * Użycie: npx tsx --env-file=.env.local scripts/seed-entity-relations.ts
+﻿/**
+ * Idempotentny seed join-tabel â†’ entity_relations (jednorazowa migracja danych).
+ * Po DROP join-tabel (0022) skrypt koĹ„czy siÄ™ komunikatem â€” dane sÄ… juĹĽ w entity_relations.
+ * UĹĽycie: npx tsx --env-file=.env.local scripts/seed-entity-relations.ts
  */
 import { db } from "@/db";
-import { entityRelations } from "../db/schema";
+import { entityRelations } from "../../db/schema";
 import { isNull } from "drizzle-orm";
 import postgres from "postgres";
-import { getDatabaseUrl } from "../lib/strategy-hub/db-url";
+import { getDatabaseUrl } from "../../lib/strategy-hub/db-url";
 
 async function joinTablesExist(): Promise<boolean> {
   const sql = postgres(getDatabaseUrl(), { prepare: false, max: 1 });
@@ -62,7 +62,7 @@ async function loadExistingKeys(): Promise<Set<string>> {
 
 async function main() {
   if (!(await joinTablesExist())) {
-    console.log("✅ Join-tabele już usunięte — seed pominięty (dane w entity_relations)");
+    console.log("âś… Join-tabele juĹĽ usuniÄ™te â€” seed pominiÄ™ty (dane w entity_relations)");
     process.exit(0);
   }
 
@@ -185,7 +185,7 @@ async function main() {
   const missing = toInsert.filter((r) => !existing.has(relationKey(r)));
 
   if (missing.length === 0) {
-    console.log("✅ Brak nowych relacji do seedowania");
+    console.log("âś… Brak nowych relacji do seedowania");
     process.exit(0);
   }
 
@@ -203,7 +203,7 @@ async function main() {
     }))
   );
 
-  console.log(`✅ Zaseedowano ${missing.length} relacji z join-tabel`);
+  console.log(`âś… Zaseedowano ${missing.length} relacji z join-tabel`);
   process.exit(0);
 }
 

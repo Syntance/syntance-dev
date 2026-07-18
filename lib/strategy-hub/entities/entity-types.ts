@@ -291,9 +291,3 @@ export const AREA_DEPENDENCIES: Record<StrategyArea, StrategyArea[]> = {
   strona: ["segmenty", "lejek"],
   kpi: ["kanaly", "strona"],
 };
-
-/** Obszary downstream — kto zależy od danego obszaru. */
-export function areaDownstream(area: StrategyArea): StrategyArea[] {
-  const keys = Object.keys(AREA_DEPENDENCIES) as StrategyArea[];
-  return keys.filter((k) => AREA_DEPENDENCIES[k].includes(area));
-}

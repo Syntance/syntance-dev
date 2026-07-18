@@ -9,6 +9,7 @@ import {
 import { ListItemsEditor } from "@/components/strategy-hub/list-items-editor";
 import { Sparkles, Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { emitToast } from "@/lib/strategy-hub/toast";
 
 interface UvpEditorProps {
   /** Markdown / plain text — jedno zdanie pozycjonowania. */
@@ -66,8 +67,8 @@ export function UvpEditor({
         await onSaveCore(value);
         setCoreState("saved");
         setTimeout(() => setCoreState("idle"), 1500);
-      } catch (err) {
-        console.error(err);
+      } catch {
+        emitToast("Nie udało się zapisać UVP.");
         setCoreState("idle");
       }
     }, DEBOUNCE_MS);

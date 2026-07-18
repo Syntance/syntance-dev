@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, Grid3x3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { pluralCount } from "@/lib/strategy-hub/pluralize";
 import type { MessageMatrix } from "@/lib/strategy-hub/message-matrix";
 
 /**
@@ -37,7 +38,7 @@ export function MessageMatrixSection({
         {matrix.gapCount > 0 ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-600">
             <AlertTriangle className="size-3" />
-            {matrix.gapCount} etapów bez przekazu
+            {pluralCount(matrix.gapCount, "etap bez przekazu", "etapy bez przekazu", "etapów bez przekazu")}
           </span>
         ) : (
           <span className="text-[11px] text-muted-foreground">

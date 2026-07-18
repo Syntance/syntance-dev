@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { OptionCombobox } from "@/components/strategy-hub/option-combobox";
+import { apiFetch } from "@/lib/strategy-hub/api-fetch";
 import {
   VisibilityControl,
   type VisibilityStatus,
@@ -426,36 +427,25 @@ export function EntityCrud({
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch(`/api/strategy-hub/projects/${projectId}/visibility`, {
-      signal: ctrl.signal,
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then(
-        (d: { records?: Record<string, Record<string, VisibilityStatus>> } | null) =>
-          setVisMap(d?.records?.[entity] ?? {})
-      )
-      .catch(() => {});
+    apiFetch<{ records?: Record<string, Record<string, VisibilityStatus>> }>(
+      `/api/strategy-hub/projects/${projectId}/visibility`,
+      { signal: ctrl.signal, silent: true }
+    )
+      .then((d) => setVisMap(d.records?.[entity] ?? {}))
+      .catch(() => {}); // tło, niekrytyczne — brak mapy = brak badge'y widoczności
     return () => ctrl.abort();
   }, [projectId, entity]);
 
   const load = useCallback(async () => {
-    try {
-      const res = await fetch(baseWithPath, { signal: AbortSignal.timeout(8000) });
-      if (res.ok) {
-        const json = await res.json();
-        setItems(json.items ?? []);
-      }
-    } catch (err) {
-      console.error("load failed", err);
-    }
+    const json = await apiFetch<{ items?: EntityRecord[] }>(baseWithPath);
+    setItems(json.items ?? []);
   }, [baseWithPath]);
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch(baseWithPath, { signal: ctrl.signal })
-      .then((r) => (r.ok ? r.json() : { items: [] }))
-      .then((j) => setItems(j.items ?? []))
-      .catch(() => {})
+    apiFetch<{ items?: EntityRecord[] }>(baseWithPath, { signal: ctrl.signal })
+      .then((json) => setItems(json.items ?? []))
+      .catch(() => {}) // toast pokazuje apiFetch; abort przy odmontowaniu też tu trafia
       .finally(() => setLoading(false));
     return () => ctrl.abort();
   }, [baseWithPath]);
@@ -463,41 +453,30 @@ export function EntityCrud({
   const handleAdd = (data: Record<string, unknown>) =>
     startTransition(async () => {
       try {
-        const res = await fetch(base, {
+        await apiFetch(base, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          json: {
             ...defaults,
             ...data,
             ...(pathId ? { pathId } : {}),
             ...(siteId ? { siteId } : {}),
-          }),
-          signal: AbortSignal.timeout(8000),
+          },
         });
-        if (res.ok) {
-          await load();
-          setAdding(false);
-          onMutate?.();
-        }
-      } catch (err) {
-        console.error("add failed", err);
+        await load();
+        setAdding(false);
+        onMutate?.();
+      } catch {
+        // toast pokazuje apiFetch; formularz zostaje otwarty z danymi
       }
     });
 
   const handleUpdate = async (id: string, data: Record<string, unknown>) => {
     try {
-      const res = await fetch(`${base}/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        signal: AbortSignal.timeout(8000),
-      });
-      if (res.ok) {
-        await load();
-        onMutate?.();
-      }
-    } catch (err) {
-      console.error("update failed", err);
+      await apiFetch(`${base}/${id}`, { method: "PATCH", json: data });
+      await load();
+      onMutate?.();
+    } catch {
+      // toast pokazuje apiFetch
     }
   };
 
@@ -505,14 +484,11 @@ export function EntityCrud({
     startTransition(async () => {
       setItems((prev) => prev.filter((i) => i.id !== id));
       try {
-        await fetch(`${base}/${id}`, {
-          method: "DELETE",
-          signal: AbortSignal.timeout(8000),
-        });
+        await apiFetch(`${base}/${id}`, { method: "DELETE" });
         onMutate?.();
-      } catch (err) {
-        console.error("remove failed", err);
-        await load();
+      } catch {
+        // rollback optymistycznego usunięcia — toast pokazuje apiFetch
+        await load().catch(() => {});
       }
     });
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { pluralCount } from "@/lib/strategy-hub/pluralize";
 import { KONST } from "@/components/strategy-hub/constellation/constellation-theme";
 import { SegmentSelector } from "@/components/strategy-hub/segment-selector";
 import { STAGGER_COLUMN } from "@/components/strategy-hub/konst-animation";
@@ -174,7 +175,7 @@ export function BlueprintView({
               color: KONST.review,
             }}
           >
-            ⚠ {data.gapCount} luk
+            ⚠ {pluralCount(data.gapCount, "luka", "luki", "luk")}
           </button>
         </div>
       </header>
@@ -322,8 +323,9 @@ export function BlueprintView({
           className="mt-1 text-[11px] tracking-[0.18em]"
           style={{ color: KONST.muted }}
         >
-          {data.columns.length} etapów · {elementCount} elementów · {data.gapCount}{" "}
-          luk
+          {pluralCount(data.columns.length, "etap", "etapy", "etapów")} ·{" "}
+          {pluralCount(elementCount, "element", "elementy", "elementów")} ·{" "}
+          {pluralCount(data.gapCount, "luka", "luki", "luk")}
         </p>
       </footer>
     </div>

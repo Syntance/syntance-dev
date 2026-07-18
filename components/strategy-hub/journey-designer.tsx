@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { pluralCount } from "@/lib/strategy-hub/pluralize";
 import type {
   CoverageKey,
   JourneyStageView,
@@ -58,7 +59,9 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
   const [view, setView] = React.useState<JourneyView>(initialView);
   const [loading, setLoading] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
-  const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
+  // Stan odwrotny (zwinięte, domyślnie pusty) = wszystkie etapy startują
+  // rozwinięte bez efektu synchronizującego (react-hooks/set-state-in-effect).
+  const [collapsedIds, setCollapsedIds] = React.useState<Set<string>>(new Set());
   const savingTimers = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map()
   );
@@ -66,13 +69,6 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
 
   const segmentId = view.segmentId;
   const stages = [...view.stages].sort((a, b) => a.orderIdx - b.orderIdx);
-
-  // Automatycznie rozpinaj wszystkie etapy gdy się załadują
-  React.useEffect(() => {
-    if (stages.length > 0) {
-      setExpandedIds(new Set(stages.map((s) => s.id)));
-    }
-  }, [stages.length]);
 
   const crudBase = React.useCallback(
     (sid: string) =>
@@ -186,12 +182,32 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
   };
 
   const toggleExpanded = (id: string) => {
-    setExpandedIds((prev) => {
+    setCollapsedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  };
+
+  /** Przypina KPI do etapu: relacja stage → kpi `mierzony_przez` (gap engine liczy ją jako pokrycie). */
+  const pinKpi = async (stageId: string, kpiId: string) => {
+    try {
+      await fetch(`/api/strategy-hub/projects/${projectId}/relations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: { type: "stage", id: stageId },
+          target: { type: "kpi", id: kpiId },
+          relationType: "mierzony_przez",
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch {
+      /* best-effort — refresh pokaże realny stan */
+    } finally {
+      void refresh(segmentId);
+    }
   };
 
   /** Indeks pierwszego etapu prowadzonego przez sprzedaż = granica MQL/SQL. */
@@ -204,9 +220,13 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
       <div className="rounded-2xl border border-dashed border-border p-8 text-center">
         <Milestone className="mx-auto size-6 text-muted-foreground/50" />
         <p className="mt-2 text-sm text-muted-foreground">
-          Najpierw dodaj segment w module Segmenty — podróż zakupowa należy do
-          segmentu.
+          Najpierw dodaj segment — podróż zakupowa należy do segmentu.
         </p>
+        <Button asChild size="sm" className="mt-3 bg-brand text-white hover:bg-brand/90">
+          <Link href={`/strategy-hub/projects/${projectId}/market/segments`}>
+            <Plus className="size-3.5" /> Dodaj pierwszy segment
+          </Link>
+        </Button>
       </div>
     );
   }
@@ -235,7 +255,7 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
         {view.gapCount > 0 && (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-600">
             <AlertTriangle className="size-3" />
-            {view.gapCount} luk w pokryciu etapów
+            {pluralCount(view.gapCount, "luka", "luki", "luk")} w pokryciu etapów
           </span>
         )}
       </div>
@@ -267,7 +287,8 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
                   stage={stage}
                   index={i}
                   total={stages.length}
-                  expanded={expandedIds.has(stage.id)}
+                  expanded={!collapsedIds.has(stage.id)}
+                  kpis={view.kpis}
                   onToggleExpanded={() => toggleExpanded(stage.id)}
                   onSave={(field, value, debounce) => {
                     saveField(stage.id, field, value, debounce);
@@ -275,6 +296,7 @@ export function JourneyDesigner({ projectId, initialView }: Props) {
                   }}
                   onMove={(dir) => move(stage.id, dir)}
                   onRemove={() => void removeStage(stage.id)}
+                  onPinKpi={(kpiId) => void pinKpi(stage.id, kpiId)}
                 />
               </React.Fragment>
             ))}
@@ -315,21 +337,28 @@ function StageCard({
   index,
   total,
   expanded,
+  kpis,
   onToggleExpanded,
   onSave,
   onMove,
   onRemove,
+  onPinKpi,
 }: {
   projectId: string;
   stage: JourneyStageView;
   index: number;
   total: number;
   expanded: boolean;
+  kpis: { id: string; name: string }[];
   onToggleExpanded: () => void;
   onSave: (field: keyof JourneyStageView, value: unknown, debounce?: number) => void;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
+  onPinKpi: (kpiId: string) => void;
 }) {
+  const kpiGap = stage.coverage.some(
+    (c) => c.key === "kpi" && c.required && !c.ok
+  );
   return (
     <div className="flex h-full min-h-0 w-[300px] shrink-0 flex-col gap-2.5 overflow-y-auto rounded-xl border border-border bg-card/40 p-4">
       <div className="flex items-center gap-2">
@@ -515,9 +544,30 @@ function StageCard({
           );
         })}
         <span className="ml-auto text-[10px] text-muted-foreground">
-          {stage.counts.elements} treści · {stage.counts.salesActivities} akcji
+          {pluralCount(stage.counts.elements, "treść", "treści", "treści")} ·{" "}
+          {pluralCount(stage.counts.salesActivities, "akcja", "akcje", "akcji")}
         </span>
       </div>
+
+      {kpiGap && kpis.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <select
+            aria-label="Przypnij KPI do etapu"
+            value=""
+            onChange={(e) => {
+              if (e.target.value) onPinKpi(e.target.value);
+            }}
+            className="h-6 w-full rounded-md border border-dashed border-amber-500/40 bg-transparent px-1.5 text-[10px] text-muted-foreground focus-visible:outline-none"
+          >
+            <option value="">+ przypnij KPI mierzący ten etap…</option>
+            {kpis.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }

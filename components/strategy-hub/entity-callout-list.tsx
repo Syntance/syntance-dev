@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, Loader2, Check, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { emitToast } from "@/lib/strategy-hub/toast";
 import {
   WEIGHT_OPTIONS,
   weightPickerActiveClass,
@@ -272,8 +273,8 @@ export function EntityCalloutList({
         await onAdd(value);
         setDraft("");
         flashSaved();
-      } catch (err) {
-        console.error("add failed", err);
+      } catch {
+        emitToast("Nie udało się dodać wpisu.");
       }
     });
   };
@@ -286,8 +287,8 @@ export function EntityCalloutList({
       try {
         await onUpdate(id, patch);
         flashSaved();
-      } catch (err) {
-        console.error("update failed", err);
+      } catch {
+        emitToast("Nie udało się zapisać zmian.");
       }
     });
   };
@@ -297,8 +298,8 @@ export function EntityCalloutList({
       try {
         await onRemove(id);
         flashSaved();
-      } catch (err) {
-        console.error("remove failed", err);
+      } catch {
+        emitToast("Nie udało się usunąć wpisu.");
       }
     });
   };

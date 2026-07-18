@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import type { Message } from "@ai-sdk/react";
 import {
   emitMapFocus,
-  hasMapFocusListener,
   type MapFocusDetail,
   type MapFocusMode,
 } from "@/lib/strategy-hub/map-focus-bus";
@@ -64,4 +63,4 @@ export function useMapFocusFromChat(messages: Message[]): void {
   }, [messages]);
 }
 
-export { hasMapFocusListener, parseFocusArgs };
+export { parseFocusArgs };

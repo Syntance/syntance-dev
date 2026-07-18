@@ -111,7 +111,7 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
         {
           id: "fund_problems",
           label: "Problemy / ambicje",
-          weight: 0.25,
+          weight: 0.2,
           metric: "count_gte",
           entity: "businessProblems",
           target: 1,
@@ -119,7 +119,7 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
         {
           id: "fund_uvp",
           label: "UVP core",
-          weight: 0.25,
+          weight: 0.2,
           metric: "field_filled",
           entity: "uvp",
           field: "coreUvpMd",
@@ -127,7 +127,7 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
         {
           id: "fund_competitors",
           label: "Konkurencja",
-          weight: 0.25,
+          weight: 0.2,
           metric: "count_gte",
           entity: "competitors",
           target: 1,
@@ -135,10 +135,19 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
         {
           id: "fund_objections",
           label: "Obiekcje",
-          weight: 0.25,
+          weight: 0.2,
           metric: "count_gte",
           entity: "objections",
           target: 1,
+        },
+        {
+          // B3 (logika Negacza): „jesteśmy X dla Y, którzy chcą Z, w przeciwieństwie do W".
+          id: "fund_positioning",
+          label: "Pozycjonowanie / specjalizacja zdefiniowane",
+          weight: 0.2,
+          metric: "field_filled",
+          entity: "positioning",
+          field: "positioningStatement",
         },
       ],
       lock: { enabled: true, requiresUpstream: [] },
@@ -182,26 +191,6 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
       visibleInClient: true,
     },
     {
-      key: "buyer_journey",
-      label: "Podróż zakupowa klienta",
-      readyThreshold: 80,
-      inProgressThreshold: 1,
-      criteria: [
-        {
-          id: "buyer_journey_count",
-          // Po scaleniu taksonomii podróży: jedno źródło prawdy = purchase_stages.
-          label: "≥1 etap podróży zakupowej",
-          weight: 1,
-          metric: "count_gte",
-          entity: "purchaseStages",
-          target: 1,
-        },
-      ],
-      lock: { enabled: true, requiresUpstream: ["segmenty"] },
-      stale: { enabled: true },
-      visibleInClient: false,
-    },
-    {
       key: "lejek",
       label: "Lejek",
       readyThreshold: 80,
@@ -209,24 +198,29 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
       criteria: [
         {
           id: "lejek_stages",
-          label: "Etapy zakupu",
-          weight: 0.25,
+          label: "Etapy podróży zakupowej",
+          weight: 0.15,
           metric: "count_gte",
           entity: "purchaseStages",
           target: 1,
         },
         {
-          id: "lejek_elements",
-          label: "Elementy lejka",
-          weight: 0.25,
-          metric: "count_gte",
-          entity: "funnelElements",
-          target: 1,
+          // Gap engine (Negacz): każdy etap ma odpowiedź-treść, nie „ile elementów".
+          id: "journey_content_coverage",
+          label: "Każdy etap podróży ma treść",
+          weight: 0.35,
+          metric: "custom",
+        },
+        {
+          id: "journey_exit_coverage",
+          label: "Każdy etap ma wyjście do przodu (CTA)",
+          weight: 0.2,
+          metric: "custom",
         },
         {
           id: "lejek_flows",
           label: "User flows",
-          weight: 0.25,
+          weight: 0.1,
           metric: "count_gte",
           entity: "userFlows",
           target: 1,
@@ -234,7 +228,7 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
         {
           id: "lejek_cta_measurable",
           label: "CTA elementów lejka powiązane ze zdarzeniem konwersji",
-          weight: 0.25,
+          weight: 0.2,
           metric: "custom",
         },
       ],
@@ -251,10 +245,16 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
         {
           id: "map_channels",
           label: "≥4 kanały",
-          weight: 1,
+          weight: 0.4,
           metric: "count_gte",
           entity: "channels",
           target: 4,
+        },
+        {
+          id: "journey_channel_coverage",
+          label: "Każdy etap podróży ma kanał dystrybucji",
+          weight: 0.6,
+          metric: "custom",
         },
       ],
       lock: { enabled: true, requiresUpstream: ["lejek"] },
@@ -310,9 +310,16 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
       inProgressThreshold: 1,
       criteria: [
         {
+          // Gap engine: etapy `ownerSide=sales|shared` mają akcję handlową.
+          id: "journey_sales_coverage",
+          label: "Każdy etap sprzedażowy ma akcję handlową",
+          weight: 0.5,
+          metric: "custom",
+        },
+        {
           id: "sprzedaz_activities",
           label: "≥1 akcja procesu sprzedaży",
-          weight: 0.6,
+          weight: 0.25,
           metric: "count_gte",
           entity: "salesActivities",
           target: 1,
@@ -320,7 +327,7 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
         {
           id: "sprzedaz_pitches",
           label: "≥1 pitch sprzedażowy",
-          weight: 0.4,
+          weight: 0.25,
           metric: "count_gte",
           entity: "salesPitches",
           target: 1,
@@ -358,7 +365,7 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
         {
           id: "map_kpi_count",
           label: "≥4 wskaźniki",
-          weight: 0.6,
+          weight: 0.3,
           metric: "count_gte",
           entity: "kpis",
           target: 4,
@@ -366,6 +373,12 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
         {
           id: "kpi_measurable",
           label: "KPI powiązane ze zdarzeniem analitycznym (event_key)",
+          weight: 0.3,
+          metric: "custom",
+        },
+        {
+          id: "journey_kpi_coverage",
+          label: "Każdy etap podróży jest mierzony KPI",
           weight: 0.4,
           metric: "custom",
         },
@@ -501,7 +514,6 @@ export const DEFAULT_RULES: RulesConfig = RulesConfigSchema.parse({
     { from: "lejek", to: "strona" },
     { from: "kanaly", to: "kpi" },
     { from: "strona", to: "kpi" },
-    { from: "segmenty", to: "buyer_journey" },
     { from: "fundament", to: "pitche" },
     { from: "segmenty", to: "pitche" },
     { from: "strona", to: "sekcje" },

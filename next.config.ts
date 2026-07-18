@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import bundleAnalyzer from "@next/bundle-analyzer";
 
+// Nagłówki bezpieczeństwa (CSP nonce, HSTS, COOP itd.) — jedno źródło: proxy.ts.
 const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],

@@ -18,6 +18,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { emitToast } from "@/lib/strategy-hub/toast";
 
 type CompetitorType = "direct" | "indirect" | "none";
 
@@ -270,8 +271,8 @@ export function CompetitorsEditor({
         setDraftName("");
         setDraftUrl("");
         flashSaved();
-      } catch (err) {
-        console.error(err);
+      } catch {
+        emitToast("Nie udało się dodać konkurenta.");
       }
     });
   };
@@ -281,8 +282,8 @@ export function CompetitorsEditor({
       try {
         await onUpdate(id, patch);
         flashSaved();
-      } catch (err) {
-        console.error(err);
+      } catch {
+        emitToast("Nie udało się zapisać zmian.");
       }
     });
   };
@@ -292,8 +293,8 @@ export function CompetitorsEditor({
       try {
         await onRemove(id);
         flashSaved();
-      } catch (err) {
-        console.error(err);
+      } catch {
+        emitToast("Nie udało się usunąć konkurenta.");
       }
     });
   };

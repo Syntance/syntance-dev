@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/strategy-hub/entity-singleton";
+import { apiFetch } from "@/lib/strategy-hub/api-fetch";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -67,12 +68,11 @@ export function AgentPanel({ projectId }: Props) {
   const [undoing, setUndoing] = React.useState<string | null>(null);
 
   const refreshItems = React.useCallback(() => {
-    void fetch(`${base}?status=applied`, { signal: AbortSignal.timeout(8000) })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { items?: ActivityItem[] } | null) => {
-        if (data) setItems(data.items ?? []);
-      })
-      .catch(() => null);
+    void apiFetch<{ items?: ActivityItem[] }>(`${base}?status=applied`, {
+      silent: true,
+    })
+      .then((data) => setItems(data.items ?? []))
+      .catch(() => {}); // tło, niekrytyczne
   }, [base]);
 
   React.useEffect(() => {
@@ -82,14 +82,11 @@ export function AgentPanel({ projectId }: Props) {
   const run = async (mode: AgentMode) => {
     setRunning(mode);
     try {
-      const res = await fetch(base, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode }),
-      });
-      if (res.ok) refreshItems();
-    } catch (err) {
-      console.error("agent run failed", err);
+      // Agent pracuje długo (LLM) — dłuższy timeout niż standardowe 8 s.
+      await apiFetch(base, { method: "POST", json: { mode }, timeoutMs: 120_000 });
+      refreshItems();
+    } catch {
+      // toast pokazuje apiFetch
     } finally {
       setRunning(null);
     }
@@ -98,13 +95,13 @@ export function AgentPanel({ projectId }: Props) {
   const undo = async (batchId: string) => {
     setUndoing(batchId);
     try {
-      const res = await fetch(
+      await apiFetch(
         `/api/strategy-hub/projects/${projectId}/changes/${batchId}/undo`,
-        { method: "POST", signal: AbortSignal.timeout(15000) }
+        { method: "POST", timeoutMs: 15_000 }
       );
-      if (res.ok) refreshItems();
-    } catch (err) {
-      console.error("undo failed", err);
+      refreshItems();
+    } catch {
+      // toast pokazuje apiFetch
     } finally {
       setUndoing(null);
     }

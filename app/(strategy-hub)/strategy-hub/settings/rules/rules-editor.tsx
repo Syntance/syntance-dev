@@ -114,14 +114,22 @@ export function RulesEditor({ initialGlobal, projectScopes }: Props) {
         </p>
       )}
 
-      <Tabs defaultValue="connections">
+      <Tabs defaultValue="journey">
         <TabsList className="flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="journey">Podróż (gap engine)</TabsTrigger>
           <TabsTrigger value="connections">Zależności</TabsTrigger>
           <TabsTrigger value="correlations">Korelacje</TabsTrigger>
           <TabsTrigger value="modules">Moduły</TabsTrigger>
           <TabsTrigger value="alerts">Alerty</TabsTrigger>
           <TabsTrigger value="appearance">Wygląd</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="journey" className="mt-4">
+          <JourneyCoverageEditor
+            coverage={draft.journeyCoverage}
+            onChange={(journeyCoverage) => patch({ journeyCoverage })}
+          />
+        </TabsContent>
 
         <TabsContent value="connections" className="mt-4">
           <ConnectionsMatrix
@@ -160,6 +168,84 @@ export function RulesEditor({ initialGlobal, projectScopes }: Props) {
           />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ─── Podróż zakupowa (gap engine, logika Negacza) ─────────────────────────────
+
+const COVERAGE_TOGGLES: {
+  key: keyof RulesConfig["journeyCoverage"];
+  label: string;
+  hint: string;
+}[] = [
+  {
+    key: "requireContent",
+    label: "Każdy etap wymaga treści",
+    hint: "Element lejka odpowiadający na pytania etapu — bez niego etap jest luką.",
+  },
+  {
+    key: "requireChannel",
+    label: "Każdy etap wymaga kanału dystrybucji",
+    hint: "Relacja „publikowany w” / „promowany przez” lub plan aktywności z etapem.",
+  },
+  {
+    key: "requireSales",
+    label: "Etapy sprzedażowe wymagają akcji handlowej",
+    hint: "Dotyczy etapów z „Prowadzi” = sprzedaż lub wspólny. E-commerce bez handlowców może to wyłączyć.",
+  },
+  {
+    key: "requireExit",
+    label: "Każdy etap (poza ostatnim) wymaga wyjścia do przodu",
+    hint: "Relacja „prowadzi do etapu” lub „ląduje na” — treść bez wyjścia to ślepa uliczka.",
+  },
+  {
+    key: "requireKpi",
+    label: "Każdy etap wymaga KPI",
+    hint: "KPI przypięty do etapu lub do treści etapu relacją „mierzony przez”.",
+  },
+  {
+    key: "retentionSkipsChannel",
+    label: "Etapy retencyjne nie wymagają kanału akwizycji",
+    hint: "Wyjątek dla etapów z tagiem fazy „retencja”.",
+  },
+];
+
+function JourneyCoverageEditor({
+  coverage,
+  onChange,
+}: {
+  coverage: RulesConfig["journeyCoverage"];
+  onChange: (next: RulesConfig["journeyCoverage"]) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Gap engine podróży zakupowej (logika Negacza): które odpowiedzi na etap są
+        wymagane, żeby etap nie liczył się jako luka. Te reguły zasilają liczniki
+        luk w Journey/Lejku/Blueprincie ORAZ health score obszarów — jedno źródło
+        prawdy o kompletności strategii.
+      </p>
+      <div className="space-y-2">
+        {COVERAGE_TOGGLES.map((t) => (
+          <div
+            key={t.key}
+            className="flex items-start gap-3 rounded-lg border border-border bg-card/40 p-3"
+          >
+            <input
+              id={`journey-coverage-${t.key}`}
+              type="checkbox"
+              checked={coverage[t.key]}
+              onChange={(e) => onChange({ ...coverage, [t.key]: e.target.checked })}
+              className="mt-0.5 size-4 accent-[var(--brand)]"
+            />
+            <label htmlFor={`journey-coverage-${t.key}`} className="cursor-pointer">
+              <span className="block text-sm font-medium">{t.label}</span>
+              <span className="block text-xs text-muted-foreground">{t.hint}</span>
+            </label>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

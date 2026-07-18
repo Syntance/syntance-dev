@@ -24,11 +24,14 @@ import {
   copyGuidelines,
 } from "@/db/schema";
 import { eq, isNull, and, count } from "drizzle-orm";
+import { brandPositioning } from "@/db/schema";
 import { HEALTH_MODULE_KEYS, findModuleRule } from "./rules/defaults";
 import { computeModuleScore, type CriterionContext } from "./rules/evaluate";
 import { resolveRules } from "./rules/resolve";
 import { resolveStatusesFromContext, type ModuleState } from "./rules/state";
 import { projectModuleHref } from "./area-routes";
+import { computeProjectCoverage, coverageRatio } from "./journey-coverage";
+import { pluralCount } from "./pluralize";
 
 interface ModuleHealth {
   key: string;
@@ -55,28 +58,32 @@ function moduleHref(projectId: string, key: (typeof HEALTH_MODULE_KEYS)[number])
   return projectModuleHref(projectId, key);
 }
 
+function gapSuffix(gaps: number): string {
+  return gaps > 0 ? ` · ${pluralCount(gaps, "luka", "luki", "luk")}` : "";
+}
+
 function buildHint(key: string, ctx: CriterionContext, score: number): string {
   switch (key) {
     case "discovery":
-      return `${ctx.qN} pytań · ${ctx.matN} materiałów`;
+      return `${pluralCount(ctx.qN, "pytanie", "pytania", "pytań")} · ${pluralCount(ctx.matN, "materiał", "materiały", "materiałów")}`;
     case "brand":
       return score >= 100 ? "Kompletna" : "Uzupełnij tożsamość";
     case "fundament":
-      return `${ctx.problemCount} problemów · ${ctx.competitorCount} konkurentów · ${ctx.objectionCount} obiekcji`;
+      return `${pluralCount(ctx.problemCount, "problem", "problemy", "problemów")} · ${pluralCount(ctx.competitorCount, "konkurent", "konkurentów", "konkurentów")} · ${pluralCount(ctx.objectionCount, "obiekcja", "obiekcje", "obiekcji")}`;
     case "segmenty":
-      return `${ctx.segN} grup docelowych`;
+      return pluralCount(ctx.segN, "grupa docelowa", "grupy docelowe", "grup docelowych");
     case "lejek":
-      return `${ctx.stageCount} etapów · ${ctx.elementCount} elementów`;
+      return `${pluralCount(ctx.stageCount, "etap", "etapy", "etapów")} · ${pluralCount(ctx.elementCount, "element", "elementy", "elementów")}${gapSuffix(ctx.journeyGapCount ?? 0)}`;
     case "kanaly":
-      return `${ctx.chN} kanałów`;
+      return `${pluralCount(ctx.chN, "kanał", "kanały", "kanałów")} · pokrycie etapów ${Math.round((ctx.journeyChannelCoverage ?? 0) * 100)}%`;
     case "przekaz":
-      return `${ctx.pitchN} pitchów · ${ctx.scriptN} skryptów`;
+      return `${pluralCount(ctx.pitchN, "pitch", "pitche", "pitchów")} · ${pluralCount(ctx.scriptN, "skrypt", "skrypty", "skryptów")}`;
     case "sprzedaz":
-      return `${ctx.salesActivityCount ?? 0} akcji · ${ctx.pitchN} pitchów`;
+      return `${pluralCount(ctx.salesActivityCount ?? 0, "akcja", "akcje", "akcji")} · pokrycie etapów ${Math.round((ctx.journeySalesCoverage ?? 0) * 100)}%`;
     case "strona":
-      return `${ctx.pageN} podstron`;
+      return pluralCount(ctx.pageN, "podstrona", "podstrony", "podstron");
     case "kpi":
-      return `${ctx.kpiN} wskaźników`;
+      return `${pluralCount(ctx.kpiN, "wskaźnik", "wskaźniki", "wskaźników")} · pokrycie etapów ${Math.round((ctx.journeyKpiCoverage ?? 0) * 100)}%`;
     default:
       return "";
   }
@@ -93,7 +100,12 @@ function nonEmpty(v: string | null | undefined): boolean {
 export async function computeProjectHealth(
   projectId: string
 ): Promise<ProjectHealth> {
-  const rules = await resolveRules(projectId);
+  // Gap engine podróży zakupowej — jedno źródło prawdy o kompletności maszyny
+  // (Journey/Canvas/Pipeline liczą z tego samego; audyt 2026-07-17).
+  const [rules, journey] = await Promise.all([
+    resolveRules(projectId),
+    computeProjectCoverage(projectId),
+  ]);
 
   // Kontekst kryteriów — te same tabele i filtry co `strategy-map.ts`
   // (jedna taksonomia = health i mapa liczą z tych samych danych).
@@ -102,6 +114,7 @@ export async function computeProjectHealth(
     visual,
     uvpRow,
     copyRow,
+    positioningRow,
     [segCount],
     [chCount],
     [pitchCount],
@@ -138,6 +151,16 @@ export async function computeProjectHealth(
       .select()
       .from(copyGuidelines)
       .where(eq(copyGuidelines.projectId, projectId))
+      .limit(1)
+      .then((r) => r[0]),
+    db
+      .select({
+        statementMd: brandPositioning.statementMd,
+        nicheMd: brandPositioning.nicheMd,
+        antiIcpMd: brandPositioning.antiIcpMd,
+      })
+      .from(brandPositioning)
+      .where(eq(brandPositioning.projectId, projectId))
       .limit(1)
       .then((r) => r[0]),
     db
@@ -266,6 +289,19 @@ export async function computeProjectHealth(
     brandVisual: visual ?? null,
     uvp: uvpRow ?? null,
     copyGuidelines: copyRow ?? null,
+    positioning: positioningRow
+      ? {
+          positioningStatement: positioningRow.statementMd,
+          nicheMd: positioningRow.nicheMd,
+          antiIcpMd: positioningRow.antiIcpMd,
+        }
+      : null,
+    journeyContentCoverage: coverageRatio(journey, ["content"]),
+    journeyChannelCoverage: coverageRatio(journey, ["channel"]),
+    journeySalesCoverage: coverageRatio(journey, ["sales"]),
+    journeyExitCoverage: coverageRatio(journey, ["exit"]),
+    journeyKpiCoverage: coverageRatio(journey, ["kpi"]),
+    journeyGapCount: journey.gapCount,
     kpiMeasurableRatio:
       kpiEventRows.length > 0
         ? kpiEventRows.filter((k) => !!k.eventKey).length / kpiEventRows.length

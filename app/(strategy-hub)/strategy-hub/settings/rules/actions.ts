@@ -5,8 +5,23 @@ import { db } from "@/db";
 import { strategyRuleSets } from "@/db/schema";
 import { RulesConfigSchema, type RulesConfig } from "@/lib/strategy-hub/rules/types";
 import { DEFAULT_RULES } from "@/lib/strategy-hub/rules/defaults";
+import {
+  getStrategyHubAccess,
+  getAdminRole,
+} from "@/lib/strategy-hub/context";
+
+/** Zapis reguł tylko dla właściciela workspace (Server Action = publiczny POST). */
+async function requireOwner(): Promise<void> {
+  const access = await getStrategyHubAccess();
+  if (!access) throw new Error("Brak dostępu");
+  const role = await getAdminRole(access.session.email);
+  if (role !== "owner") {
+    throw new Error("Reguły strategii może zmieniać tylko właściciel workspace");
+  }
+}
 
 export async function upsertRules(scope: string, config: RulesConfig) {
+  await requireOwner();
   const parsed = RulesConfigSchema.parse(config);
 
   await db

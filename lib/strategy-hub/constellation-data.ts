@@ -535,8 +535,4 @@ export async function getConstellationData(
   };
 }
 
-export type {
-  ConstellationData,
-  ConstellationLink,
-  ConstellationNode,
-} from "@/lib/strategy-hub/constellation-types";
+export type { ConstellationData } from "@/lib/strategy-hub/constellation-types";

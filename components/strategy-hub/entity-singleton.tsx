@@ -11,6 +11,7 @@ import { Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { apiFetch } from "@/lib/strategy-hub/api-fetch";
 
 type SaveStatus = "idle" | "saving" | "saved";
 type Data = Record<string, unknown>;
@@ -30,10 +31,9 @@ export function useSingleton(projectId: string, entity: string) {
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetch(base, { signal: ctrl.signal })
-      .then((r) => (r.ok ? r.json() : { item: null }))
+    apiFetch<{ item?: Data | null }>(base, { signal: ctrl.signal })
       .then((j) => setData(j.item ?? {}))
-      .catch(() => {})
+      .catch(() => {}) // toast pokazuje apiFetch
       .finally(() => setLoaded(true));
     return () => ctrl.abort();
   }, [base]);
@@ -44,16 +44,11 @@ export function useSingleton(projectId: string, entity: string) {
     if (Object.keys(patch).length === 0) return;
     setStatus("saving");
     try {
-      await fetch(base, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-        signal: AbortSignal.timeout(8000),
-      });
+      await apiFetch(base, { method: "PATCH", json: patch });
       setStatus("saved");
       setTimeout(() => setStatus("idle"), 1500);
-    } catch (err) {
-      console.error("singleton save failed", err);
+    } catch {
+      // toast pokazuje apiFetch; status wraca do idle bez fałszywego "saved"
       setStatus("idle");
     }
   }, [base]);

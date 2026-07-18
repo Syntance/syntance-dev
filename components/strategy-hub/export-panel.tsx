@@ -15,6 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/strategy-hub/entity-singleton";
+import { apiFetch } from "@/lib/strategy-hub/api-fetch";
+import { emitToast } from "@/lib/strategy-hub/toast";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -51,12 +53,9 @@ export function ExportPanel({ projectId }: Props) {
   const [sentOk, setSentOk] = useState<ExportType | null>(null);
 
   const refreshJobs = useCallback(() => {
-    void fetch(base, { signal: AbortSignal.timeout(8000) })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { items?: ExportJob[] } | null) => {
-        if (data) setJobs(data.items ?? []);
-      })
-      .catch(() => null);
+    void apiFetch<{ items?: ExportJob[] }>(base, { silent: true })
+      .then((data) => setJobs(data.items ?? []))
+      .catch(() => {}); // tło, niekrytyczne
   }, [base]);
 
   useEffect(() => {
@@ -83,8 +82,8 @@ export function ExportPanel({ projectId }: Props) {
       a.click();
       URL.revokeObjectURL(url);
       refreshJobs();
-    } catch (err) {
-      console.error("export download failed", err);
+    } catch {
+      emitToast("Eksport nie powiódł się. Spróbuj ponownie.");
     } finally {
       setDownloading(null);
     }
@@ -94,19 +93,18 @@ export function ExportPanel({ projectId }: Props) {
     if (!email.trim()) return;
     setSending(true);
     try {
-      const res = await fetch(`${base}/deliver`, {
+      // Generowanie + wysyłka maila trwa — dłuższy timeout niż standardowe 8 s.
+      await apiFetch(`${base}/deliver`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, email: email.trim() }),
+        json: { type, email: email.trim() },
+        timeoutMs: 30_000,
       });
-      if (res.ok) {
-        setSentOk(type);
-        setTimeout(() => setSentOk(null), 3000);
-        setEmailFor(null);
-        refreshJobs();
-      }
-    } catch (err) {
-      console.error("export email failed", err);
+      setSentOk(type);
+      setTimeout(() => setSentOk(null), 3000);
+      setEmailFor(null);
+      refreshJobs();
+    } catch {
+      // toast pokazuje apiFetch
     } finally {
       setSending(false);
     }

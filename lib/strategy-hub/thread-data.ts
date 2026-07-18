@@ -33,16 +33,7 @@ import type {
   ThreadEdge,
   ThreadNode,
 } from "@/lib/strategy-hub/thread-types";
-export type {
-  ThreadData,
-  ThreadDecision,
-  ThreadEdge,
-  ThreadNode,
-} from "@/lib/strategy-hub/thread-types";
-export {
-  parseThreadParam,
-  threadParamFromRef,
-} from "@/lib/strategy-hub/thread-types";
+export type { ThreadData } from "@/lib/strategy-hub/thread-types";
 
 const CANONICAL_AXIS: EntityTypeKey[] = [
   "segment",

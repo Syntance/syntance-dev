@@ -185,6 +185,45 @@ export function SalesProcessBoard({ projectId, initialData }: Props) {
     }
   };
 
+  /** Przypina odpowiedź do obiekcji: relacja materiał → obiekcja `oslabia`. */
+  const pinAnswer = async (objectionId: string, refValue: string) => {
+    if (!refValue) return;
+    const [type, id] = refValue.split("|");
+    try {
+      await fetch(`/api/strategy-hub/projects/${projectId}/relations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: { type, id },
+          target: { type: "objection", id: objectionId },
+          relationType: "oslabia",
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+    } finally {
+      await refresh(segmentId);
+    }
+  };
+
+  const unpinAnswer = async (objectionId: string, relationId: string) => {
+    setData((prev) => ({
+      ...prev,
+      objections: prev.objections.map((o) =>
+        o.id === objectionId
+          ? { ...o, answers: o.answers.filter((a) => a.relationId !== relationId) }
+          : o
+      ),
+    }));
+    try {
+      await fetch(
+        `/api/strategy-hub/projects/${projectId}/relations/${relationId}`,
+        { method: "DELETE" }
+      );
+    } catch {
+      /* best-effort */
+    }
+  };
+
   if (data.segments.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border p-8 text-center">
@@ -324,6 +363,7 @@ export function SalesProcessBoard({ projectId, initialData }: Props) {
                               onChange={(e) =>
                                 saveActivity(a.id, "name", e.target.value)
                               }
+                              aria-label="Nazwa akcji handlowej"
                               className="h-7 flex-1 border-0 bg-transparent px-0 text-xs font-medium shadow-none focus-visible:ring-0"
                             />
                             <button
@@ -340,6 +380,7 @@ export function SalesProcessBoard({ projectId, initialData }: Props) {
                             onChange={(e) =>
                               saveActivity(a.id, "type", e.target.value || null, 0)
                             }
+                            aria-label="Typ akcji handlowej"
                             className="h-6 w-full rounded-md border border-border bg-transparent px-1.5 text-[10px] text-muted-foreground focus-visible:outline-none"
                           >
                             <option value="">typ akcji —</option>
@@ -441,9 +482,95 @@ export function SalesProcessBoard({ projectId, initialData }: Props) {
         </div>
       )}
 
+      {data.objections.length > 0 && !loading && (
+        <div className="shrink-0 space-y-2 border-t border-border pt-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Obiekcje segmentu — odpowiedzi sprzedaży
+            </p>
+            <Link
+              href={`/strategy-hub/projects/${projectId}/foundation/business`}
+              className="text-[10px] text-brand hover:underline"
+            >
+              edytuj obiekcje
+            </Link>
+          </div>
+          <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+            {data.objections.map((o) => {
+              const answered = o.hasResponse || o.answers.length > 0;
+              const pinnedRefs = new Set(o.answers.map((a) => `${a.type}|${a.id}`));
+              const availableAnswers = data.library.filter(
+                (l) => !pinnedRefs.has(`${l.type}|${l.id}`)
+              );
+              return (
+                <div
+                  key={o.id}
+                  className={cn(
+                    "space-y-1.5 rounded-lg border p-2",
+                    answered ? "border-border bg-card/40" : "border-amber-500/40 bg-amber-500/5"
+                  )}
+                >
+                  <p className="line-clamp-2 text-[11px] text-foreground/90">
+                    {o.objectionMd}
+                  </p>
+                  {!answered && (
+                    <p className="text-[10px] font-medium text-amber-600">
+                      luka: obiekcja bez odpowiedzi
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-1">
+                    {o.hasResponse && (
+                      <span className="rounded-full border border-emerald-500/40 px-2 py-0.5 text-[10px] text-emerald-600">
+                        odpowiedź spisana
+                      </span>
+                    )}
+                    {o.answers.map((a) => (
+                      <span
+                        key={a.relationId}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]",
+                          ATTACHMENT_BADGE[a.type].className
+                        )}
+                        title="Materiał osłabiający obiekcję (relacja „osłabia”)"
+                      >
+                        <span className="max-w-[110px] truncate">{a.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => void unpinAnswer(o.id, a.relationId)}
+                          aria-label={`Odepnij odpowiedź ${a.label}`}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="size-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  {availableAnswers.length > 0 && (
+                    <select
+                      value=""
+                      onChange={(e) => void pinAnswer(o.id, e.target.value)}
+                      aria-label="Przypnij odpowiedź osłabiającą obiekcję"
+                      className="h-6 w-full rounded-md border border-dashed border-border bg-transparent px-1.5 text-[10px] text-muted-foreground focus-visible:outline-none"
+                    >
+                      <option value="">+ przypnij odpowiedź (pitch / skrypt / magnet)…</option>
+                      {availableAnswers.map((l) => (
+                        <option key={`${l.type}|${l.id}`} value={`${l.type}|${l.id}`}>
+                          {ATTACHMENT_BADGE[l.type].label}: {l.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <p className="text-[11px] text-muted-foreground">
         Kolumny = etapy podróży zakupowej segmentu (edycja: Rynek → Podróż
         zakupowa). Granica MQL→SQL wynika z pola &bdquo;Prowadzi&rdquo; na etapach.
+        Obiekcja bez odpowiedzi (spisanej lub przypiętej relacją „osłabia”) = luka.
       </p>
     </div>
   );

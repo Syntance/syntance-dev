@@ -162,9 +162,13 @@ async function run() {
       assert.ok(DEFAULT_RULES.presentationOrder.includes("sprzedaz"));
     });
 
-    await test("buyer_journey liczy purchaseStages (scalona taksonomia)", () => {
-      const mod = findModuleRule(DEFAULT_RULES, "buyer_journey");
-      assert.equal(mod?.criteria[0]?.entity, "purchaseStages");
+    await test("moduł buyer_journey usunięty (N5) — podróż liczy się w lejku", () => {
+      assert.equal(findModuleRule(DEFAULT_RULES, "buyer_journey"), undefined);
+      const lejek = findModuleRule(DEFAULT_RULES, "lejek");
+      assert.ok(
+        lejek?.criteria.some((c) => c.id === "journey_content_coverage"),
+        "lejek ma kryterium pokrycia etapów treścią"
+      );
     });
 
     const view = await getJourneyView(projectId, segment.id);

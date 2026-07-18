@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { emitToast } from "@/lib/strategy-hub/toast";
 
 interface FieldConfig {
   name: string;
@@ -76,8 +77,8 @@ export function ResourceList<T extends { id: string }>({
       try {
         await onSave(data);
         setOpen(false);
-      } catch (err) {
-        console.error(err);
+      } catch {
+        emitToast("Nie udało się zapisać.");
       }
     });
   }

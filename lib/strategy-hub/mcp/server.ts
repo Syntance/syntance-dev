@@ -17,7 +17,6 @@ import {
   channels,
   funnelElements,
   purchaseStages,
-  buyerJourneyStages,
   aiProposals,
 } from "@/db/schema";
 import { eq, isNull, and, asc, desc, inArray } from "drizzle-orm";
@@ -710,7 +709,7 @@ export function createStrategyHubMcpServer() {
     "hub_list_children",
     {
       description:
-        "Listuje dzieci encji nadrzędnej. scope: segment|page|audit|kpi. child: klucz z odpowiedniego katalogu (np. buyer-journey, sections, findings, snapshots). parentId: id encji nadrzędnej.",
+        "Listuje dzieci encji nadrzędnej. scope: segment|page|audit|kpi. child: klucz z odpowiedniego katalogu (np. purchase-stages, sections, findings, snapshots). parentId: id encji nadrzędnej.",
       inputSchema: z.object({
         scope: z.enum(["segment", "page", "audit", "kpi"]),
         child: z.string(),
@@ -834,37 +833,8 @@ export function createStrategyHubMcpServer() {
       })
   );
 
-  server.registerTool(
-    "hub_promote_to_funnel",
-    {
-      description:
-        "Przekuwa etap mapy myśli klienta (buyer journey stage) na nowy element lejka we wskazanym etapie zakupu (purchase stage). Odpowiednik akcji „Przekuj na lejek” w UI.",
-      inputSchema: z.object({
-        buyerJourneyStageId: z.string().uuid(),
-        targetPurchaseStageId: z.string().uuid(),
-      }),
-    },
-    async ({ buyerJourneyStageId, targetPurchaseStageId }) =>
-      safeRun(async () => {
-        const [stage] = await db
-          .select()
-          .from(buyerJourneyStages)
-          .where(eq(buyerJourneyStages.id, buyerJourneyStageId))
-          .limit(1);
-        if (!stage) throw new Error("Buyer journey stage not found");
-        const inserted = await db
-          .insert(funnelElements)
-          .values({
-            stageId: targetPurchaseStageId,
-            segmentId: stage.segmentId,
-            name: stage.name,
-            contentMd: stage.ourActionMd,
-            position: 0,
-          })
-          .returning();
-        return inserted[0];
-      })
-  );
+  // (hub_promote_to_funnel usunięte w N5 — podróż zakupowa JEST szkieletem
+  //  lejka po scaleniu taksonomii; „przekuwanie” nie ma już czego przekuwać.)
 
   // ── Narzędzia AI-workflow (Faza 12, M3) — spinają się z Agentem AI (Faza 10) ─
 

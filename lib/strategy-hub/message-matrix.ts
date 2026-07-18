@@ -17,13 +17,13 @@ import { listRelations } from "@/lib/strategy-hub/relations/store";
  * przypięte relacją „uzywany_w_etapie". Pusta komórka = luka przekazu.
  */
 
-export interface MatrixCellItem {
+interface MatrixCellItem {
   type: "element" | "sales_pitch" | "sales_script" | "lead_magnet";
   id: string;
   label: string;
 }
 
-export interface MatrixCell {
+interface MatrixCell {
   stageId: string;
   stageName: string;
   orderIdx: number;
@@ -32,7 +32,7 @@ export interface MatrixCell {
   isGap: boolean;
 }
 
-export interface MatrixRow {
+interface MatrixRow {
   segmentId: string;
   segmentName: string;
   icon: string | null;

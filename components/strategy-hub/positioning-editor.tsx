@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { emitToast } from "@/lib/strategy-hub/toast";
 import {
   Plus,
   Trash2,
@@ -43,6 +44,8 @@ interface PositioningEditorProps {
   ourLabel: string;
   competitors: CompetitorMarker[];
   statementMd: string;
+  nicheMd: string;
+  antiIcpMd: string;
   onSave: (
     patch: Partial<{
       axisXLabel: string | null;
@@ -52,6 +55,8 @@ interface PositioningEditorProps {
       ourLabel: string | null;
       competitorsOnQuadrant: CompetitorMarker[] | null;
       statementMd: string | null;
+      nicheMd: string | null;
+      antiIcpMd: string | null;
     }>
   ) => Promise<void>;
 }
@@ -97,6 +102,8 @@ export function PositioningEditor({
   ourLabel: ourLabelInit,
   competitors,
   statementMd: statementInit,
+  nicheMd: nicheInit,
+  antiIcpMd: antiIcpInit,
   onSave,
 }: PositioningEditorProps) {
   const [axisX, setAxisX] = useState(axisXInit);
@@ -107,6 +114,8 @@ export function PositioningEditor({
   );
   const [comps, setComps] = useState<CompetitorMarker[]>(competitors);
   const [statement, setStatement] = useState(statementInit);
+  const [niche, setNiche] = useState(nicheInit);
+  const [antiIcp, setAntiIcp] = useState(antiIcpInit);
   const [pending, startTransition] = useTransition();
   const [savedTick, setSavedTick] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -138,8 +147,8 @@ export function PositioningEditor({
           try {
             await onSave(patch);
             flashSaved();
-          } catch (err) {
-            console.error(err);
+          } catch {
+            emitToast("Nie udało się zapisać pozycjonowania.");
           }
         });
       }, delay);
@@ -346,6 +355,16 @@ export function PositioningEditor({
   const onStatementChange = (v: string) => {
     setStatement(v);
     debouncedSave({ statementMd: v || null });
+  };
+
+  const onNicheChange = (v: string) => {
+    setNiche(v);
+    debouncedSave({ nicheMd: v || null });
+  };
+
+  const onAntiIcpChange = (v: string) => {
+    setAntiIcp(v);
+    debouncedSave({ antiIcpMd: v || null });
   };
 
   // Skróty osi: "Premium ↔ Tania" → ["Premium", "Tania"]
@@ -660,6 +679,48 @@ export function PositioningEditor({
               onChange={(e) => onStatementChange(e.target.value)}
               placeholder="Dla [klient], który [potrzeba], jesteśmy [marką], która [korzyść], w przeciwieństwie do [konkurenta], my [różnica]."
               rows={4}
+              className={cn(
+                "w-full mt-1 px-2 py-1.5 text-sm rounded-md bg-muted/20 border border-border/40",
+                "outline-none focus:ring-1 focus:ring-ring",
+                "placeholder:text-muted-foreground/50 leading-snug"
+              )}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="positioning-niche"
+              className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold"
+            >
+              Nisza / specjalizacja
+            </label>
+            <textarea
+              id="positioning-niche"
+              value={niche}
+              onChange={(e) => onNicheChange(e.target.value)}
+              placeholder="W czym jesteśmy najlepsi i dla jak wąskiej grupy — wąska nisza wygrywa z „wszystko dla wszystkich”."
+              rows={3}
+              className={cn(
+                "w-full mt-1 px-2 py-1.5 text-sm rounded-md bg-muted/20 border border-border/40",
+                "outline-none focus:ring-1 focus:ring-ring",
+                "placeholder:text-muted-foreground/50 leading-snug"
+              )}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="positioning-anti-icp"
+              className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold"
+            >
+              Anty-ICP — dla kogo NIE jesteśmy
+            </label>
+            <textarea
+              id="positioning-anti-icp"
+              value={antiIcp}
+              onChange={(e) => onAntiIcpChange(e.target.value)}
+              placeholder="Komu świadomie odmawiamy — to chroni specjalizację i marże."
+              rows={3}
               className={cn(
                 "w-full mt-1 px-2 py-1.5 text-sm rounded-md bg-muted/20 border border-border/40",
                 "outline-none focus:ring-1 focus:ring-ring",

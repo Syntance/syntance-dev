@@ -208,6 +208,10 @@ export const brandPositioning = pgTable("brand_positioning", {
   /** [{label: string, x: number, y: number}] — markery konkurencji */
   competitorsOnQuadrant: jsonb("competitors_on_quadrant"),
   statementMd: text("statement_md"),
+  /** B3 (logika Negacza): nisza / specjalizacja — w czym jesteśmy najlepsi. */
+  nicheMd: text("niche_md"),
+  /** B3: anty-ICP — dla kogo świadomie NIE jesteśmy. */
+  antiIcpMd: text("anti_icp_md"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   updatedBy: uuid("updated_by"),
 });
@@ -908,23 +912,7 @@ export const marketSegmentationCriteria = pgTable(
 );
 
 // ─── Segmenty: dzieci ────────────────────────────────────────────────────────
-
-export const buyerJourneyStages = pgTable(
-  "buyer_journey_stages",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    segmentId: uuid("segment_id")
-      .notNull()
-      .references(() => segments.id, { onDelete: "cascade" }),
-    name: varchar("name", { length: 255 }).notNull(),
-    whatDoesMd: text("what_does_md"),
-    timeHint: varchar("time_hint", { length: 100 }),
-    ourActionMd: text("our_action_md"),
-    orderIdx: integer("order_idx").notNull().default(0),
-    deletedAt: timestamp("deleted_at"),
-  },
-  (t) => [index("buyer_journey_stages_segment_idx").on(t.segmentId)]
-);
+// (buyer_journey_stages zdropowane w 0027 — podróż zakupowa = purchase_stages)
 
 export const segmentQuickWins = pgTable(
   "segment_quick_wins",
@@ -1412,7 +1400,6 @@ export const segmentsRelations = relations(segments, ({ one, many }) => ({
   userFlows: many(userFlows),
   competitors: many(competitors),
   objections: many(objections),
-  buyerJourneyStages: many(buyerJourneyStages),
   quickWins: many(segmentQuickWins),
   risks: many(segmentRisks),
   channelActivityPlan: many(channelActivityPlan),
@@ -1567,16 +1554,6 @@ export const marketSegmentationCriteriaRelations = relations(
     project: one(projects, {
       fields: [marketSegmentationCriteria.projectId],
       references: [projects.id],
-    }),
-  })
-);
-
-export const buyerJourneyStagesRelations = relations(
-  buyerJourneyStages,
-  ({ one }) => ({
-    segment: one(segments, {
-      fields: [buyerJourneyStages.segmentId],
-      references: [segments.id],
     }),
   })
 );
@@ -2180,6 +2157,17 @@ export const adminUsers = pgTable("AdminUser", {
   }),
   /** 'owner' (może zarządzać zespołem) | 'member' (pełny dostęp do projektów, bez zarządzania zespołem). */
   role: varchar("role", { length: 20 }).notNull().default("owner"),
+});
+
+/**
+ * Fixed-window rate limit dla endpointów auth (login, request-reset,
+ * request-setup). Klucz: `scope:ip:email`. DB zamiast in-memory, żeby licznik
+ * przeżywał restart i wiele instancji — patrz `lib/rate-limit.ts`.
+ */
+export const authRateLimits = pgTable("auth_rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start").defaultNow().notNull(),
+  count: integer("count").notNull().default(0),
 });
 
 export const passwordResetTokens = pgTable("PasswordResetToken", {

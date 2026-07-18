@@ -22,7 +22,6 @@ import {
   seoKeywords,
   kpis,
   marketSegmentationCriteria,
-  buyerJourneyStages,
   pageSections,
   offers,
   funnelElementEvents,
@@ -128,7 +127,6 @@ export async function getStrategyMapData(
     campaignRows,
     geoAssetRows,
     marketCriteriaRow,
-    buyerJourneyRows,
     pageSectionRows,
     offerRows,
     salesActivityRows,
@@ -256,11 +254,6 @@ export async function getStrategyMapData(
       .where(eq(marketSegmentationCriteria.projectId, projectId))
       .limit(1),
     db
-      .select({ id: buyerJourneyStages.id })
-      .from(buyerJourneyStages)
-      .innerJoin(segments, eq(buyerJourneyStages.segmentId, segments.id))
-      .where(and(eq(segments.projectId, projectId), isNull(buyerJourneyStages.deletedAt))),
-    db
       .select({ id: pageSections.id })
       .from(pageSections)
       .innerJoin(pages, eq(pageSections.pageId, pages.id))
@@ -307,7 +300,6 @@ export async function getStrategyMapData(
     leadMagnetCount: leadMagnetRows.length,
     uvp: uvpData ?? null,
     copyGuidelines: copyData ?? null,
-    buyerJourneyStageCount: buyerJourneyRows.length,
     pageSectionCount: pageSectionRows.length,
     seoKeywordCount: seoRows.length,
     geoAssetCount: geoAssetRows.length,

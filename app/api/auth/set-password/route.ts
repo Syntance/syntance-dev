@@ -1,25 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/db";
 import { adminUsers, clientUsers, passwordResetTokens } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { hashPassword, signToken } from "@/lib/auth";
+import { hashPassword, signToken, sessionCookieOptions } from "@/lib/auth";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { getProjectsForUser } from "@/lib/client-portal/queries";
 
+const bodySchema = z.object({
+  token: z.string().min(10).max(200),
+  password: z
+    .string()
+    .min(8, "Hasło musi mieć minimum 8 znaków")
+    .max(200),
+});
+
 export async function POST(req: NextRequest) {
-  const { token, password } = await req.json();
-
-  if (!token || !password) {
-    return NextResponse.json(
-      { error: "Token i hasło są wymagane" },
-      { status: 400 }
-    );
+  const parsed = bodySchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    const message =
+      parsed.error.issues[0]?.message ?? "Token i hasło są wymagane";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
+  const { token, password } = parsed.data;
 
-  if (password.length < 8) {
+  // Limit per IP — utrudnia zgadywanie tokenów setup/invite.
+  const rate = await checkRateLimit(
+    `set-pw:${clientIp(req)}`,
+    10,
+    15 * 60 * 1000
+  );
+  if (!rate.ok) {
     return NextResponse.json(
-      { error: "Hasło musi mieć minimum 8 znaków" },
-      { status: 400 }
+      { error: "Zbyt wiele prób. Spróbuj ponownie później." },
+      { status: 429, headers: { "Retry-After": String(rate.retryAfterSec) } }
     );
   }
 
@@ -66,13 +81,7 @@ export async function POST(req: NextRequest) {
     });
 
     const response = NextResponse.json({ success: true, admin: true });
-    response.cookies.set("session", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
+    response.cookies.set("session", sessionToken, sessionCookieOptions());
     return response;
   }
 
@@ -109,12 +118,6 @@ export async function POST(req: NextRequest) {
     success: true,
     slug: accessible[0]?.slug,
   });
-  response.cookies.set("session", sessionToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/",
-  });
+  response.cookies.set("session", sessionToken, sessionCookieOptions());
   return response;
 }

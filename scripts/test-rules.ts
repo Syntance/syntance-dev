@@ -98,13 +98,13 @@ test("propagate: zmiana kpi → brak downstream", () => {
 
 // ── Faza 1 (M1) — dopełnienie macierzy 13 locków ze spec Notion ──
 
-// 11. Buyer journey wymaga Segment.
-test("lock: pusty segmenty blokuje buyer_journey", () => {
+// 11. Lejek wymaga Segment (podróż zakupowa liczy się w lejku — N5).
+test("lock: pusty segmenty blokuje lejek", () => {
   const s = resolveModuleStatuses(DEFAULT_RULES, {
     scoreOf: (k) => (k === "segmenty" ? 0 : 100),
   });
-  assert.equal(s.get("buyer_journey")?.locked, true);
-  assert.ok(s.get("buyer_journey")?.blockedBy.includes("segmenty"));
+  assert.equal(s.get("lejek")?.locked, true);
+  assert.ok(s.get("lejek")?.blockedBy.includes("segmenty"));
 });
 
 // 12. Pitche wymagają Segment+UVP+Obiekcje (fundament).
@@ -152,7 +152,7 @@ test("lock: pusta oferta blokuje kampanie, mimo gotowych kanałów/lejka", () =>
 // 17. Pełne dane → cała nowa macierz odblokowana i gotowa.
 test("ready: pełne dane → pitche/sekcje/seo/geo/oferta/kampanie ✅", () => {
   const s = resolveModuleStatuses(DEFAULT_RULES, { scoreOf: () => 100 });
-  for (const key of ["pitche", "sekcje", "seo", "geo", "oferta", "kampanie", "buyer_journey"]) {
+  for (const key of ["pitche", "sekcje", "seo", "geo", "oferta", "kampanie"]) {
     assert.equal(s.get(key)?.state, "ready", `${key} powinien być ready`);
   }
 });

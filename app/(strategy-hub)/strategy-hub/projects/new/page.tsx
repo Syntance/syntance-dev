@@ -2,12 +2,10 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { db } from "@/db";
 import { projects, businessStrategy } from "@/db/schema";
 import { requireStrategyHubAccess, getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import { NewProjectForm } from "./new-project-form";
 
 export const metadata = { title: "Nowy projekt" };
 
@@ -15,13 +13,24 @@ async function createProject(formData: FormData) {
   "use server";
 
   const name = formData.get("name") as string;
-  const slug = formData.get("slug") as string;
   const clientName = formData.get("clientName") as string;
   const domain = formData.get("domain") as string;
   const description = formData.get("description") as string;
   const icon = (formData.get("icon") as string) || "🏢";
 
-  if (!name || !slug) return;
+  if (!name) return;
+  // Fallback: pusty slug nigdy nie blokuje submitu po cichu — derywujemy z nazwy.
+  const slug =
+    (formData.get("slug") as string) ||
+    name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/ł/g, "l")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60);
+  if (!slug) return;
 
   const access = await requireStrategyHubAccess();
   const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
@@ -66,80 +75,7 @@ export default function NewProjectPage() {
         </div>
       </div>
 
-      <form action={createProject} className="space-y-5">
-        <div className="grid grid-cols-[auto_1fr] gap-4 items-start">
-          <div className="space-y-1.5">
-            <Label htmlFor="icon" className="text-xs">Ikona</Label>
-            <Input
-              id="icon"
-              name="icon"
-              placeholder="🏢"
-              defaultValue="🏢"
-              className="w-16 text-center text-lg"
-              maxLength={2}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="name" className="text-xs">
-              Nazwa projektu <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="name"
-              name="name"
-              placeholder="RetroHouse"
-              required
-              // eslint-disable-next-line jsx-a11y/no-autofocus -- pierwsze pole formularza nowego projektu.
-              autoFocus
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="slug" className="text-xs">
-            Slug <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="slug"
-            name="slug"
-            placeholder="retrohouse"
-            required
-            className="font-mono text-sm"
-          />
-          <p className="text-xs text-muted-foreground">
-            Używany jako identyfikator w URL. Tylko małe litery i myślniki.
-          </p>
-        </div>
-
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="clientName" className="text-xs">Nazwa klienta</Label>
-            <Input id="clientName" name="clientName" placeholder="Jan Kowalski" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="domain" className="text-xs">Domena</Label>
-            <Input id="domain" name="domain" placeholder="retrohouse.pl" />
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="description" className="text-xs">Opis projektu</Label>
-          <Textarea
-            id="description"
-            name="description"
-            placeholder="Krótki opis — co to za projekt, dla kogo, jaki cel."
-            rows={3}
-          />
-        </div>
-
-        <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/strategy-hub">Anuluj</Link>
-          </Button>
-          <Button type="submit" size="sm" className="bg-brand hover:bg-brand/90 text-white">
-            Utwórz projekt
-          </Button>
-        </div>
-      </form>
+      <NewProjectForm action={createProject} />
     </div>
   );
 }

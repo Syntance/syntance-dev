@@ -24,6 +24,8 @@ const patchSchema = z.object({
   ourLabel: z.string().max(100).optional().nullable(),
   competitorsOnQuadrant: z.array(competitorMarkerSchema).optional().nullable(),
   statementMd: z.string().optional().nullable(),
+  nicheMd: z.string().optional().nullable(),
+  antiIcpMd: z.string().optional().nullable(),
 });
 
 export async function GET(

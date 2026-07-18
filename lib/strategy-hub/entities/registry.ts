@@ -13,7 +13,6 @@ import {
   brandVisual,
   marketSegmentationCriteria,
   segments,
-  buyerJourneyStages,
   purchaseStages,
   salesActivities,
   segmentQuickWins,
@@ -37,7 +36,7 @@ import {
 } from "@/db/schema";
 
 /** Buduje warunek filtrowania po siteId (opcjonalny). */
-function siteFilter<T extends { siteId: unknown }>(
+export function siteFilter<T extends { siteId: unknown }>(
   table: T,
   siteId: string | null | undefined
 ) {
@@ -46,7 +45,7 @@ function siteFilter<T extends { siteId: unknown }>(
 }
 
 /** Buduje warunek filtrowania po pathId (lub IS NULL gdy brak). */
-function pathFilter<T extends { pathId: unknown }>(
+export function pathFilter<T extends { pathId: unknown }>(
   table: T,
   pathId: string | null | undefined
 ) {
@@ -104,7 +103,7 @@ export interface SingletonEntityDef<TPatch = unknown> {
 }
 
 /** Granica wymazania typu — Zod waliduje wejście przed wywołaniem closures. */
-function listDef<C, P>(d: ListEntityDef<C, P>): ListEntityDef {
+export function listDef<C, P>(d: ListEntityDef<C, P>): ListEntityDef {
   return d as unknown as ListEntityDef;
 }
 function singletonDef<P>(d: SingletonEntityDef<P>): SingletonEntityDef {
@@ -112,14 +111,14 @@ function singletonDef<P>(d: SingletonEntityDef<P>): SingletonEntityDef {
 }
 
 /** Usuwa klucze o wartości `undefined` (PATCH częściowy), zachowując typ. */
-function compact<T extends Row>(obj: T): Partial<T> {
+export function compact<T extends Row>(obj: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined)
   ) as Partial<T>;
 }
 
 /** Opcjonalne, nullowalne pole markdown/tekst. */
-const md = () => z.string().nullable().optional();
+export const md = () => z.string().nullable().optional();
 
 /** Id aktywnych etapów zakupu segmentu (scoping akcji sprzedażowych). */
 async function segmentStageIds(segmentId: string): Promise<string[]> {
@@ -216,15 +215,6 @@ const segmentCreate = z.object({
   scoring: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 const segmentPatch = segmentCreate.partial();
-
-const buyerStageCreate = z.object({
-  name: z.string().min(1).max(255),
-  whatDoesMd: md(),
-  timeHint: z.string().max(100).nullable().optional(),
-  ourActionMd: md(),
-  orderIdx: z.number().int().optional(),
-});
-const buyerStagePatch = buyerStageCreate.partial();
 
 const purchaseStageCreate = z.object({
   name: z.string().min(1).max(255),
@@ -1565,54 +1555,6 @@ const segmentChildEntities: Record<string, ListEntityDef> = {
         .returning({ id: salesActivities.id })
         .then((r) => r.length > 0);
     },
-  }),
-
-  "buyer-journey": listDef({
-    kind: "list",
-    label: "Etap podróży",
-    createSchema: buyerStageCreate,
-    patchSchema: buyerStagePatch,
-    list: (sid) =>
-      db
-        .select()
-        .from(buyerJourneyStages)
-        .where(
-          and(
-            eq(buyerJourneyStages.segmentId, sid),
-            isNull(buyerJourneyStages.deletedAt)
-          )
-        )
-        .orderBy(asc(buyerJourneyStages.orderIdx)),
-    create: (sid, data) =>
-      db
-        .insert(buyerJourneyStages)
-        .values({ segmentId: sid, ...data })
-        .returning()
-        .then((r) => r[0]),
-    update: (sid, itemId, data) =>
-      db
-        .update(buyerJourneyStages)
-        .set(compact(data))
-        .where(
-          and(
-            eq(buyerJourneyStages.id, itemId),
-            eq(buyerJourneyStages.segmentId, sid)
-          )
-        )
-        .returning()
-        .then((r) => r[0]),
-    softDelete: (sid, itemId) =>
-      db
-        .update(buyerJourneyStages)
-        .set({ deletedAt: new Date() })
-        .where(
-          and(
-            eq(buyerJourneyStages.id, itemId),
-            eq(buyerJourneyStages.segmentId, sid)
-          )
-        )
-        .returning({ id: buyerJourneyStages.id })
-        .then((r) => r.length > 0),
   }),
 
   "quick-wins": listDef({

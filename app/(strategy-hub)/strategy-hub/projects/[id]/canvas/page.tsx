@@ -15,6 +15,8 @@ import {
   HelpCircle,
   Sparkles,
   ArrowRight,
+  Milestone,
+  Handshake,
 } from "lucide-react";
 import { requireStrategyHubAccess } from "@/lib/strategy-hub/context";
 import { db } from "@/db";
@@ -22,6 +24,11 @@ import { projects } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 import { computeProjectHealth } from "@/lib/strategy-hub/health-score";
 import { getCanvasData } from "@/lib/strategy-hub/canvas-data";
+import {
+  computeProjectCoverage,
+  coverageRatio,
+} from "@/lib/strategy-hub/journey-coverage";
+import { pluralCount } from "@/lib/strategy-hub/pluralize";
 import { PositioningMini } from "@/components/strategy-hub/positioning-mini";
 import { HealthRing } from "@/components/strategy-hub/health-ring";
 import { cn } from "@/lib/utils";
@@ -110,10 +117,41 @@ export default async function CanvasPage({ params }: Props) {
   const project = rows[0];
   if (!project) notFound();
 
-  const [health, data] = await Promise.all([
+  const [health, data, journey] = await Promise.all([
     computeProjectHealth(id),
     getCanvasData(id),
+    computeProjectCoverage(id),
   ]);
+
+  // Statusy kafli lejka/podróży/sprzedaży z gap engine — nie z liczby rekordów
+  // (audyt 2026-07-17: „Kompletne” przy 11 lukach podważało wiarygodność).
+  const funnelStatus: TileStatus =
+    journey.stageCount === 0
+      ? "empty"
+      : journey.gapCount === 0
+        ? "complete"
+        : "partial";
+  const journeyStatus: TileStatus =
+    journey.segments.length === 0 || journey.stageCount === 0
+      ? "empty"
+      : journey.segmentsWithoutJourney.length === 0
+        ? "complete"
+        : "partial";
+  const salesCoveragePct = Math.round(coverageRatio(journey, ["sales"]) * 100);
+  const salesStatus: TileStatus =
+    journey.stageCount === 0 && data.sales.activities === 0
+      ? "empty"
+      : salesCoveragePct >= 100 && data.sales.activities > 0
+        ? "complete"
+        : data.sales.activities > 0 || salesCoveragePct > 0
+          ? "partial"
+          : "empty";
+  const segmentsStatus: TileStatus =
+    data.segments.total === 0
+      ? "empty"
+      : journey.segmentsWithoutJourney.length === 0
+        ? "complete"
+        : "partial";
 
   const base = `/strategy-hub/projects/${id}`;
 
@@ -171,7 +209,13 @@ export default async function CanvasPage({ params }: Props) {
           href={`${base}/foundation/business`}
           icon={Crosshair}
           title="Pozycjonowanie"
-          status={data.positioning.ourX !== null ? "complete" : "empty"}
+          status={
+            data.positioning.statementMd?.trim()
+              ? "complete"
+              : data.positioning.ourX !== null
+                ? "partial"
+                : "empty"
+          }
         >
           <div className="flex items-center gap-2">
             <div className="size-[88px] text-muted-foreground shrink-0">
@@ -183,10 +227,16 @@ export default async function CanvasPage({ params }: Props) {
                 className="w-full h-full"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              {data.positioning.competitors.length} konkurentów na mapie
+            <p className="text-xs text-muted-foreground line-clamp-4">
+              {firstLine(data.positioning.statementMd, 120) ??
+                "Brak statementu pozycjonowania — „jesteśmy X dla Y, w przeciwieństwie do W”."}
             </p>
           </div>
+          {data.positioning.nicheMd?.trim() && (
+            <span className="inline-block mt-2 text-[10px] rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+              Nisza zdefiniowana
+            </span>
+          )}
         </Tile>
 
         {/* 3 — Segmenty */}
@@ -194,7 +244,7 @@ export default async function CanvasPage({ params }: Props) {
           href={`${base}/market/segments`}
           icon={Users}
           title="Segmenty"
-          status={statusFrom(data.segments.total)}
+          status={segmentsStatus}
         >
           {data.segments.items.length === 0 ? (
             <p className="text-xs text-muted-foreground">Brak segmentów.</p>
@@ -217,25 +267,104 @@ export default async function CanvasPage({ params }: Props) {
           )}
         </Tile>
 
-        {/* 4 — Lejek */}
+        {/* 4 — Podróż zakupowa (kręgosłup strategii) */}
+        <Tile
+          href={`${base}/market/journey`}
+          icon={Milestone}
+          title="Podróż zakupowa"
+          status={journeyStatus}
+        >
+          {journey.stageCount === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Brak etapów podróży — z nich wynikają lejek, sprzedaż i pomiar.
+            </p>
+          ) : (
+            <>
+              <div className="flex gap-4">
+                <div>
+                  <p className="text-2xl font-semibold tabular-nums">
+                    {journey.stageCount}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {pluralCount(journey.stageCount, "etap", "etapy", "etapów").replace(/^\d+\s/, "")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-2xl font-semibold tabular-nums">
+                    {journey.gapCount}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {pluralCount(journey.gapCount, "luka", "luki", "luk").replace(/^\d+\s/, "")}
+                  </p>
+                </div>
+              </div>
+              {journey.segmentsWithoutJourney.length > 0 && (
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  {pluralCount(
+                    journey.segmentsWithoutJourney.length,
+                    "segment bez podróży",
+                    "segmenty bez podróży",
+                    "segmentów bez podróży"
+                  )}
+                </p>
+              )}
+            </>
+          )}
+        </Tile>
+
+        {/* 5 — Lejek */}
         <Tile
           href={`${base}/execution/funnel`}
           icon={Filter}
           title="Lejek"
-          status={statusFrom(data.funnel.elements)}
+          status={funnelStatus}
         >
           <div className="flex gap-4">
             <div>
               <p className="text-2xl font-semibold tabular-nums">
-                {data.funnel.stages}
+                {data.funnel.elements}
               </p>
-              <p className="text-[11px] text-muted-foreground">etapów</p>
+              <p className="text-[11px] text-muted-foreground">
+                {pluralCount(data.funnel.elements, "element", "elementy", "elementów").replace(/^\d+\s/, "")}
+              </p>
             </div>
             <div>
               <p className="text-2xl font-semibold tabular-nums">
-                {data.funnel.elements}
+                {Math.round(coverageRatio(journey, ["content", "exit"]) * 100)}%
               </p>
-              <p className="text-[11px] text-muted-foreground">elementów</p>
+              <p className="text-[11px] text-muted-foreground">pokrycia etapów</p>
+            </div>
+          </div>
+          {journey.gapCount > 0 && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {pluralCount(journey.gapCount, "luka", "luki", "luk")} w gap engine
+            </p>
+          )}
+        </Tile>
+
+        {/* 6 — Proces sprzedaży */}
+        <Tile
+          href={`${base}/execution/sales`}
+          icon={Handshake}
+          title="Proces sprzedaży"
+          status={salesStatus}
+        >
+          <div className="flex gap-4">
+            <div>
+              <p className="text-2xl font-semibold tabular-nums">
+                {data.sales.activities}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {pluralCount(data.sales.activities, "akcja handlowa", "akcje handlowe", "akcji handlowych").replace(/^\d+\s/, "")}
+              </p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold tabular-nums">
+                {salesCoveragePct}%
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                etapów sprzedażowych z akcją
+              </p>
             </div>
           </div>
         </Tile>

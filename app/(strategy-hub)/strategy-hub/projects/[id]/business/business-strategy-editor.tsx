@@ -70,6 +70,8 @@ interface PositioningRow {
   ourLabel: string | null;
   competitorsOnQuadrant: unknown;
   statementMd: string | null;
+  nicheMd?: string | null;
+  antiIcpMd?: string | null;
 }
 
 interface Props {
@@ -201,6 +203,8 @@ interface PositioningState {
   ourLabel: string;
   competitorsOnQuadrant: CompetitorMarker[];
   statementMd: string;
+  nicheMd: string;
+  antiIcpMd: string;
 }
 
 interface SectionState {
@@ -298,6 +302,8 @@ export function BusinessStrategyEditor({
       positioning.competitorsOnQuadrant
     ),
     statementMd: positioning.statementMd ?? "",
+    nicheMd: positioning.nicheMd ?? "",
+    antiIcpMd: positioning.antiIcpMd ?? "",
   });
   const [competitorItems, setCompetitorItems] = useState<CompetitorRow[]>(competitors);
   const [activeKey, setActiveKey] = useState<SectionKey>(SECTIONS[0].key);
@@ -443,6 +449,8 @@ export function BusinessStrategyEditor({
         ourLabel: string | null;
         competitorsOnQuadrant: CompetitorMarker[] | null;
         statementMd: string | null;
+        nicheMd: string | null;
+        antiIcpMd: string | null;
       }>
     ) => {
       setPositioningData((prev) => {
@@ -455,6 +463,8 @@ export function BusinessStrategyEditor({
         if (patch.competitorsOnQuadrant !== undefined)
           next.competitorsOnQuadrant = patch.competitorsOnQuadrant ?? [];
         if (patch.statementMd !== undefined) next.statementMd = patch.statementMd ?? "";
+        if (patch.nicheMd !== undefined) next.nicheMd = patch.nicheMd ?? "";
+        if (patch.antiIcpMd !== undefined) next.antiIcpMd = patch.antiIcpMd ?? "";
         return next;
       });
       const res = await fetch(positioningApi, {
@@ -738,6 +748,8 @@ export function BusinessStrategyEditor({
                 ourLabel={positioningData.ourLabel}
                 competitors={positioningData.competitorsOnQuadrant}
                 statementMd={positioningData.statementMd}
+                nicheMd={positioningData.nicheMd}
+                antiIcpMd={positioningData.antiIcpMd}
                 onSave={savePositioning}
               />
             ) : (

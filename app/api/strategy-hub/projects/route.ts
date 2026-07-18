@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
-import { getStrategyHubAccess, getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import { requireApiAccess } from "@/lib/strategy-hub/api-helpers";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { and, eq, isNull, desc } from "drizzle-orm";
 
 export async function GET() {
-  const access = await getStrategyHubAccess();
-  if (!access)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireApiAccess();
+  if (!auth.ok) return auth.response;
 
-  const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
+  const ws = await getOrCreateWorkspaceForAdmin(auth.access.session.email);
 
   const rows = await db
     .select({

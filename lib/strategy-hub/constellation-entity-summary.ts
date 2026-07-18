@@ -20,10 +20,7 @@ import {
   pageSections,
   sites,
 } from "@/db/schema";
-import {
-  isEntityTypeKey,
-  type EntityTypeKey,
-} from "@/lib/strategy-hub/entities/entity-types";
+import { type EntityTypeKey } from "@/lib/strategy-hub/entities/entity-types";
 
 export interface SummaryField {
   label: string;
@@ -503,8 +500,4 @@ export async function getEntitySummary(
   }
 
   return { fields };
-}
-
-export function parseSummaryType(type: string): EntityTypeKey | null {
-  return isEntityTypeKey(type) ? type : null;
 }

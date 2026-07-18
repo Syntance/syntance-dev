@@ -294,11 +294,3 @@ export function ConstellationNodeView({
     </g>
   );
 }
-
-function nodeRadius(kind: ConstellationNode["kind"]): number {
-  if (kind === "core") return 30;
-  if (kind === "area") return 16;
-  return 4.5;
-}
-
-export { nodeRadius };

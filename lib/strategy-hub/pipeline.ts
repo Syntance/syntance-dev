@@ -18,6 +18,7 @@ import {
 } from "@/lib/strategy-hub/entities/entity-types";
 import { projectModuleHref } from "@/lib/strategy-hub/area-routes";
 import { computeProjectHealth } from "@/lib/strategy-hub/health-score";
+import { computeProjectCoverage } from "@/lib/strategy-hub/journey-coverage";
 import type {
   PipelineData,
   PipelineStage,
@@ -30,6 +31,8 @@ const STAGE_ORDER: PipelineStageKey[] = [
   "research",
   "fundament",
   "segmenty",
+  // Kręgosłup strategii wg Negacza — jawny etap między segmentami a lejkiem.
+  "podroz",
   "lejek",
   "kanaly",
   "przekaz",
@@ -43,6 +46,7 @@ const STAGE_LABELS: Record<PipelineStageKey, string> = {
   research: "Research AI",
   fundament: "Fundament",
   segmenty: "Segmenty",
+  podroz: "Podróż zakupowa",
   lejek: "Lejek",
   kanaly: "Kanały",
   przekaz: "Przekaz",
@@ -134,9 +138,10 @@ function researchModuleStatus(count: number): Exclude<PipelineStageStatus, "lock
 }
 
 export async function getPipelineData(projectId: string): Promise<PipelineData> {
-  const [health, aiChanges, appliedProposals, openQuestions, reviewData] =
+  const [health, journey, aiChanges, appliedProposals, openQuestions, reviewData] =
     await Promise.all([
       computeProjectHealth(projectId),
+      computeProjectCoverage(projectId),
       db
         .select({
           entityType: changeHistory.entityType,
@@ -297,8 +302,12 @@ export async function getPipelineData(projectId: string): Promise<PipelineData> 
     kpi: reviewData[4],
   };
 
+  const journeyHref = `/strategy-hub/projects/${projectId}/market/journey`;
+
   const stages: PipelineStage[] = [];
-  let blockDownstream = false;
+  // Locki są MIĘKKIE (spec 12 §7): pusty upstream = ostrzeżenie-bramka,
+  // nigdy twarda blokada — moduły pozostają edytowalne w dowolnej kolejności.
+  let upstreamEmpty: PipelineStageKey | null = null;
 
   for (let i = 0; i < STAGE_ORDER.length; i++) {
     const key = STAGE_ORDER[i]!;
@@ -319,6 +328,23 @@ export async function getPipelineData(projectId: string): Promise<PipelineData> 
     } else if (key === "research") {
       score = researchScore(researchCount);
       rawStatus = researchModuleStatus(researchCount);
+    } else if (key === "podroz") {
+      // Kręgosłup: udział segmentów z ≥1 etapem podróży zakupowej.
+      const segTotal = journey.segments.length;
+      const withJourney = segTotal - journey.segmentsWithoutJourney.length;
+      score = segTotal > 0 ? Math.round((withJourney / segTotal) * 100) : 0;
+      rawStatus =
+        segTotal === 0 || withJourney === 0
+          ? "empty"
+          : withJourney === segTotal
+            ? "ready"
+            : "in_progress";
+      for (const seg of journey.segmentsWithoutJourney) {
+        humanGates.push({
+          label: `Segment „${seg.segmentName}” nie ma podróży zakupowej`,
+          href: journeyHref,
+        });
+      }
     } else {
       const moduleKey = MODULE_FOR_STAGE[key];
       const mod = moduleKey ? moduleByKey.get(moduleKey) : undefined;
@@ -338,27 +364,27 @@ export async function getPipelineData(projectId: string): Promise<PipelineData> 
       }
     }
 
-    const status: PipelineStageStatus = blockDownstream ? "locked" : rawStatus;
-
-    if (blockDownstream) {
-      const prevKey = STAGE_ORDER[i - 1];
-      if (prevKey) {
-        humanGates.unshift({
-          label: `Najpierw ukończ etap: ${STAGE_LABELS[prevKey]}`,
-          href: projectModuleHref(
-            projectId,
-            MODULE_FOR_STAGE[prevKey] ?? "discovery"
-          ),
-        });
-      }
+    if (upstreamEmpty && rawStatus !== "empty") {
+      // Miękki sygnał spójności: downstream ma dane, choć upstream jest pusty.
+      humanGates.unshift({
+        label: `Uzupełnij wcześniejszy etap „${STAGE_LABELS[upstreamEmpty]}” — z niego wynika ten etap`,
+        href:
+          upstreamEmpty === "podroz"
+            ? journeyHref
+            : projectModuleHref(
+                projectId,
+                MODULE_FOR_STAGE[upstreamEmpty] ?? "discovery"
+              ),
+      });
     }
-
-    blockDownstream = blockDownstream || rawStatus === "empty";
+    if (rawStatus === "empty" && upstreamEmpty === null && key !== "research") {
+      upstreamEmpty = key;
+    }
 
     stages.push({
       key,
       label: STAGE_LABELS[key],
-      status,
+      status: rawStatus,
       score,
       aiActions: aiActionsByStage.get(key) ?? [],
       humanGates,
@@ -368,4 +394,4 @@ export async function getPipelineData(projectId: string): Promise<PipelineData> 
   return { stages };
 }
 
-export type { PipelineData, PipelineStage } from "./pipeline-types";
+export type { PipelineData } from "./pipeline-types";

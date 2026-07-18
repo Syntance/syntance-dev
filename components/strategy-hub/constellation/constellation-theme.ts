@@ -84,7 +84,7 @@ export function generateStars(
   return stars;
 }
 
-export interface BurstParticle {
+interface BurstParticle {
   x: number;
   y: number;
   r: number;

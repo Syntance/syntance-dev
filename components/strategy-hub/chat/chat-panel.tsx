@@ -48,9 +48,7 @@ export function ChatPanel({ projectId, projectName, seed }: ChatPanelProps) {
         tools: { webSearch, notionRead },
         aiRules,
       },
-      onError: (err: Error) => {
-        console.error("Chat error:", err);
-      },
+      // Błąd renderowany inline pod wiadomościami (patrz {error && ...} niżej).
     });
 
   useEffect(() => {

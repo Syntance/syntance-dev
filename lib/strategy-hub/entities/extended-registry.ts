@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   strategicDecisions,
@@ -10,38 +10,15 @@ import {
   geoQueries,
   offers,
 } from "@/db/schema";
-import { registerListEntities, type ListEntityDef } from "./registry";
-
-const md = () => z.string().nullable().optional();
-
-function listDef<C, P>(d: ListEntityDef<C, P>): ListEntityDef {
-  return d as unknown as ListEntityDef;
-}
-
-function compact<T extends Record<string, unknown>>(obj: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(obj).filter(([, v]) => v !== undefined)
-  ) as Partial<T>;
-}
-
-function pathFilter<T extends { pathId: unknown }>(
-  table: T,
-  pathId: string | null | undefined
-) {
-  if (!pathId) return undefined;
-  return or(
-    eq(table.pathId as Parameters<typeof eq>[0], pathId),
-    isNull(table.pathId as Parameters<typeof isNull>[0])
-  );
-}
-
-function siteFilter<T extends { siteId: unknown }>(
-  table: T,
-  siteId: string | null | undefined
-) {
-  if (!siteId) return undefined;
-  return eq(table.siteId as Parameters<typeof eq>[0], siteId);
-}
+// Wspólne helpery definicji encji — jedno źródło w registry.ts.
+import {
+  registerListEntities,
+  listDef,
+  compact,
+  md,
+  pathFilter,
+  siteFilter,
+} from "./registry";
 
 const decisionCreate = z.object({
   title: z.string().min(1).max(255),

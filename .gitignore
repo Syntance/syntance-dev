@@ -52,3 +52,6 @@ next-env.d.ts
 
 # graphify (generated code-graph cache, regenerate with `graphify update .`)
 /graphify-out/
+
+# lokalne dumpy DB robione przez skrypty migracyjne (scripts/*.ts) — nie do repo
+/scripts/backups/

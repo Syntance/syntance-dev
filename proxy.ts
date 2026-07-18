@@ -11,7 +11,37 @@ import { NextResponse, type NextRequest } from "next/server";
  *
  * Next.js 16: `proxy.ts` (dawniej `middleware.ts`) — runtime Node.js domyślnie.
  */
+const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
+
+/**
+ * Anty-CSRF dla mutacji API: gdy przeglądarka wysyła nagłówek `Origin`, musi
+ * zgadzać się z hostem. Żądania bez `Origin` (server-to-server: webhook Notion,
+ * klienci MCP, cron) przechodzą — cookie sameSite=lax i tak ich nie
+ * uwierzytelnia cross-site. Uzupełnia wbudowaną ochronę CSRF Server Actions.
+ */
+function crossOriginApiMutation(req: NextRequest): boolean {
+  if (!req.nextUrl.pathname.startsWith("/api/")) return false;
+  if (!MUTATING_METHODS.has(req.method)) return false;
+
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+
+  const host = req.headers.get("host");
+  try {
+    return host !== null && new URL(origin).host !== host;
+  } catch {
+    return true; // nieparsowalny Origin = odrzucamy
+  }
+}
+
 export function proxy(req: NextRequest) {
+  if (crossOriginApiMutation(req)) {
+    return NextResponse.json(
+      { error: "Cross-origin request blocked" },
+      { status: 403 }
+    );
+  }
+
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 
   const csp = [

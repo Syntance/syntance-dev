@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { Plus, Trash2, Users, Loader2, ChevronRight, Sparkles } from "lucide-react";
+import Link from "next/link";
+import {
+  Plus,
+  Trash2,
+  Users,
+  Loader2,
+  ChevronRight,
+  Sparkles,
+  ArrowUpRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,12 +58,6 @@ const dimensionCols: JsonColumn[] = [
   { key: "description", label: "Opis", placeholder: "Jak różnicuje segmenty" },
 ];
 
-const buyerFields: FieldDef[] = [
-  { key: "name", label: "Etap", type: "text", primary: true },
-  { key: "whatDoesMd", label: "Co robi klient", type: "textarea" },
-  { key: "timeHint", label: "Czas", type: "text", placeholder: "np. 1-2 dni" },
-  { key: "ourActionMd", label: "Nasza akcja", type: "textarea" },
-];
 const quickWinFields: FieldDef[] = [
   { key: "title", label: "Quick win", type: "text", primary: true },
   { key: "descriptionMd", label: "Opis", type: "textarea" },
@@ -433,13 +436,13 @@ export function SegmentsEditor({ projectId, projectName, mode = "editor" }: Prop
                   variant="outline"
                   onClick={() =>
                     openSidekick(
-                      `Zaproponuj kompletny lejek (etapy zakupu TOFU/MOFU/BOFU/retencja + elementy lejka z formatem i CTA) dla segmentu „${selected.name}". Uwzględnij JTBD, problem i UVP tego segmentu jeśli są opisane.`
+                      `Zaproponuj podróż zakupową segmentu „${selected.name}" (logika Negacza): etapy z triggerem, pytaniami klienta, stanem emocjonalnym, obiekcjami, naszą akcją, kryterium wyjścia i polem „Prowadzi" (marketing/wspólny/sprzedaż). Potem do każdego etapu zaproponuj odpowiedź marketingu (treść z formatem i CTA prowadzącym do następnego etapu). Uwzględnij JTBD, problem i UVP tego segmentu, jeśli są opisane.`
                     )
                   }
                   className="h-8 gap-1.5 text-xs"
                 >
                   <Sparkles className="size-3.5" />
-                  Generuj lejek
+                  Zaproponuj podróż zakupową
                 </Button>
                 <VisibilityControl
                   projectId={projectId}
@@ -717,19 +720,17 @@ export function SegmentsEditor({ projectId, projectName, mode = "editor" }: Prop
             </SectionCard>
 
             <SectionCard
-              title="Ścieżka zakupowa"
-              description="Etapy podróży klienta w tym segmencie."
+              title="Podróż zakupowa"
+              description="Kręgosłup strategii segmentu — etapy edytujesz w Journey Designerze (jedno źródło prawdy dla lejka, sprzedaży i blueprintu)."
             >
-              <EntityCrud
-                projectId={projectId}
-                entity="buyer-journey"
-                basePath={`${base}/${selected.id}/buyer-journey`}
-                fields={buyerFields}
-                addLabel="Dodaj etap"
-                emptyHint="Brak etapów ścieżki."
-                dense
-                readOnly={!isEditor}
-              />
+              <Button asChild size="sm" variant="outline" className="gap-1.5">
+                <Link
+                  href={`/strategy-hub/projects/${projectId}/market/journey?segment=${selected.id}`}
+                >
+                  Otwórz Journey Designer
+                  <ArrowUpRight className="size-3.5" />
+                </Link>
+              </Button>
             </SectionCard>
 
             <SectionCard title="Quick wins">

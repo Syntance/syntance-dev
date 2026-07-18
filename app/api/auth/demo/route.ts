@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { adminUsers } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { verifyPassword, signToken } from "@/lib/auth";
+import { verifyPassword, signToken, sessionCookieOptions } from "@/lib/auth";
 
 /**
  * Endpoint demo logowania — dostępny tylko gdy DEMO_EMAIL + DEMO_PASSWORD są ustawione.
@@ -40,12 +40,7 @@ export async function POST() {
   });
 
   const response = NextResponse.json({ success: true, isAdmin: true });
-  response.cookies.set("session", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 4, // 4h — wystarczy na prezentację
-    path: "/",
-  });
+  // 4h — wystarczy na prezentację.
+  response.cookies.set("session", token, sessionCookieOptions(60 * 60 * 4));
   return response;
 }

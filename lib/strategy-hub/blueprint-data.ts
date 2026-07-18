@@ -36,13 +36,7 @@ import type {
   BlueprintRow,
   BlueprintStageColumn,
 } from "@/lib/strategy-hub/blueprint-types";
-export type {
-  BlueprintCellItem,
-  BlueprintData,
-  BlueprintRow,
-  BlueprintStageColumn,
-} from "@/lib/strategy-hub/blueprint-types";
-export { blueprintGapHref } from "@/lib/strategy-hub/blueprint-types";
+export type { BlueprintData } from "@/lib/strategy-hub/blueprint-types";
 
 function refKey(type: EntityTypeKey, id: string): string {
   return `${type}:${id}`;

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
-import { requireStrategyHubAccess } from "@/lib/strategy-hub/context";
+import { requireApiAccess } from "@/lib/strategy-hub/api-helpers";
 import { buildChatTools } from "@/lib/strategy-hub/ai-tools";
 import { buildWriteTools } from "@/lib/strategy-hub/ai-tools-write";
 import { buildGraphTools } from "@/lib/strategy-hub/ai-tools-graph";
@@ -32,10 +32,9 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const access = await requireStrategyHubAccess().catch(() => null);
-  if (!access) {
-    return new Response("Unauthorized", { status: 401 });
-  }
+  const auth = await requireApiAccess();
+  if (!auth.ok) return auth.response;
+  const { access } = auth;
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json(
