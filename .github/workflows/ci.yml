@@ -53,6 +53,11 @@ jobs:
           printf 'DATABASE_URL=%s\nJWT_SECRET=%s\n' "$DATABASE_URL" "$JWT_SECRET" > .env.local
           pnpm db:migrate:apply
 
+      # Dead-man's switch: skrypty testowe dotykające DB muszą wywoływać
+      # process.exit(0) na sukces (patrz scripts/test-thread.ts i sąsiedzi) —
+      # jeśli regresja to złamie, ten limit failuje szybko zamiast zjadać
+      # cały 20-minutowy budżet joba.
       - run: pnpm test
+        timeout-minutes: 8
 
       - run: pnpm build

@@ -141,6 +141,7 @@ async function run() {
 
   await cleanupProject(projectId);
   console.log(`\n${passed} testów blueprint OK`);
+  process.exit(0);
 }
 
 run().catch((err) => {

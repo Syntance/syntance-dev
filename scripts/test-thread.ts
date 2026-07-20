@@ -177,6 +177,7 @@ async function run() {
 
   await cleanupProject(projectId);
   console.log(`\n${passed} testów nitki OK`);
+  process.exit(0);
 }
 
 run().catch((err) => {
