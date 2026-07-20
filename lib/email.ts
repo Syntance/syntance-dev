@@ -1,9 +1,20 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const FROM_EMAIL = process.env.EMAIL_FROM || "Syntance <noreply@syntance.dev>";
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://syntance.dev";
+
+let resendClient: Resend | null = null;
+
+/**
+ * Leniwa inicjalizacja — konstruktor Resend rzuca bez klucza. Moduł importują
+ * route'y API, a Next.js zbiera page data przy `next build` importując każdy
+ * route; sklejenie klienta na poziomie modułu wywala cały build w środowiskach
+ * bez RESEND_API_KEY (np. CI bez sekretów maila).
+ */
+function getResend(): Resend {
+  resendClient ??= new Resend(process.env.RESEND_API_KEY);
+  return resendClient;
+}
 
 export async function sendPasswordSetupEmail(
   email: string,
@@ -11,7 +22,7 @@ export async function sendPasswordSetupEmail(
 ) {
   const url = `${BASE_URL}/set-password?token=${token}`;
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM_EMAIL,
     to: email,
     subject: "Ustaw hasło do portalu Syntance",
@@ -55,7 +66,7 @@ export async function sendTeamInviteEmail(
 ) {
   const url = `${BASE_URL}/set-password?token=${token}`;
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM_EMAIL,
     to: email,
     subject: `Zaproszenie do zespołu ${workspaceName} — Syntance`,
@@ -93,7 +104,7 @@ export async function sendPasswordResetEmail(
 ) {
   const url = `${BASE_URL}/reset-password?token=${token}`;
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM_EMAIL,
     to: email,
     subject: "Reset hasła — Syntance",
@@ -139,7 +150,7 @@ export async function sendStrategyUpdatedEmail(params: {
 }) {
   const url = `${BASE_URL}/projects/${params.projectSlug}/strategy/business`;
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM_EMAIL,
     to: params.to,
     subject: `Aktualizacja strategii — ${params.projectName}`,
