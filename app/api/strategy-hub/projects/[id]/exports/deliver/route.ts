@@ -9,8 +9,19 @@ import { buildStrategyReport } from "@/lib/strategy-hub/export/build-report";
 import { reportToMarkdown } from "@/lib/strategy-hub/export/to-markdown";
 import { reportToDocx } from "@/lib/strategy-hub/export/to-docx";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.EMAIL_FROM || "Syntance <noreply@syntance.dev>";
+
+let resendClient: Resend | null = null;
+
+/**
+ * Leniwa inicjalizacja — konstruktor Resend rzuca bez klucza, a `next build`
+ * importuje ten route przy zbieraniu page data (patrz analogiczny fix
+ * w lib/email.ts). Klucz musi być realnie ustawiony dopiero przy wysyłce.
+ */
+function getResend(): Resend {
+  resendClient ??= new Resend(process.env.RESEND_API_KEY);
+  return resendClient;
+}
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -74,7 +85,7 @@ export async function POST(
       .values({ projectId: id, type, status: "done" })
       .returning();
 
-    const { error } = await resend.emails.send({
+    const { error } = await getResend().emails.send({
       from: FROM_EMAIL,
       to: email,
       subject: `Eksport strategii — ${project.name}`,
