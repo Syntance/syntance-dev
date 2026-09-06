@@ -9,6 +9,9 @@ function section(title: string, body: string | null | undefined): string {
 export function reportToMarkdown(r: StrategyReport): string {
   let md = `# Strategia — ${r.projectName}\n\n`;
   md += `_Wygenerowano: ${new Date(r.generatedAt).toLocaleString("pl-PL")}_\n\n`;
+  if (r.foundationSourceName) {
+    md += `_Fundament strategii dziedziczony z projektu: ${r.foundationSourceName}_\n\n`;
+  }
 
   md += section("Cele biznesowe", r.goalsMd);
   md += section("UVP (Unique Value Proposition)", r.uvpMd);

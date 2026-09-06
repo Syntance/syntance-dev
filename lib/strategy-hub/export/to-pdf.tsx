@@ -246,7 +246,14 @@ export async function reportToPdf(r: StrategyReport): Promise<Buffer> {
       { size: "A4", style: styles.cover },
       el(Text, { style: styles.coverTitle }, r.projectName),
       el(Text, { style: styles.coverSubtitle }, "Pełna strategia · Syntance Strategy Hub"),
-      el(Text, { style: styles.coverMeta }, `Wygenerowano: ${generated}`)
+      el(Text, { style: styles.coverMeta }, `Wygenerowano: ${generated}`),
+      r.foundationSourceName
+        ? el(
+            Text,
+            { style: styles.coverMeta },
+            `Fundament strategii dziedziczony z projektu: ${r.foundationSourceName}`
+          )
+        : null
     ),
     el(
       Page,

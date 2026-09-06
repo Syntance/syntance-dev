@@ -107,23 +107,34 @@ przekierowywany do rodzica — w route'ach API, w narzędziach AI i MCP, w agenc
 po cichu zmieniłby strategię rodzeństwa i wnuków, a zapis lokalny trafiłby do
 wiersza, którego po tej zmianie nikt już nie odczytuje.
 
+### Rozstrzygnięte przy okazji
+
+**Oferta ↔ segment przy dziedziczeniu: relacja jest LOKALNA.** Oferta pochodzi
+z fundamentu, ale to, do jakich segmentów celuje, jest decyzją konkretnego projektu —
+wiersz `entity_relations` nosi `projectId` dziecka, więc nie wycieka do rodzeństwa,
+a oferta jest w tym projekcie widoczna (czytamy ją ze źródła), więc `sourceId` nie
+jest sierotą. To także pożądane produktowo: ta sama oferta może celować w inne
+segmenty w każdej gałęzi. Walidujemy istnienie oferty w projekcie-źródle, a segmentów
+lokalnie. Odrzucony wariant: zapis w projekcie-źródle — przepisałby przypisania
+całemu rodzeństwu, a lokalne id segmentów i tak by tam nie istniały.
+
+**Ścieżki na encjach dziedziczonych: filtr wariantowy jest pomijany.** Ścieżki
+należą do projektu oglądającego, więc nigdy nie zrównają się ze ścieżkami źródła —
+z filtrem przechodziłyby wyłącznie encje z `path_id IS NULL`, a reszta znikałaby
+po cichu mimo istnienia w źródle. Przy `inherited` pokazujemy cały fundament.
+Dotyczy `businessProblems` i `competitors` (tylko one z W0 mają `path_id`).
+
 ### Znane ograniczenia
 
-- **Oferta ↔ segment przy dziedziczeniu.** Oferta jest z fundamentu, segmenty są
-  lokalne — nie istnieje poprawne miejsce zapisu tej relacji. Zapis zwraca 409,
-  a edytor ofert mówi wprost, że wymaga to odłączenia fundamentu. Do rozstrzygnięcia,
-  czy przypisanie ma być danymi lokalnymi, czy częścią fundamentu razem z segmentami.
-- **Ścieżki na dziedziczonych encjach.** Filtr ścieżek przepuści tylko encje bez
-  przypisanej ścieżki (`path_id IS NULL`), bo ścieżki należą do projektu oglądającego.
-  Bezpośrednia konsekwencja prostopadłości obu osi.
 - **Embeddingi.** Encje W0 są indeksowane raz, pod projektem-właścicielem. Wyszukiwanie
   semantyczne zawężone do projektu dziedziczącego nie zwróci dziedziczonego fundamentu —
-  alternatywą byłaby duplikacja wektorów.
-- **Renderery eksportu** (`to-markdown`, `to-docx`, `to-pdf`) nie pokazują jeszcze nazwy
-  projektu-źródła; pole `foundationSourceName` czeka gotowe w `StrategyReport`.
+  alternatywą byłaby duplikacja wektorów, świadomie odrzucona.
 - **`strategy_rule_sets`** nie ma kolumny organizacyjnej: zakres `global` to domyślne
   reguły agencji, wspólne dla wszystkich klientów. Lista nadpisań per projekt jest już
   zawężona do bieżącej organizacji.
+- **Kolumny do usunięcia w fazie contract:** `AdminUser.organization_id`,
+  `channels.workspace_id`. Kod ich nie używa, ale DROP musi pójść osobnym deployem —
+  inaczej łamiemy expand→contract i tracimy ścieżkę wycofania.
 
 ## Powiązane
 

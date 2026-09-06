@@ -140,7 +140,7 @@ export function OffersClient({
         </select>
 
         {selectedId && foundationInherited && (
-          <p className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Oferty pochodzą z projektu
             {foundationSourceName ? (
               <>
@@ -150,14 +150,13 @@ export function OffersClient({
             ) : (
               " nadrzędnego"
             )}
-            , a segmenty są własne dla tego projektu — przypisania nie da się tu
-            zapisać, bo należałoby do dwóch różnych projektów naraz. Odłącz
-            fundament w Ustawieniach projektu → Ogólne, żeby edytować oferty
-            i ich segmenty lokalnie.
+            , ale przypisanie do segmentów jest własne dla tego projektu — ta sama
+            oferta może celować gdzie indziej w każdej gałęzi. Edycja samej treści
+            oferty wymaga odłączenia fundamentu.
           </p>
         )}
 
-        {selectedId && !foundationInherited && (
+        {selectedId && (
           <>
             <RelationPicker
               projectId={projectId}

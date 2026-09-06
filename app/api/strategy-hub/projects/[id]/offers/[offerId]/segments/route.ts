@@ -5,7 +5,6 @@ import { db } from "@/db";
 import { offers, segments } from "@/db/schema";
 import {
   requireProjectAccess,
-  requireOwnFoundation,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
@@ -43,9 +42,10 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Powiązania oferta→segment zostają LOKALNE: segmenty nie są encją
-  // fundamentu, więc identyfikatory z projektu-źródła nie istnieją w tym
-  // projekcie. Przy dziedziczeniu lista będzie pusta — patrz komentarz w PUT.
+  // Powiązania oferta→segment są LOKALNE i to jest zamierzone: oferta pochodzi
+  // z fundamentu, ale to, do jakich segmentów celuje, jest decyzją TEGO projektu.
+  // Dzięki temu ta sama oferta może mieć inne segmenty w każdej gałęzi, a wiersz
+  // relacji nosi `projectId` dziecka, więc nie wycieka do rodzeństwa.
   const relations = await listRelations(projectId, {
     entity: { type: "offer", id: offerId },
   });
@@ -65,22 +65,21 @@ export async function PUT(
   const auth = await requireProjectAccess(projectId);
   if (!auth.ok) return auth.response;
 
-  // Zapis dotyczy powiązań oferty (fundament W0) z segmentami (encja LOKALNA),
-  // więc przy dziedziczeniu nie ma poprawnego miejsca na zapis: w projekcie
-  // źródłowym te segmenty nie istnieją, a lokalnie relacja wskazywałaby na
-  // ofertę spoza projektu. Blokujemy 409 do czasu decyzji produktowej.
-  const own = await requireOwnFoundation(projectId);
-  if (!own.ok) return own.response;
-
   const parsed = putSchema.safeParse(await req.json());
   if (!parsed.success) {
     return badRequest("Invalid input", parsed.error.flatten());
   }
 
+  // Oferta może pochodzić z fundamentu, więc jej istnienie sprawdzamy w projekcie
+  // źródłowym. Sama relacja zapisuje się LOKALNIE (patrz komentarz w GET) — nie
+  // dotykamy przez to strategii rodzica ani rodzeństwa, a segmenty walidujemy
+  // lokalnie, bo to encja tego projektu.
+  const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
   const [offer] = await db
     .select({ id: offers.id })
     .from(offers)
-    .where(and(eq(offers.id, offerId), eq(offers.projectId, projectId)))
+    .where(and(eq(offers.id, offerId), eq(offers.projectId, fundamentId)))
     .limit(1);
 
   if (!offer) {

@@ -28,11 +28,16 @@ export async function GET(
   if (!auth.ok) return auth.response;
   // Problemy to fundament (W0): czytamy z projektu-źródła, ale autoryzacja
   // została wykonana na `id` pytającego — nigdy na projekcie źródłowym.
-  const readId = (await resolveFoundationSource(id)).projectId;
+  const foundation = await resolveFoundationSource(id);
+  const readId = foundation.projectId;
   const pathId = new URL(req.url).searchParams.get("pathId");
-  const pathFilter = pathId
-    ? or(eq(businessProblems.pathId, pathId), isNull(businessProblems.pathId))
-    : undefined;
+  // Przy dziedziczeniu filtr ścieżki jest pomijany: ścieżki należą do projektu
+  // pytającego, więc nie zrównają się ze ścieżkami źródła — zostałyby wyłącznie
+  // problemy z `path_id IS NULL`, a reszta zniknęłaby po cichu.
+  const pathFilter =
+    pathId && !foundation.inherited
+      ? or(eq(businessProblems.pathId, pathId), isNull(businessProblems.pathId))
+      : undefined;
 
   const rows = await db
     .select()

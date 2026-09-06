@@ -34,6 +34,12 @@ export async function reportToDocx(r: StrategyReport): Promise<Buffer> {
     p(`Wygenerowano: ${new Date(r.generatedAt).toLocaleString("pl-PL")}`),
   ];
 
+  if (r.foundationSourceName) {
+    children.push(
+      p(`Fundament strategii dziedziczony z projektu: ${r.foundationSourceName}`)
+    );
+  }
+
   if (r.goalsMd) {
     children.push(h("Cele biznesowe", HeadingLevel.HEADING_1), p(r.goalsMd));
   }

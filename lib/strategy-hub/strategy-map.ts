@@ -113,6 +113,17 @@ export async function getStrategyMapData(
   const pathScope = (col: AnyPgColumn): SQL | undefined =>
     pathId ? or(isNull(col), eq(col, pathId)) : undefined;
 
+  /**
+   * Ten sam zakres, ale dla encji FUNDAMENTU. Gdy fundament jest dziedziczony,
+   * filtr ścieżki trzeba wyłączyć: ścieżki należą do projektu oglądającego,
+   * więc `pathId` nigdy nie zrówna się ze ścieżką z projektu źródłowego
+   * i przeszłyby wyłącznie encje z `path_id IS NULL` — reszta zniknęłaby
+   * po cichu, choć w źródle istnieje. Obie osie są prostopadłe, więc przy
+   * dziedziczeniu wariantową po prostu pomijamy.
+   */
+  const pathScopeFundament = (col: AnyPgColumn): SQL | undefined =>
+    foundation.inherited ? undefined : pathScope(col);
+
   const live = and(
     eq(segments.projectId, projectId),
     isNull(segments.deletedAt),
@@ -163,7 +174,7 @@ export async function getStrategyMapData(
         and(
           eq(competitors.projectId, fundamentId),
           isNull(competitors.deletedAt),
-          pathScope(competitors.pathId)
+          pathScopeFundament(competitors.pathId)
         )
       ),
     db
