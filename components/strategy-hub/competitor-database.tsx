@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Loader2,
   Minus,
@@ -78,6 +80,7 @@ export interface CompetitorColumn {
   label: string;
   type: ColumnType;
   options: ColumnOption[] | null;
+  textColor: string | null;
 }
 
 interface CompetitorDatabaseProps {
@@ -184,6 +187,24 @@ function optionClass(color: string): string {
   );
 }
 
+/**
+ * Kolor SAMEGO TEKSTU (bez tła/obramowania) dla kolumny — inny kontekst
+ * wizualny niż `optionClass` (badge opcji `select`). Ta sama paleta,
+ * `null`/nierozpoznany klucz = domyślny kolor tekstu (bez klasy).
+ */
+const TEXT_COLOR_CLASS: Record<string, string> = {
+  gray: "text-foreground",
+  red: "text-destructive",
+  amber: "text-amber-600 dark:text-amber-400",
+  emerald: "text-emerald-600 dark:text-emerald-400",
+  blue: "text-blue-600 dark:text-blue-400",
+  purple: "text-purple-600 dark:text-purple-400",
+};
+
+function textColorClass(color: string | null): string | undefined {
+  return color ? TEXT_COLOR_CLASS[color] : undefined;
+}
+
 function emptyRow(): CompetitorDbRow {
   return {
     id: "",
@@ -214,7 +235,10 @@ export function CompetitorDatabase({
   const [openId, setOpenId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [adding, setAdding] = useState(false);
-  const [addColumnOpen, setAddColumnOpen] = useState(false);
+  // `null` = zamknięty, `"new"` = tworzenie, kolumna = edycja tej kolumny.
+  const [columnDialog, setColumnDialog] = useState<CompetitorColumn | "new" | null>(
+    null
+  );
   const [editingCell, setEditingCell] = useState<{ rowId: string; key: string } | null>(
     null
   );
@@ -319,9 +343,12 @@ export function CompetitorDatabase({
     }
   }
 
-  function handleColumnAdded(column: CompetitorColumn) {
-    setColumns((prev) => [...prev, column]);
-    setAddColumnOpen(false);
+  function handleColumnSaved(column: CompetitorColumn) {
+    setColumns((prev) => {
+      const exists = prev.some((c) => c.id === column.id);
+      return exists ? prev.map((c) => (c.id === column.id ? column : c)) : [...prev, column];
+    });
+    setColumnDialog(null);
   }
 
   async function handleColumnDelete(column: CompetitorColumn) {
@@ -338,6 +365,33 @@ export function CompetitorDatabase({
         `/api/strategy-hub/projects/${projectId}/competitor-columns/${column.id}`,
         { method: "DELETE" }
       );
+    } catch {
+      load();
+    }
+  }
+
+  /** Przesuwanie = zamiana orderIdx z sąsiadem. Działa bez biblioteki DnD. */
+  async function handleColumnMove(column: CompetitorColumn, direction: "left" | "right") {
+    const idx = columns.findIndex((c) => c.id === column.id);
+    const neighborIdx = direction === "left" ? idx - 1 : idx + 1;
+    const neighbor = columns[neighborIdx];
+    if (!neighbor) return;
+
+    const reordered = [...columns];
+    [reordered[idx], reordered[neighborIdx]] = [reordered[neighborIdx], reordered[idx]];
+    setColumns(reordered);
+
+    try {
+      await Promise.all([
+        apiFetch(
+          `/api/strategy-hub/projects/${projectId}/competitor-columns/${column.id}`,
+          { method: "PATCH", json: { orderIdx: neighborIdx } }
+        ),
+        apiFetch(
+          `/api/strategy-hub/projects/${projectId}/competitor-columns/${neighbor.id}`,
+          { method: "PATCH", json: { orderIdx: idx } }
+        ),
+      ]);
     } catch {
       load();
     }
@@ -382,19 +436,51 @@ export function CompetitorDatabase({
               <th className="p-3 font-medium">Specjalizacja</th>
               <th className="p-3 font-medium">Cena vs. nasza</th>
               <th className="p-3 font-medium">Nasz wyróżnik</th>
-              {columns.map((col) => (
+              {columns.map((col, colIdx) => (
                 <th key={col.id} className="group/col p-3 font-medium">
-                  <span className="inline-flex items-center gap-1.5">
-                    {col.label}
+                  <span className="inline-flex items-center gap-1">
                     {!foundationInherited && (
                       <button
                         type="button"
-                        onClick={() => handleColumnDelete(col)}
-                        aria-label={`Usuń kolumnę ${col.label}`}
-                        className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover/col:opacity-100"
+                        disabled={colIdx === 0}
+                        onClick={() => handleColumnMove(col, "left")}
+                        aria-label={`Przesuń kolumnę ${col.label} w lewo`}
+                        title="Przesuń w lewo"
+                        className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground group-hover/col:opacity-100 disabled:pointer-events-none disabled:opacity-0"
                       >
-                        <X className="size-3" />
+                        <ChevronLeft className="size-3" />
                       </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setColumnDialog(col)}
+                      className="max-w-[10rem] truncate hover:text-brand hover:underline"
+                      title="Edytuj kolumnę"
+                    >
+                      {col.label}
+                    </button>
+                    {!foundationInherited && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={colIdx === columns.length - 1}
+                          onClick={() => handleColumnMove(col, "right")}
+                          aria-label={`Przesuń kolumnę ${col.label} w prawo`}
+                          title="Przesuń w prawo"
+                          className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground group-hover/col:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+                        >
+                          <ChevronRight className="size-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleColumnDelete(col)}
+                          aria-label={`Usuń kolumnę ${col.label}`}
+                          title="Usuń kolumnę"
+                          className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover/col:opacity-100"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </>
                     )}
                   </span>
                 </th>
@@ -403,7 +489,7 @@ export function CompetitorDatabase({
                 <th className="w-9 p-2">
                   <button
                     type="button"
-                    onClick={() => setAddColumnOpen(true)}
+                    onClick={() => setColumnDialog("new")}
                     aria-label="Dodaj kolumnę"
                     title="Dodaj kolumnę"
                     className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -580,11 +666,12 @@ export function CompetitorDatabase({
         onDelete={() => openItem && handleDelete(openItem.id)}
       />
 
-      <AddColumnDialog
-        open={addColumnOpen}
-        onClose={() => setAddColumnOpen(false)}
+      <ColumnFormDialog
+        open={columnDialog !== null}
+        initial={columnDialog === "new" || columnDialog === null ? null : columnDialog}
+        onClose={() => setColumnDialog(null)}
         projectId={projectId}
-        onAdded={handleColumnAdded}
+        onSaved={handleColumnSaved}
       />
     </div>
   );
@@ -682,7 +769,12 @@ function CustomFieldCell({
   if (column.type === "long_text") {
     // Długi tekst edytuje się w karcie — tu tylko podgląd, żeby nie zaśmiecać wiersza.
     return (
-      <span className="line-clamp-1 text-muted-foreground">
+      <span
+        className={cn(
+          "line-clamp-1",
+          textColorClass(column.textColor) ?? "text-muted-foreground"
+        )}
+      >
         {typeof value === "string" && value ? value : "—"}
       </span>
     );
@@ -717,6 +809,14 @@ function CustomFieldCell({
         ? `${value} zł`
         : String(value);
 
+  // Kolor kolumny nadpisuje domyślny (szary/link) — użytkownik świadomie go
+  // wybrał, więc ma wygrywać nad heurystyką "to jest URL, więc niebieski".
+  const colorClass =
+    textColorClass(column.textColor) ??
+    (column.type === "url" && value
+      ? "text-brand underline-offset-2 hover:underline"
+      : "text-muted-foreground hover:text-foreground");
+
   return (
     <button
       type="button"
@@ -724,7 +824,7 @@ function CustomFieldCell({
       onClick={onStartEdit}
       className={cn(
         "block max-w-[10rem] truncate text-left disabled:cursor-default",
-        column.type === "url" && value ? "text-brand underline-offset-2 hover:underline" : "text-muted-foreground hover:text-foreground"
+        colorClass
       )}
     >
       {column.type === "url" && typeof value === "string" && value ? (
@@ -739,29 +839,42 @@ function CustomFieldCell({
   );
 }
 
-function AddColumnDialog({
+/**
+ * Jeden dialog dla tworzenia I edycji kolumny — formularz jest identyczny
+ * (etykieta/typ/opcje/kolor), różni się tylko czasownikiem submitu i tym,
+ * czy leci POST czy PATCH. Osobny "EditColumnDialog" duplikowałby ~150 linii
+ * JSX bez żadnej realnej różnicy w zachowaniu.
+ */
+function ColumnFormDialog({
   open,
+  initial,
   onClose,
   projectId,
-  onAdded,
+  onSaved,
 }: {
   open: boolean;
+  initial: CompetitorColumn | null;
   onClose: () => void;
   projectId: string;
-  onAdded: (column: CompetitorColumn) => void;
+  onSaved: (column: CompetitorColumn) => void;
 }) {
   const [label, setLabel] = useState("");
   const [type, setType] = useState<ColumnType>("text");
   const [options, setOptions] = useState<ColumnOption[]>([]);
+  const [textColor, setTextColor] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [prevOpen, setPrevOpen] = useState(open);
-  if (open !== prevOpen) {
-    setPrevOpen(open);
+  // Reset formularza przy KAŻDYM otwarciu (nowe lub edycja) oraz przy zmianie
+  // edytowanej kolumny — ten sam wzorzec "poprzedni klucz" co CompetitorSheet.
+  const dialogKey = open ? (initial ? initial.id : "new") : "closed";
+  const [prevKey, setPrevKey] = useState(dialogKey);
+  if (dialogKey !== prevKey) {
+    setPrevKey(dialogKey);
     if (open) {
-      setLabel("");
-      setType("text");
-      setOptions([]);
+      setLabel(initial?.label ?? "");
+      setType(initial?.type ?? "text");
+      setOptions(initial?.options ?? []);
+      setTextColor(initial?.textColor ?? null);
     }
   }
 
@@ -792,26 +905,30 @@ function AddColumnDialog({
   async function handleSave() {
     if (!canSave) return;
     setSaving(true);
+    const body = {
+      label: label.trim(),
+      type,
+      options:
+        type === "select"
+          ? validOptions.map((o, i) => ({
+              value: o.value || `opcja_${i + 1}`,
+              label: o.label.trim(),
+              color: o.color,
+            }))
+          : undefined,
+      textColor,
+    };
     try {
-      const res = await apiFetch<{ item: CompetitorColumn }>(
-        `/api/strategy-hub/projects/${projectId}/competitor-columns`,
-        {
-          method: "POST",
-          json: {
-            label: label.trim(),
-            type,
-            options:
-              type === "select"
-                ? validOptions.map((o, i) => ({
-                    value: o.value || `opcja_${i + 1}`,
-                    label: o.label.trim(),
-                    color: o.color,
-                  }))
-                : undefined,
-          },
-        }
-      );
-      onAdded(res.item);
+      const res = initial
+        ? await apiFetch<{ item: CompetitorColumn }>(
+            `/api/strategy-hub/projects/${projectId}/competitor-columns/${initial.id}`,
+            { method: "PATCH", json: body }
+          )
+        : await apiFetch<{ item: CompetitorColumn }>(
+            `/api/strategy-hub/projects/${projectId}/competitor-columns`,
+            { method: "POST", json: body }
+          );
+      onSaved(res.item);
     } catch {
       // apiFetch pokazał już toast.
     } finally {
@@ -823,13 +940,13 @@ function AddColumnDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Nowa kolumna</DialogTitle>
+          <DialogTitle>{initial ? "Edytuj kolumnę" : "Nowa kolumna"}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <Field label="Nazwa kolumny">
             <Input
-              // eslint-disable-next-line jsx-a11y/no-autofocus -- pole otwiera się dopiero po kliknięciu „Dodaj kolumnę" — bezpośredni skutek akcji użytkownika.
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- pole otwiera się dopiero po kliknięciu w kolumnę/„Dodaj kolumnę" — bezpośredni skutek akcji użytkownika.
               autoFocus
               value={label}
               onChange={(e) => setLabel(e.target.value)}
@@ -912,6 +1029,41 @@ function AddColumnDialog({
               </div>
             </Field>
           )}
+
+          {type !== "select" && type !== "checkbox" && (
+            <Field label="Kolor tekstu w tabeli">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  title="Domyślny"
+                  onClick={() => setTextColor(null)}
+                  className={cn(
+                    "flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground",
+                    textColor === null
+                      ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
+                      : ""
+                  )}
+                >
+                  <X className="size-3" />
+                </button>
+                {OPTION_COLORS.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    title={c.label}
+                    onClick={() => setTextColor(c.value)}
+                    className={cn(
+                      "size-6 shrink-0 rounded-full border",
+                      c.className.split(" ")[1],
+                      textColor === c.value
+                        ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
+                        : ""
+                    )}
+                  />
+                ))}
+              </div>
+            </Field>
+          )}
         </div>
 
         <DialogFooter>
@@ -926,7 +1078,7 @@ function AddColumnDialog({
             className="gap-1.5"
           >
             {saving && <Loader2 className="size-3.5 animate-spin" />}
-            Dodaj kolumnę
+            {initial ? "Zapisz zmiany" : "Dodaj kolumnę"}
           </Button>
         </DialogFooter>
       </DialogContent>

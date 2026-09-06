@@ -31,6 +31,7 @@ const createSchema = z
     label: z.string().min(1).max(255),
     type: z.enum(COLUMN_TYPES),
     options: z.array(optionSchema).max(30).optional(),
+    textColor: z.string().max(20).optional().nullable(),
   })
   .refine((v) => v.type !== "select" || (v.options && v.options.length > 0), {
     message: "Kolumna typu 'select' wymaga co najmniej jednej opcji",
@@ -113,6 +114,7 @@ export async function POST(
       label: parsed.data.label,
       type: parsed.data.type,
       options: parsed.data.type === "select" ? parsed.data.options : null,
+      textColor: parsed.data.textColor ?? null,
       orderIdx: nextOrder,
     })
     .returning();

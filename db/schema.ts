@@ -376,6 +376,12 @@ export const competitorColumns = pgTable(
     type: varchar("type", { length: 20 }).notNull(),
     /** Tylko dla `type: select` — [{value, label, color}]. */
     options: jsonb("options"),
+    /**
+     * Kolor wyświetlanego tekstu w tabeli — klucz z tej samej palety co
+     * kolory opcji `select` (patrz `OPTION_COLORS` w UI). Nie dotyczy komórek
+     * `checkbox` (ikona, nie tekst) ani `select` (już ma kolor per opcja).
+     */
+    textColor: varchar("text_color", { length: 20 }),
     orderIdx: integer("order_idx").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     deletedAt: timestamp("deleted_at"),
