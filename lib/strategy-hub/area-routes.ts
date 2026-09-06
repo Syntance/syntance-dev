@@ -63,6 +63,8 @@ const FOUNDATION_TABS: AreaTabDef[] = [
 ];
 
 const MARKET_TABS: AreaTabDef[] = [
+  { slug: "analysis", label: "Analiza rynku" },
+  { slug: "competition", label: "Analiza konkurencji" },
   { slug: "segments", label: "Segmenty" },
   { slug: "journey", label: "Customer journey" },
   { slug: "segmentation", label: "Segmentacja" },
