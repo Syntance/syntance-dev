@@ -11,6 +11,7 @@ import {
 } from "@/lib/strategy-hub/api-helpers";
 
 const TYPES = ["direct", "indirect", "none"] as const;
+const PRICE_COMPARISONS = ["cheaper", "similar", "more_expensive"] as const;
 const coord = z.number().min(-1).max(1);
 
 const patchSchema = z.object({
@@ -18,11 +19,15 @@ const patchSchema = z.object({
   url: z.string().url().optional().nullable(),
   type: z.enum(TYPES).optional(),
   segmentId: z.string().uuid().optional().nullable(),
+  location: z.string().max(255).optional().nullable(),
+  specialization: z.string().max(255).optional().nullable(),
   strengthsMd: z.string().optional().nullable(),
   weaknessesMd: z.string().optional().nullable(),
   pricingMd: z.string().optional().nullable(),
   channelsMd: z.string().optional().nullable(),
   notesMd: z.string().optional().nullable(),
+  ourEdgeMd: z.string().optional().nullable(),
+  priceComparison: z.enum(PRICE_COMPARISONS).optional().nullable(),
   quadrantX: coord.optional().nullable(),
   quadrantY: coord.optional().nullable(),
 });

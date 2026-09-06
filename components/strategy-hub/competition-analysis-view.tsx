@@ -1,24 +1,19 @@
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
 import { PositioningMini } from "@/components/strategy-hub/positioning-mini";
-import type {
-  CompetitionAnalysis,
-  CompetitorAnalysis,
-} from "@/lib/strategy-hub/competition-analysis";
+import { CompetitorDatabase } from "@/components/strategy-hub/competitor-database";
+import type { CompetitionAnalysis } from "@/lib/strategy-hub/competition-analysis";
 import {
   AnalysisField,
   AnalysisProse,
   AnalysisSection,
   AnalysisStat,
-  EmptyAnalysis,
-  GapList,
 } from "@/components/strategy-hub/analysis-primitives";
 
 /**
- * Widok „Analiza konkurencji" — trzy poziomy odczytu, od ogółu do szczegółu:
- * kwadrant pozycjonowania (gdzie jesteśmy względem innych), karty konkurentów
- * (mocne i słabe strony zestawione obok siebie), macierz porównawcza
- * (jedno spojrzenie na wszystkich naraz).
+ * Widok „Analiza konkurencji" — konfigurator, nie raport. Baza konkurentów
+ * (tabela z kolumnami-kategoriami, klik w wiersz otwiera kartę) jest głównym
+ * elementem strony i sama zarządza swoimi danymi; pozycjonowanie i obiekcje
+ * zostają czytelniczymi sekcjami obok, bo edytuje się je gdzie indziej.
  */
 export function CompetitionAnalysisView({
   data,
@@ -27,29 +22,12 @@ export function CompetitionAnalysisView({
   data: CompetitionAnalysis;
   projectId: string;
 }) {
-  const brakDanych = data.competitorCount === 0 && !data.positioning;
-
-  if (brakDanych) {
-    return (
-      <EmptyAnalysis
-        title="Brak danych o konkurencji"
-        description="Ten widok czyta konkurentów i pozycjonowanie z fundamentu strategii. Dodaj pierwszego konkurenta, a pojawi się tu jego profil, mocne i słabe strony oraz miejsce na kwadrancie."
-        href={`/strategy-hub/projects/${projectId}/foundation/business`}
-        linkLabel="Przejdź do fundamentu"
-      />
-    );
-  }
+  // Ustalone przez resolvera: sourceName jest niepuste wtedy i tylko wtedy,
+  // gdy fundament jest dziedziczony (patrz resolveFoundationSource).
+  const foundationInherited = data.foundationSourceName !== null;
 
   return (
     <div className="space-y-10">
-      {data.foundationSourceName && (
-        <p className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-          Konkurencja i pozycjonowanie pochodzą z projektu{" "}
-          <strong>{data.foundationSourceName}</strong> — ten projekt dziedziczy
-          fundament strategii.
-        </p>
-      )}
-
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <AnalysisStat label="Konkurenci" value={data.competitorCount} />
         <AnalysisStat
@@ -71,6 +49,17 @@ export function CompetitionAnalysisView({
           hint="zebrane od rynku"
         />
       </section>
+
+      <AnalysisSection
+        title="Baza konkurentów"
+        hint="Kliknij konkurenta, żeby otworzyć jego pełną kartę. Werdykt cenowy klika się wprost w tabeli."
+      >
+        <CompetitorDatabase
+          projectId={projectId}
+          foundationInherited={foundationInherited}
+          foundationSourceName={data.foundationSourceName}
+        />
+      </AnalysisSection>
 
       {data.positioning && (
         <AnalysisSection
@@ -112,81 +101,6 @@ export function CompetitionAnalysisView({
         </AnalysisSection>
       )}
 
-      {data.competitors.length > 0 && (
-        <>
-          <AnalysisSection
-            title="Profile konkurentów"
-            hint="Mocne i słabe strony zestawione obok siebie — tak widać, gdzie realnie jest przewaga."
-            action={
-              <Link
-                href={`/strategy-hub/projects/${projectId}/foundation/business`}
-                className="shrink-0 text-xs text-brand underline underline-offset-2"
-              >
-                Edytuj konkurentów
-              </Link>
-            }
-          >
-            <div className="space-y-4">
-              {data.byType.map((grupa) => (
-                <div key={grupa.type} className="space-y-3">
-                  {data.byType.length > 1 && (
-                    <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      {grupa.type}
-                      <span className="ml-1.5 font-normal normal-case">
-                        ({grupa.competitors.length})
-                      </span>
-                    </h3>
-                  )}
-                  {grupa.competitors.map((c) => (
-                    <CompetitorCard key={c.id} competitor={c} />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </AnalysisSection>
-
-          <AnalysisSection
-            title="Macierz porównawcza"
-            hint="Wszyscy konkurenci naraz — do wyłapania wzorców, których nie widać w pojedynczych profilach."
-          >
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[52rem] border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    <th className="p-3 text-left font-medium">Konkurent</th>
-                    <th className="p-3 text-left font-medium">Mocne strony</th>
-                    <th className="p-3 text-left font-medium">Słabe strony</th>
-                    <th className="p-3 text-left font-medium">Cennik</th>
-                    <th className="p-3 text-left font-medium">Kanały</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.competitors.map((c) => (
-                    <tr
-                      key={c.id}
-                      className="border-b border-border last:border-0 align-top"
-                    >
-                      <td className="p-3">
-                        <span className="font-medium">{c.name}</span>
-                        {c.type && (
-                          <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                            {c.type}
-                          </span>
-                        )}
-                      </td>
-                      <MacierzKomorka value={c.strengthsMd} />
-                      <MacierzKomorka value={c.weaknessesMd} />
-                      <MacierzKomorka value={c.pricingMd} />
-                      <MacierzKomorka value={c.channelsMd} />
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </AnalysisSection>
-        </>
-      )}
-
       {data.objections.length > 0 && (
         <AnalysisSection
           title="Obiekcje rynku"
@@ -226,91 +140,5 @@ export function CompetitionAnalysisView({
         </AnalysisSection>
       )}
     </div>
-  );
-}
-
-function MacierzKomorka({ value }: { value: string | null }) {
-  return (
-    <td className="p-3">
-      {value ? (
-        <AnalysisProse className="text-xs">{value}</AnalysisProse>
-      ) : (
-        <span className="text-muted-foreground/50">—</span>
-      )}
-    </td>
-  );
-}
-
-function CompetitorCard({ competitor: c }: { competitor: CompetitorAnalysis }) {
-  return (
-    <article className="overflow-hidden rounded-xl border border-border bg-card">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h4 className="text-sm font-semibold">{c.name}</h4>
-            {c.url && (
-              <a
-                href={c.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-brand underline underline-offset-2"
-              >
-                strona
-                <ExternalLink className="size-3" />
-              </a>
-            )}
-            {c.segmentName && (
-              <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                {c.segmentName}
-              </span>
-            )}
-            {c.segmentMissing && (
-              <span className="rounded-md border border-amber-500/40 px-1.5 py-0.5 text-[10px] text-amber-500">
-                segment spoza tego projektu
-              </span>
-            )}
-          </div>
-          <div className="mt-1.5">
-            <GapList gaps={c.gaps} />
-          </div>
-        </div>
-        {(c.quadrantX !== null || c.quadrantY !== null) && (
-          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-            x {c.quadrantX ?? "—"} · y {c.quadrantY ?? "—"}
-          </span>
-        )}
-      </header>
-
-      <div className="grid gap-px bg-border sm:grid-cols-2">
-        <div className="bg-card p-4">
-          <h5 className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-emerald-500">
-            Mocne strony
-          </h5>
-          {c.strengthsMd ? (
-            <AnalysisProse>{c.strengthsMd}</AnalysisProse>
-          ) : (
-            <p className="text-xs text-muted-foreground/60">Nie opisano.</p>
-          )}
-        </div>
-        <div className="bg-card p-4">
-          <h5 className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-destructive">
-            Słabe strony
-          </h5>
-          {c.weaknessesMd ? (
-            <AnalysisProse>{c.weaknessesMd}</AnalysisProse>
-          ) : (
-            <p className="text-xs text-muted-foreground/60">Nie opisano.</p>
-          )}
-        </div>
-      </div>
-
-      {(c.pricingMd || c.channelsMd || c.notesMd) && (
-        <div className="space-y-4 border-t border-border p-4">
-          <AnalysisField label="Cennik" value={c.pricingMd} />
-          <AnalysisField label="Kanały" value={c.channelsMd} />
-          <AnalysisField label="Notatki" value={c.notesMd} />
-        </div>
-      )}
-    </article>
   );
 }

@@ -315,11 +315,26 @@ export const competitors = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     url: text("url"),
     type: varchar("type", { length: 20 }).notNull().default("direct"),
+    /** Miasto/region/zasięg działania — kolumna w widoku "baza konkurentów". */
+    location: varchar("location", { length: 255 }),
+    /** Krótka etykieta nisze/kategorii, np. "SEO dla e-commerce" — inne pojęcie niż `type`. */
+    specialization: varchar("specialization", { length: 255 }),
     strengthsMd: text("strengths_md"),
     weaknessesMd: text("weaknesses_md"),
     pricingMd: text("pricing_md"),
     channelsMd: text("channels_md"),
     notesMd: text("notes_md"),
+    /**
+     * Nasz wyróżnik WZGLĘDEM TEGO KONKRETNEGO konkurenta — inne pojęcie niż
+     * `brandPositioning.statementMd`/`nicheMd`, które są jednym zdaniem dla
+     * całej firmy. Tu chodzi o punktową odpowiedź "czym górujemy nad X".
+     */
+    ourEdgeMd: text("our_edge_md"),
+    /**
+     * Werdykt ceny względem naszej: `cheaper` | `similar` | `more_expensive`.
+     * Osobne pole od `pricingMd` (opis) — to jest KLIKALNA ocena, nie tekst.
+     */
+    priceComparison: varchar("price_comparison", { length: 20 }),
     quadrantX: real("quadrant_x"),
     quadrantY: real("quadrant_y"),
     source: varchar("source", { length: 20 }).notNull().default("hub"),
