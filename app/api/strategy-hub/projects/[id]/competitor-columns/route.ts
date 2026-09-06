@@ -115,6 +115,9 @@ export async function POST(
       type: parsed.data.type,
       options: parsed.data.type === "select" ? parsed.data.options : null,
       textColor: parsed.data.textColor ?? null,
+      // Ten route tworzy WYŁĄCZNIE kolumny własne — systemowe (Typ, Lokalizacja…)
+      // są seedowane raz migracją, nigdy przez API.
+      source: "custom",
       orderIdx: nextOrder,
     })
     .returning();

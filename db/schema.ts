@@ -379,9 +379,25 @@ export const competitorColumns = pgTable(
     /**
      * Kolor wyświetlanego tekstu w tabeli — klucz z tej samej palety co
      * kolory opcji `select` (patrz `OPTION_COLORS` w UI). Nie dotyczy komórek
-     * `checkbox` (ikona, nie tekst) ani `select` (już ma kolor per opcja).
+     * `checkbox` (ikona, nie tekst) ani `select`/`price_comparison` (już mają
+     * kolor per wartość — kolumnowy kolor konfliktowałby wizualnie).
      */
     textColor: varchar("text_color", { length: 20 }),
+    /**
+     * `custom` — wartość siedzi w `competitors.customFields[key]`, w pełni
+     * zarządzana przez użytkownika (typ/opcje edytowalne, usuwalna).
+     * `system` — wpis PORZĄDKUJE i ETYKIETUJE prawdziwą, typowaną kolumnę SQL
+     * (`competitors.location` itd. — patrz `fieldKey`); typ i opcje są
+     * strukturalnie zablokowane (kolumna SQL ma już swój kształt), a wpisu
+     * nie da się usunąć — dane nigdzie by nie zniknęły, tylko UI by je ukrył,
+     * co byłoby mylące. Seedowane raz per projekt migracją, nie przez API.
+     */
+    source: varchar("source", { length: 10 }).notNull().default("custom"),
+    /**
+     * Tylko dla `source: system` — nazwa prawdziwej kolumny SQL w `competitors`,
+     * którą ten wpis reprezentuje (np. `location`, `price_comparison`).
+     */
+    fieldKey: varchar("field_key", { length: 30 }),
     orderIdx: integer("order_idx").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     deletedAt: timestamp("deleted_at"),

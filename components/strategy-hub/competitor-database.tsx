@@ -74,6 +74,23 @@ export type ColumnType =
   | "checkbox"
   | "select";
 
+/** system = Typ/Lokalizacja/Specjalizacja/Cena/NaszWyróżnik (prawdziwa kolumna SQL, seedowana migracją). custom = dodana przez „+”. */
+export type ColumnSource = "system" | "custom";
+
+/**
+ * Dla `source: system` — którą kolumnę SQL ten wpis porządkuje/etykietuje.
+ * WARTOŚCI SĄ SNAKE_CASE — to surowe stringi z migracji 0037 (dane, nie nazwy
+ * właściwości TS), więc NIE odpowiadają 1:1 camelCase polom `CompetitorDbRow`
+ * (`price_comparison` → `priceComparison`, `our_edge_md` → `ourEdgeMd`).
+ * Mapowanie na właściwość robi `SystemFieldCell` przez jawny switch.
+ */
+export type SystemFieldKey =
+  | "type"
+  | "location"
+  | "specialization"
+  | "price_comparison"
+  | "our_edge_md";
+
 export interface CompetitorColumn {
   id: string;
   key: string;
@@ -81,7 +98,16 @@ export interface CompetitorColumn {
   type: ColumnType;
   options: ColumnOption[] | null;
   textColor: string | null;
+  source: ColumnSource;
+  fieldKey: SystemFieldKey | null;
 }
+
+/** Kolumny, dla których kolor tekstu ma sens — `type`/`price_comparison` są ikonowe, nie tekstowe. */
+const COLORABLE_SYSTEM_FIELDS: SystemFieldKey[] = [
+  "location",
+  "specialization",
+  "our_edge_md",
+];
 
 interface CompetitorDatabaseProps {
   projectId: string;
@@ -405,9 +431,10 @@ export function CompetitorDatabase({
     );
   }
 
-  // 6 stałych kolumn + własne + (przy edycji: przycisk "+ kolumna" i kolumna
-  // akcji usuwania — dwa dodatkowe nagłówki, patrz <thead> niżej).
-  const totalCols = 6 + columns.length + (foundationInherited ? 0 : 2);
+  // Konkurent (przypięty) + wszystkie kolumny z rejestru (systemowe i własne)
+  // + (przy edycji: przycisk "+ kolumna" i kolumna akcji usuwania wiersza —
+  // dwa dodatkowe nagłówki, patrz <thead> niżej).
+  const totalCols = 1 + columns.length + (foundationInherited ? 0 : 2);
 
   return (
     <div className="space-y-3">
@@ -430,12 +457,14 @@ export function CompetitorDatabase({
         <table className="w-full min-w-[64rem] border-collapse text-xs">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-left">
+              {/*
+                Tylko "Konkurent" jest przypięty na stałe — to kolumna
+                tytułowa/identyfikująca wiersz, tak jak w Notion/Airtable.
+                Wszystkie inne (systemowe: Typ/Lokalizacja/Specjalizacja/
+                Cena/NaszWyróżnik, oraz własne) idą jedną wspólną pętlą niżej —
+                przesuwanie, edycja etykiety i kolor działają na nich tak samo.
+              */}
               <th className="p-3 font-medium">Konkurent</th>
-              <th className="p-3 font-medium">Typ</th>
-              <th className="p-3 font-medium">Lokalizacja</th>
-              <th className="p-3 font-medium">Specjalizacja</th>
-              <th className="p-3 font-medium">Cena vs. nasza</th>
-              <th className="p-3 font-medium">Nasz wyróżnik</th>
               {columns.map((col, colIdx) => (
                 <th key={col.id} className="group/col p-3 font-medium">
                   <span className="inline-flex items-center gap-1">
@@ -460,27 +489,28 @@ export function CompetitorDatabase({
                       {col.label}
                     </button>
                     {!foundationInherited && (
-                      <>
-                        <button
-                          type="button"
-                          disabled={colIdx === columns.length - 1}
-                          onClick={() => handleColumnMove(col, "right")}
-                          aria-label={`Przesuń kolumnę ${col.label} w prawo`}
-                          title="Przesuń w prawo"
-                          className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground group-hover/col:opacity-100 disabled:pointer-events-none disabled:opacity-0"
-                        >
-                          <ChevronRight className="size-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleColumnDelete(col)}
-                          aria-label={`Usuń kolumnę ${col.label}`}
-                          title="Usuń kolumnę"
-                          className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover/col:opacity-100"
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        disabled={colIdx === columns.length - 1}
+                        onClick={() => handleColumnMove(col, "right")}
+                        aria-label={`Przesuń kolumnę ${col.label} w prawo`}
+                        title="Przesuń w prawo"
+                        className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground group-hover/col:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+                      >
+                        <ChevronRight className="size-3" />
+                      </button>
+                    )}
+                    {/* Systemowa kolumna reprezentuje prawdziwe dane — nie da się jej usunąć, tylko przesunąć/przemianować/pokolorować. */}
+                    {!foundationInherited && col.source === "custom" && (
+                      <button
+                        type="button"
+                        onClick={() => handleColumnDelete(col)}
+                        aria-label={`Usuń kolumnę ${col.label}`}
+                        title="Usuń kolumnę"
+                        className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover/col:opacity-100"
+                      >
+                        <X className="size-3" />
+                      </button>
                     )}
                   </span>
                 </th>
@@ -503,7 +533,6 @@ export function CompetitorDatabase({
           </thead>
           <tbody>
             {items.map((c) => {
-              const type = asType(c.type);
               return (
                 <tr
                   key={c.id}
@@ -531,71 +560,34 @@ export function CompetitorDatabase({
                       )}
                     </div>
                   </td>
-                  <td className="p-3">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        aria-hidden
-                        className={cn("size-1.5 rounded-full", TYPE_DOT[type])}
-                      />
-                      {TYPE_LABELS[type]}
-                    </span>
-                  </td>
-                  <td className="p-3 text-muted-foreground">
-                    {c.location ?? "—"}
-                  </td>
-                  <td className="p-3 text-muted-foreground">
-                    {c.specialization ?? "—"}
-                  </td>
-                  <td className="p-3">
-                    <div className="flex gap-1">
-                      {PRICE_OPTIONS.map((opt) => {
-                        const active = c.priceComparison === opt.value;
-                        const Icon = opt.icon;
-                        return (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            disabled={foundationInherited}
-                            title={opt.label}
-                            aria-pressed={active}
-                            onClick={() =>
-                              handlePatch(c.id, {
-                                priceComparison: active ? null : opt.value,
-                              })
-                            }
-                            className={cn(
-                              "flex size-6 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-                              active
-                                ? opt.activeClass
-                                : "border-border text-muted-foreground/50 hover:text-foreground"
-                            )}
-                          >
-                            <Icon className="size-3.5" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </td>
-                  <td className="max-w-[16rem] p-3 text-muted-foreground">
-                    <span className="line-clamp-1">{c.ourEdgeMd ?? "—"}</span>
-                  </td>
-                  {columns.map((col) => (
-                    <td key={col.id} className="p-3">
-                      <CustomFieldCell
-                        column={col}
-                        value={c.customFields?.[col.key] ?? null}
-                        editing={
-                          editingCell?.rowId === c.id && editingCell.key === col.key
-                        }
-                        readOnly={foundationInherited}
-                        onStartEdit={() => setEditingCell({ rowId: c.id, key: col.key })}
-                        onStopEdit={() => setEditingCell(null)}
-                        onChange={(value) =>
-                          handlePatch(c.id, { customFields: { [col.key]: value } })
-                        }
-                      />
-                    </td>
-                  ))}
+                  {columns.map((col) =>
+                    col.source === "system" ? (
+                      <td key={col.id} className="p-3">
+                        <SystemFieldCell
+                          column={col}
+                          row={c}
+                          readOnly={foundationInherited}
+                          onChange={(patch) => handlePatch(c.id, patch)}
+                        />
+                      </td>
+                    ) : (
+                      <td key={col.id} className="p-3">
+                        <CustomFieldCell
+                          column={col}
+                          value={c.customFields?.[col.key] ?? null}
+                          editing={
+                            editingCell?.rowId === c.id && editingCell.key === col.key
+                          }
+                          readOnly={foundationInherited}
+                          onStartEdit={() => setEditingCell({ rowId: c.id, key: col.key })}
+                          onStopEdit={() => setEditingCell(null)}
+                          onChange={(value) =>
+                            handlePatch(c.id, { customFields: { [col.key]: value } })
+                          }
+                        />
+                      </td>
+                    )
+                  )}
                   {!foundationInherited && <td className="p-3" />}
                   {!foundationInherited && (
                     <td className="p-3">
@@ -675,6 +667,80 @@ export function CompetitorDatabase({
       />
     </div>
   );
+}
+
+/**
+ * Komórka kolumny SYSTEMOWEJ — czyta/pisze prawdziwe pole `CompetitorDbRow`
+ * (nie `customFields`). Renderowanie i interakcja WARTOŚCI zostają dokładnie
+ * takie, jak były przed unifikacją (Typ i Nasz wyróżnik edytuje się w karcie,
+ * Cena vs. nasza jest klikalna wprost tu) — unifikacja dotyczy DEFINICJI
+ * kolumny (pozycja/etykieta/kolor), nie modelu edycji jej wartości.
+ */
+function SystemFieldCell({
+  column,
+  row,
+  readOnly,
+  onChange,
+}: {
+  column: CompetitorColumn;
+  row: CompetitorDbRow;
+  readOnly: boolean;
+  onChange: (patch: Partial<CompetitorDbRow>) => void;
+}) {
+  const color = COLORABLE_SYSTEM_FIELDS.includes(column.fieldKey as SystemFieldKey)
+    ? textColorClass(column.textColor)
+    : undefined;
+
+  if (column.fieldKey === "type") {
+    const type = asType(row.type);
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden className={cn("size-1.5 rounded-full", TYPE_DOT[type])} />
+        {TYPE_LABELS[type]}
+      </span>
+    );
+  }
+
+  if (column.fieldKey === "price_comparison") {
+    return (
+      <div className="flex gap-1">
+        {PRICE_OPTIONS.map((opt) => {
+          const active = row.priceComparison === opt.value;
+          const Icon = opt.icon;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              disabled={readOnly}
+              title={opt.label}
+              aria-pressed={active}
+              onClick={() => onChange({ priceComparison: active ? null : opt.value })}
+              className={cn(
+                "flex size-6 items-center justify-center rounded-md border transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                active
+                  ? opt.activeClass
+                  : "border-border text-muted-foreground/50 hover:text-foreground"
+              )}
+            >
+              <Icon className="size-3.5" />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (column.fieldKey === "our_edge_md") {
+    return (
+      <span className={cn("line-clamp-1 max-w-[16rem]", color ?? "text-muted-foreground")}>
+        {row.ourEdgeMd ?? "—"}
+      </span>
+    );
+  }
+
+  // location / specialization
+  const value = column.fieldKey === "location" ? row.location : row.specialization;
+  return <span className={color ?? "text-muted-foreground"}>{value ?? "—"}</span>;
 }
 
 /** Pojedyncza komórka kolumny użytkownika — renderuje się i edytuje wg typu. */
@@ -898,26 +964,37 @@ function ColumnFormDialog({
     setOptions((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  const isSystem = initial?.source === "system";
+  const canColor = isSystem
+    ? COLORABLE_SYSTEM_FIELDS.includes(initial.fieldKey as SystemFieldKey)
+    : type !== "select" && type !== "checkbox";
+
   const validOptions = options.filter((o) => o.label.trim());
   const canSave =
-    label.trim().length > 0 && (type !== "select" || validOptions.length > 0);
+    label.trim().length > 0 &&
+    (isSystem || type !== "select" || validOptions.length > 0);
 
   async function handleSave() {
     if (!canSave) return;
     setSaving(true);
-    const body = {
-      label: label.trim(),
-      type,
-      options:
-        type === "select"
-          ? validOptions.map((o, i) => ({
-              value: o.value || `opcja_${i + 1}`,
-              label: o.label.trim(),
-              color: o.color,
-            }))
-          : undefined,
-      textColor,
-    };
+    // Kolumna systemowa: typ/opcje są strukturalnie zablokowane (patrz JSDoc
+    // `SystemFieldCell`), więc nie wysyłamy ich w ogóle — serwer i tak by je
+    // zignorował, ale klient ma być uczciwy co do tego, co realnie edytuje.
+    const body = isSystem
+      ? { label: label.trim(), textColor }
+      : {
+          label: label.trim(),
+          type,
+          options:
+            type === "select"
+              ? validOptions.map((o, i) => ({
+                  value: o.value || `opcja_${i + 1}`,
+                  label: o.label.trim(),
+                  color: o.color,
+                }))
+              : undefined,
+          textColor,
+        };
     try {
       const res = initial
         ? await apiFetch<{ item: CompetitorColumn }>(
@@ -955,30 +1032,40 @@ function ColumnFormDialog({
             />
           </Field>
 
-          <Field label="Typ pola">
-            <div className="grid grid-cols-2 gap-1.5">
-              {COLUMN_TYPE_LIBRARY.map((t) => (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => setType(t.value)}
-                  className={cn(
-                    "rounded-md border p-2 text-left transition-colors",
-                    type === t.value
-                      ? "border-brand bg-brand/5"
-                      : "border-border hover:border-brand/40"
-                  )}
-                >
-                  <span className="block text-xs font-medium">{t.label}</span>
-                  <span className="block text-[10px] text-muted-foreground">
-                    {t.hint}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </Field>
+          {isSystem ? (
+            <Field label="Typ pola">
+              <p className="rounded-md border border-dashed border-border p-2 text-[11px] text-muted-foreground">
+                {COLUMN_TYPE_LIBRARY.find((t) => t.value === type)?.label ?? type}{" "}
+                — stały. Ta kolumna porządkuje prawdziwe dane konkurenta, więc
+                jej typ nie zmienia się z poziomu UI.
+              </p>
+            </Field>
+          ) : (
+            <Field label="Typ pola">
+              <div className="grid grid-cols-2 gap-1.5">
+                {COLUMN_TYPE_LIBRARY.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setType(t.value)}
+                    className={cn(
+                      "rounded-md border p-2 text-left transition-colors",
+                      type === t.value
+                        ? "border-brand bg-brand/5"
+                        : "border-border hover:border-brand/40"
+                    )}
+                  >
+                    <span className="block text-xs font-medium">{t.label}</span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {t.hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
 
-          {type === "select" && (
+          {!isSystem && type === "select" && (
             <Field label="Opcje wyboru">
               <div className="space-y-1.5">
                 {options.map((o, i) => (
@@ -1030,7 +1117,7 @@ function ColumnFormDialog({
             </Field>
           )}
 
-          {type !== "select" && type !== "checkbox" && (
+          {canColor && (
             <Field label="Kolor tekstu w tabeli">
               <div className="flex items-center gap-1.5">
                 <button
@@ -1127,6 +1214,22 @@ function CompetitorSheet({
     onSave({ customFields: { [key]: value } });
   }
 
+  // Systemowe (Typ/Lokalizacja/Specjalizacja/Cena/NaszWyróżnik) mają już
+  // dedykowane pola powyżej — bez filtra pokazałyby się tu DRUGI raz, czytając
+  // z customFields, gdzie nigdy nie mają wartości (system zapisuje do
+  // prawdziwych kolumn SQL, nie do JSONB).
+  const customColumns = columns.filter((c) => c.source === "custom");
+
+  // Etykieta pola systemowego czytana z rejestru — jeśli ktoś zmienił nazwę
+  // "Lokalizacja" na coś innego przez ColumnFormDialog, karta ma to pokazać,
+  // nie zostawać przy zaszytym na sztywno tekście. Fallback dla świeżo
+  // utworzonego konkurenta (columns może nie być jeszcze załadowane) albo
+  // gdyby wpisu systemowego zabrakło.
+  function systemLabel(fieldKey: SystemFieldKey, fallback: string): string {
+    return columns.find((c) => c.source === "system" && c.fieldKey === fieldKey)
+      ?.label ?? fallback;
+  }
+
   const type = asType(draft.type);
 
   return (
@@ -1164,7 +1267,7 @@ function CompetitorSheet({
                 className="h-8 text-sm"
               />
             </Field>
-            <Field label="Typ">
+            <Field label={systemLabel("type", "Typ")}>
               <select
                 value={type}
                 disabled={readOnly}
@@ -1194,7 +1297,7 @@ function CompetitorSheet({
                 className="h-8 text-sm"
               />
             </Field>
-            <Field label="Lokalizacja">
+            <Field label={systemLabel("location", "Lokalizacja")}>
               <Input
                 value={draft.location ?? ""}
                 disabled={readOnly}
@@ -1208,7 +1311,7 @@ function CompetitorSheet({
             </Field>
           </div>
 
-          <Field label="Specjalizacja">
+          <Field label={systemLabel("specialization", "Specjalizacja")}>
             <Input
               value={draft.specialization ?? ""}
               disabled={readOnly}
@@ -1221,7 +1324,7 @@ function CompetitorSheet({
             />
           </Field>
 
-          <Field label="Cena względem naszej">
+          <Field label={systemLabel("price_comparison", "Cena względem naszej")}>
             <div className="flex gap-1.5">
               {PRICE_OPTIONS.map((opt) => {
                 const active = draft.priceComparison === opt.value;
@@ -1252,7 +1355,7 @@ function CompetitorSheet({
             </div>
           </Field>
 
-          <Field label="Nasz wyróżnik względem tego konkurenta">
+          <Field label={systemLabel("our_edge_md", "Nasz wyróżnik względem tego konkurenta")}>
             <Textarea
               value={draft.ourEdgeMd ?? ""}
               disabled={readOnly}
@@ -1325,12 +1428,12 @@ function CompetitorSheet({
             />
           </Field>
 
-          {columns.length > 0 && (
+          {customColumns.length > 0 && (
             <div className="space-y-4 border-t border-border pt-4">
               <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Własne kolumny
               </h4>
-              {columns.map((col) => (
+              {customColumns.map((col) => (
                 <CustomFieldInput
                   key={col.id}
                   column={col}

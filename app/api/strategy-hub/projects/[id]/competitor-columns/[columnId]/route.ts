@@ -58,14 +58,32 @@ export async function PATCH(
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());
 
+  const [target] = await db
+    .select({ source: competitorColumns.source })
+    .from(competitorColumns)
+    .where(
+      and(eq(competitorColumns.id, columnId), eq(competitorColumns.projectId, id))
+    )
+    .limit(1);
+  if (!target) return notFound("Column");
+
   const data: Record<string, unknown> = Object.fromEntries(
     Object.entries(parsed.data).filter(([, v]) => v !== undefined)
   );
-  if (Object.keys(data).length === 0) return badRequest("No fields to update");
 
-  // Zmiana typu na coś innego niż 'select' czyści stare opcje — inaczej
-  // zostałyby osierocone (kolumna 'text' z martwym options w tle).
-  if (data.type && data.type !== "select") data.options = null;
+  // Kolumna systemowa reprezentuje prawdziwą, typowaną kolumnę SQL — jej typ
+  // i opcje są strukturalnie zablokowane niezależnie od tego, co wysłał klient.
+  // UI nigdy tego nie wysyła, ale serwer jest tu ostatnią linią obrony.
+  if (target.source === "system") {
+    delete data.type;
+    delete data.options;
+  } else if (data.type && data.type !== "select") {
+    // Kolumna własna: zmiana typu na coś innego niż 'select' czyści stare
+    // opcje — inaczej zostałyby osierocone (kolumna 'text' z martwym options).
+    data.options = null;
+  }
+
+  if (Object.keys(data).length === 0) return badRequest("No fields to update");
 
   const updated = await db
     .update(competitorColumns)
@@ -95,6 +113,21 @@ export async function DELETE(
   if (!auth.ok) return auth.response;
   const own = await requireOwnFoundation(id);
   if (!own.ok) return own.response;
+
+  const [target] = await db
+    .select({ source: competitorColumns.source })
+    .from(competitorColumns)
+    .where(
+      and(eq(competitorColumns.id, columnId), eq(competitorColumns.projectId, id))
+    )
+    .limit(1);
+  if (!target) return notFound("Column");
+
+  // Systemowa kolumna reprezentuje prawdziwe dane (competitors.location itd.)
+  // — "usunięcie" niczego by nie skasowało, tylko ukryło pole w mylący sposób.
+  if (target.source === "system") {
+    return badRequest("System columns cannot be deleted");
+  }
 
   const updated = await db
     .update(competitorColumns)
