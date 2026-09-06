@@ -20,6 +20,7 @@ import {
   type StrategyArea,
 } from "@/lib/strategy-hub/entities/entity-types";
 import { getConstellationData } from "@/lib/strategy-hub/constellation-data";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 const SIDE_LIMIT = 15;
 
@@ -121,16 +122,26 @@ function neighborsFromLinks(
 }
 
 async function getCoreSingletons(projectId: string): Promise<CoreSingletons> {
+  /**
+   * Oś dziedziczenia W0 — NIE zamieniaj z powrotem na `projectId`.
+   * Rdzeń konstelacji pokazuje UVP i pozycjonowanie, czyli singletony
+   * FUNDAMENTU; przy `strategyMode='dziedziczona'` żyją one w najbliższym
+   * przodku `wlasna`. Obie encje w tym `Promise.all` są z W0, więc resolver
+   * musi rozstrzygnąć się przed nimi (nie ma tu nic lokalnego, co by czekało).
+   * Dla `wlasna` resolver zwraca to samo id → zachowanie bez zmian.
+   */
+  const fundamentId = (await resolveFoundationSource(projectId)).projectId;
+
   const [uvpRow, posRow] = await Promise.all([
     db
       .select({ coreUvpMd: uvp.coreUvpMd })
       .from(uvp)
-      .where(eq(uvp.projectId, projectId))
+      .where(eq(uvp.projectId, fundamentId))
       .limit(1),
     db
       .select({ statementMd: brandPositioning.statementMd })
       .from(brandPositioning)
-      .where(eq(brandPositioning.projectId, projectId))
+      .where(eq(brandPositioning.projectId, fundamentId))
       .limit(1),
   ]);
   return {

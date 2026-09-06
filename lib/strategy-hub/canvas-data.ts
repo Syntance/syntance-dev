@@ -23,6 +23,7 @@ import {
   aiActionsLog,
 } from "@/db/schema";
 import { and, count, desc, eq, isNull, inArray } from "drizzle-orm";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 interface CanvasColor {
   name?: string;
@@ -106,6 +107,20 @@ function asCompetitors(v: unknown): CanvasCompetitor[] {
 export async function getCanvasData(projectId: string): Promise<CanvasData> {
   const pid = projectId;
 
+  /**
+   * Oś dziedziczenia W0 — NIE zamieniaj z powrotem na `pid`.
+   * Kafelki „Marka" i „Pozycjonowanie" czytają encje FUNDAMENTU, które przy
+   * `strategyMode='dziedziczona'` mieszkają w najbliższym przodku `wlasna`.
+   * Reszta kafelków (segmenty, lejek, kanały, KPI, strona, audyt, sync,
+   * discovery, AI) jest ZAWSZE lokalna i zostaje na `pid`.
+   * Trzymamy tu sam promise (bez `await`), żeby zapytania lokalne nie czekały
+   * na resolver — całość i tak rozwiązuje się w jednym `Promise.all`.
+   * Dla `wlasna` resolver zwraca to samo id → zachowanie bez zmian.
+   */
+  const fundamentId = resolveFoundationSource(projectId).then(
+    (zrodlo) => zrodlo.projectId
+  );
+
   const [
     identity,
     visual,
@@ -128,24 +143,30 @@ export async function getCanvasData(projectId: string): Promise<CanvasData> {
     [openT],
     [aiRecent],
   ] = await Promise.all([
-    db
-      .select({ missionMd: brandIdentity.missionMd, toneOfVoiceMd: brandIdentity.toneOfVoiceMd })
-      .from(brandIdentity)
-      .where(eq(brandIdentity.projectId, pid))
-      .limit(1)
-      .then((r) => r[0]),
-    db
-      .select({ colors: brandVisual.colors })
-      .from(brandVisual)
-      .where(eq(brandVisual.projectId, pid))
-      .limit(1)
-      .then((r) => r[0]),
-    db
-      .select()
-      .from(brandPositioning)
-      .where(eq(brandPositioning.projectId, pid))
-      .limit(1)
-      .then((r) => r[0]),
+    fundamentId.then((fid) =>
+      db
+        .select({ missionMd: brandIdentity.missionMd, toneOfVoiceMd: brandIdentity.toneOfVoiceMd })
+        .from(brandIdentity)
+        .where(eq(brandIdentity.projectId, fid))
+        .limit(1)
+        .then((r) => r[0])
+    ),
+    fundamentId.then((fid) =>
+      db
+        .select({ colors: brandVisual.colors })
+        .from(brandVisual)
+        .where(eq(brandVisual.projectId, fid))
+        .limit(1)
+        .then((r) => r[0])
+    ),
+    fundamentId.then((fid) =>
+      db
+        .select()
+        .from(brandPositioning)
+        .where(eq(brandPositioning.projectId, fid))
+        .limit(1)
+        .then((r) => r[0])
+    ),
     db
       .select({
         id: segments.id,

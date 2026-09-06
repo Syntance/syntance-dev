@@ -10,6 +10,7 @@ import {
 } from "@/lib/strategy-hub/entities/entity-types";
 import { searchSimilar } from "@/lib/strategy-hub/embeddings/search";
 import { getListEntity } from "@/lib/strategy-hub/entities/registry";
+import { resolveProjectIdForEntity } from "@/lib/strategy-hub/scope";
 import {
   findPath,
   getNeighbors,
@@ -63,7 +64,11 @@ async function entityDisplayName(
   if (registryKey) {
     const def = getListEntity(registryKey);
     if (def?.get) {
-      const row = await def.get(projectId, ref.id);
+      // Encje fundamentu (W0) leżą w projekcie-źródle, gdy projekt dziedziczy —
+      // bez tego dziedziczony konkurent czy oferta renderowałyby się w grafie
+      // jako gołe „Encja" zamiast swojej nazwy.
+      const scopeId = await resolveProjectIdForEntity(projectId, registryKey);
+      const row = await def.get(scopeId, ref.id);
       if (isRecord(row)) return readLabel(row);
     }
   }

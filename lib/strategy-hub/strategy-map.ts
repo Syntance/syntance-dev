@@ -45,6 +45,7 @@ import { findModuleRule } from "./rules/defaults";
 import { computeModuleScore, type CriterionContext } from "./rules/evaluate";
 import { resolveRules } from "./rules/resolve";
 import { resolveModuleStatuses, type ModuleStatus } from "./rules/state";
+import { resolveFoundationSource } from "./scope";
 import { projectModuleHref } from "./area-routes";
 import { listRelations } from "./relations/store";
 import type { Correlation, RulesConfig } from "./rules/types";
@@ -89,7 +90,20 @@ export async function getStrategyMapData(
   projectId: string,
   pathId?: string | null
 ): Promise<StrategyMapData> {
-  const rules = await resolveRules(projectId);
+  const [rules, foundation] = await Promise.all([
+    resolveRules(projectId),
+    resolveFoundationSource(projectId),
+  ]);
+
+  /**
+   * Oś dziedziczenia W0 — NIE zamieniaj z powrotem na `projectId`.
+   * Projekt w trybie `dziedziczona` czyta encje FUNDAMENTU (problemy, UVP,
+   * konkurencja, wytyczne copy, oferty) z najbliższego przodka `wlasna`.
+   * Wszystko poza W0 — segmenty, lejek, kanały, strony, KPI, relacje — jest
+   * ZAWSZE lokalne i zostaje na `projectId`. Dla `wlasna` resolver zwraca to
+   * samo id, więc zachowanie jest bit-w-bit takie jak wcześniej.
+   */
+  const fundamentId = foundation.projectId;
 
   /**
    * Zakres ścieżki strategii: gdy `pathId` ustawione, pokazujemy encje
@@ -136,18 +150,18 @@ export async function getStrategyMapData(
       .from(businessProblems)
       .where(
         and(
-          eq(businessProblems.projectId, projectId),
+          eq(businessProblems.projectId, fundamentId),
           isNull(businessProblems.deletedAt)
         )
       )
       .orderBy(asc(businessProblems.orderIdx)),
-    db.select().from(uvp).where(eq(uvp.projectId, projectId)).limit(1),
+    db.select().from(uvp).where(eq(uvp.projectId, fundamentId)).limit(1),
     db
       .select()
       .from(competitors)
       .where(
         and(
-          eq(competitors.projectId, projectId),
+          eq(competitors.projectId, fundamentId),
           isNull(competitors.deletedAt),
           pathScope(competitors.pathId)
         )
@@ -211,7 +225,7 @@ export async function getStrategyMapData(
       .where(
         and(eq(leadMagnets.projectId, projectId), isNull(leadMagnets.deletedAt))
       ),
-    db.select().from(copyGuidelines).where(eq(copyGuidelines.projectId, projectId)).limit(1),
+    db.select().from(copyGuidelines).where(eq(copyGuidelines.projectId, fundamentId)).limit(1),
     db
       .select()
       .from(pages)
@@ -261,7 +275,7 @@ export async function getStrategyMapData(
     db
       .select({ id: offers.id })
       .from(offers)
-      .where(and(eq(offers.projectId, projectId), isNull(offers.deletedAt))),
+      .where(and(eq(offers.projectId, fundamentId), isNull(offers.deletedAt))),
     db
       .select({
         id: salesActivities.id,

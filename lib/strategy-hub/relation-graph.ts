@@ -29,6 +29,7 @@ import {
   type EntityTypeKey,
 } from "@/lib/strategy-hub/entities/entity-types";
 import { listProjectRelationsByType } from "@/lib/strategy-hub/relations/store";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 export type GraphEntityType = EntityTypeKey;
 
@@ -74,6 +75,20 @@ const SEMANTIC_RELATION_TYPES = [
 export async function getRelationGraphData(
   projectId: string
 ): Promise<RelationGraphData> {
+  /**
+   * Oś dziedziczenia W0 — NIE zamieniaj z powrotem na `projectId`.
+   * Encje FUNDAMENTU (konkurencja, oferty) przy `strategyMode='dziedziczona'`
+   * pochodzą z najbliższego przodka `wlasna` i wchodzą do grafu jako węzły
+   * z PRAWDZIWYMI id projektu-źródła (celowo — nie duplikujemy encji).
+   * `href` węzłów oraz krawędzie z `entity_relations` zostają na `projectId`,
+   * bo relacje i nawigacja są lokalne dla oglądanego projektu.
+   * Trzymamy sam promise, żeby zapytania lokalne nie czekały na resolver;
+   * dla `wlasna` resolver zwraca to samo id → zachowanie bez zmian.
+   */
+  const fundamentId = resolveFoundationSource(projectId).then(
+    (zrodlo) => zrodlo.projectId
+  );
+
   const [
     projectRow,
     segmentRows,
@@ -147,18 +162,22 @@ export async function getRelationGraphData(
       .select()
       .from(geoAssets)
       .where(and(eq(geoAssets.projectId, projectId), isNull(geoAssets.deletedAt))),
-    db
-      .select()
-      .from(offers)
-      .where(and(eq(offers.projectId, projectId), isNull(offers.deletedAt))),
+    fundamentId.then((fid) =>
+      db
+        .select()
+        .from(offers)
+        .where(and(eq(offers.projectId, fid), isNull(offers.deletedAt)))
+    ),
     db
       .select()
       .from(userFlows)
       .where(and(eq(userFlows.projectId, projectId), isNull(userFlows.deletedAt))),
-    db
-      .select()
-      .from(competitors)
-      .where(and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))),
+    fundamentId.then((fid) =>
+      db
+        .select()
+        .from(competitors)
+        .where(and(eq(competitors.projectId, fid), isNull(competitors.deletedAt)))
+    ),
     db
       .select()
       .from(objections)
@@ -207,6 +226,7 @@ export async function getRelationGraphData(
     listProjectRelationsByType(projectId, [...SEMANTIC_RELATION_TYPES]),
   ]);
 
+  const segmentIds = new Set(segmentRows.map((s) => s.id));
   const elementIds = new Set(elementRows.map((e) => e.id));
   const channelIds = new Set(channelRows.map((c) => c.id));
   const kpiIds = new Set(kpiRows.map((k) => k.id));
@@ -346,7 +366,11 @@ export async function getRelationGraphData(
       href: entityHref(projectId, "competitor"),
       color: entityColor("competitor"),
     });
-    if (c.segmentId) addEdge(nid("competitor", c.id), nid("segment", c.segmentId));
+    // Konkurent dziedziczony (W0) niesie `segmentId` z projektu-źródła, a
+    // segmenty są lokalne — bez tego strażnika powstałaby krawędź do węzła,
+    // którego w grafie nie ma.
+    if (c.segmentId && segmentIds.has(c.segmentId))
+      addEdge(nid("competitor", c.id), nid("segment", c.segmentId));
   }
   for (const o of objectionRows) {
     nodes.push({

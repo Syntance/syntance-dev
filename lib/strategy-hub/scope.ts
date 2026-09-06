@@ -35,6 +35,8 @@ export const FOUNDATION_ENTITY_KEYS = [
   "brandVisual",
   "copyGuidelines",
   "offers",
+  /** Legacy blob `business_strategy` — czytany i blokowany na tych samych zasadach. */
+  "businessStrategy",
 ] as const;
 
 export type FoundationEntityKey = (typeof FOUNDATION_ENTITY_KEYS)[number];
@@ -57,6 +59,8 @@ const KLUCZ_ROUTE_NA_FUNDAMENT: Record<string, FoundationEntityKey> = {
   "brand-identity": "brandIdentity",
   "brand-visual": "brandVisual",
   "copy-guidelines": "copyGuidelines",
+  business: "businessStrategy",
+  "business-strategy": "businessStrategy",
 };
 
 /** Klucz fundamentu dla segmentu URL-a, albo `null` gdy encja nie jest z W0. */

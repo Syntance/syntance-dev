@@ -19,6 +19,7 @@ import {
   pageSections,
 } from "@/db/schema";
 import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 import { EVENT_REGISTRY, EVENT_CATEGORY_LABELS } from "@/packages/analytics-events/src";
 
 interface Result {
@@ -216,19 +217,25 @@ export async function GET(
         }));
       break;
 
-    case "offer":
+    case "offer": {
+      // Oferty to jedyna encja fundamentu (W0) w tej wyszukiwarce — przy
+      // `strategyMode='dziedziczona'` czytamy je z projektu-źródła.
+      // Autoryzacja została wykonana wyżej na `projectId` z params, nigdy na
+      // projekcie źródłowym. Pozostałe typy są lokalne i zostają bez zmian.
+      const { projectId: fundamentId } = await resolveFoundationSource(projectId);
       results = await db
         .select({ id: offers.id, label: offers.name, meta: offers.type })
         .from(offers)
         .where(
           and(
-            eq(offers.projectId, projectId),
+            eq(offers.projectId, fundamentId),
             isNull(offers.deletedAt),
             ilike(offers.name, like)
           )
         )
         .limit(LIMIT);
       break;
+    }
 
     case "objection": {
       const filters: SQL[] = [

@@ -21,6 +21,7 @@ import {
   sites,
 } from "@/db/schema";
 import { type EntityTypeKey } from "@/lib/strategy-hub/entities/entity-types";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 export interface SummaryField {
   label: string;
@@ -49,6 +50,19 @@ export async function getEntitySummary(
   id: string
 ): Promise<EntitySummary> {
   const fields: SummaryField[] = [];
+
+  /**
+   * Oś dziedziczenia W0 — NIE zamieniaj z powrotem na `projectId`.
+   * Encje FUNDAMENTU (problem, konkurent, oferta) przy
+   * `strategyMode='dziedziczona'` mieszkają w najbliższym przodku `wlasna`,
+   * więc podgląd musi ich szukać tam — inaczej kliknięcie w węzeł konstelacji
+   * (który ma id z projektu-źródła) zwróciłoby pusty panel.
+   * Rozwiązujemy leniwie i tylko w gałęziach W0, żeby pozostałe (zawsze
+   * lokalne) typy nie płaciły dodatkowego zapytania.
+   * Dla `wlasna` resolver zwraca to samo id → zachowanie bez zmian.
+   */
+  const fundamentId = async (): Promise<string> =>
+    (await resolveFoundationSource(projectId)).projectId;
 
   switch (type) {
     case "segment": {
@@ -291,7 +305,7 @@ export async function getEntitySummary(
         .from(businessProblems)
         .where(
           and(
-            eq(businessProblems.projectId, projectId),
+            eq(businessProblems.projectId, await fundamentId()),
             eq(businessProblems.id, id),
             isNull(businessProblems.deletedAt)
           )
@@ -319,7 +333,7 @@ export async function getEntitySummary(
         .from(competitors)
         .where(
           and(
-            eq(competitors.projectId, projectId),
+            eq(competitors.projectId, await fundamentId()),
             eq(competitors.id, id),
             isNull(competitors.deletedAt)
           )
@@ -365,7 +379,11 @@ export async function getEntitySummary(
         .select({ type: offers.type, uvpMd: offers.uvpMd, pricingMd: offers.pricingMd })
         .from(offers)
         .where(
-          and(eq(offers.projectId, projectId), eq(offers.id, id), isNull(offers.deletedAt))
+          and(
+            eq(offers.projectId, await fundamentId()),
+            eq(offers.id, id),
+            isNull(offers.deletedAt)
+          )
         )
         .limit(1);
       if (row) {

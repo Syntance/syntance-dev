@@ -22,6 +22,7 @@ import {
   type EntityTypeKey,
 } from "@/lib/strategy-hub/entities/entity-types";
 import { listRelations, type RelationRow } from "@/lib/strategy-hub/relations/store";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 import type { EntityRef } from "@/lib/strategy-hub/relations/schemas";
 import {
   getProjectVisibility,
@@ -293,6 +294,11 @@ function expandAxis(
 }
 
 async function loadThreadContext(projectId: string): Promise<ThreadContext> {
+  // Problemy biznesowe należą do fundamentu (W0) — przy dziedziczeniu leżą
+  // u przodka. Bez tego węzeł „problem" w nitce miałby etykietę typu zamiast
+  // treści problemu. Relacje i pozostałe encje osi są lokalne.
+  const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
   const [
     relations,
     stageRows,
@@ -337,7 +343,10 @@ async function loadThreadContext(projectId: string): Promise<ThreadContext> {
       .select({ id: businessProblems.id, problemMd: businessProblems.problemMd })
       .from(businessProblems)
       .where(
-        and(eq(businessProblems.projectId, projectId), isNull(businessProblems.deletedAt))
+        and(
+          eq(businessProblems.projectId, fundamentId),
+          isNull(businessProblems.deletedAt)
+        )
       ),
     db
       .select({ id: userFlows.id, name: userFlows.name })

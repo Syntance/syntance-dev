@@ -3,7 +3,13 @@ import { z } from "zod";
 import { eq, and, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { offers, segments } from "@/db/schema";
-import { requireProjectAccess, badRequest, notFound } from "@/lib/strategy-hub/api-helpers";
+import {
+  requireProjectAccess,
+  requireOwnFoundation,
+  badRequest,
+  notFound,
+} from "@/lib/strategy-hub/api-helpers";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 import {
   listRelations,
   createRelation,
@@ -22,16 +28,24 @@ export async function GET(
   const auth = await requireProjectAccess(projectId);
   if (!auth.ok) return auth.response;
 
+  // Oferta to fundament (W0): przy `strategyMode='dziedziczona'` żyje ona
+  // w projekcie-źródle, więc jej istnienie sprawdzamy tam. Autoryzacja została
+  // wykonana wyżej na `projectId` z params.
+  const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
   const [offer] = await db
     .select({ id: offers.id })
     .from(offers)
-    .where(and(eq(offers.id, offerId), eq(offers.projectId, projectId)))
+    .where(and(eq(offers.id, offerId), eq(offers.projectId, fundamentId)))
     .limit(1);
 
   if (!offer) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Powiązania oferta→segment zostają LOKALNE: segmenty nie są encją
+  // fundamentu, więc identyfikatory z projektu-źródła nie istnieją w tym
+  // projekcie. Przy dziedziczeniu lista będzie pusta — patrz komentarz w PUT.
   const relations = await listRelations(projectId, {
     entity: { type: "offer", id: offerId },
   });
@@ -50,6 +64,13 @@ export async function PUT(
   const { id: projectId, offerId } = await params;
   const auth = await requireProjectAccess(projectId);
   if (!auth.ok) return auth.response;
+
+  // Zapis dotyczy powiązań oferty (fundament W0) z segmentami (encja LOKALNA),
+  // więc przy dziedziczeniu nie ma poprawnego miejsca na zapis: w projekcie
+  // źródłowym te segmenty nie istnieją, a lokalnie relacja wskazywałaby na
+  // ofertę spoza projektu. Blokujemy 409 do czasu decyzji produktowej.
+  const own = await requireOwnFoundation(projectId);
+  if (!own.ok) return own.response;
 
   const parsed = putSchema.safeParse(await req.json());
   if (!parsed.success) {

@@ -6,6 +6,7 @@ import { projects as dbProjects, brandIdentity, brandVisual } from "@/db/schema"
 import { eq, isNull, and } from "drizzle-orm";
 import { Palette, Hammer, Compass, Eye, Layers, Mic2 } from "lucide-react";
 import { trackVisit } from "@/lib/strategy-hub/tracking";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 import {
   getProjectVisibility,
   moduleStatus,
@@ -40,9 +41,15 @@ async function getBrand(slug: string): Promise<{
     const projectId = rows[0].id;
     trackVisit(projectId, "brand");
 
+    // Tożsamość i identyfikacja wizualna to fundament (W0) — przy
+    // `strategyMode='dziedziczona'` czytamy je z projektu-źródła, żeby klient
+    // widział realną markę, a nie pustą sekcję. Widoczność modułu i statystyki
+    // wizyt zostają na projekcie lokalnym.
+    const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
     const [identityRows, visualRows, vis] = await Promise.all([
-      db.select().from(brandIdentity).where(eq(brandIdentity.projectId, projectId)).limit(1),
-      db.select().from(brandVisual).where(eq(brandVisual.projectId, projectId)).limit(1),
+      db.select().from(brandIdentity).where(eq(brandIdentity.projectId, fundamentId)).limit(1),
+      db.select().from(brandVisual).where(eq(brandVisual.projectId, fundamentId)).limit(1),
       getProjectVisibility(projectId),
     ]);
 

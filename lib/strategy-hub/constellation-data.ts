@@ -40,6 +40,7 @@ import { findModuleRule } from "@/lib/strategy-hub/rules/defaults";
 import { computeModuleScore, type CriterionContext } from "@/lib/strategy-hub/rules/evaluate";
 import { resolveRules } from "@/lib/strategy-hub/rules/resolve";
 import { resolveModuleStatuses } from "@/lib/strategy-hub/rules/state";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 import {
   isStrategyNodeKey,
   type NodeStatus,
@@ -141,6 +142,21 @@ export async function getConstellationData(
   projectId: string,
   mode: "editor" | "client" = "editor"
 ): Promise<ConstellationData> {
+  /**
+   * Oś dziedziczenia W0 — NIE zamieniaj z powrotem na `projectId`.
+   * Encje FUNDAMENTU (problemy, konkurencja, oferty) przy
+   * `strategyMode='dziedziczona'` pochodzą z najbliższego przodka `wlasna`,
+   * więc stają się węzłami konstelacji z PRAWDZIWYMI id projektu-źródła
+   * (celowo — nie duplikujemy encji). `href` węzłów zostaje na `projectId`,
+   * żeby linki prowadziły do bieżącego projektu. Reszta obszarów (segmenty,
+   * lejek, kanały, strona, KPI) i krawędzie z `entity_relations` są ZAWSZE
+   * lokalne. Trzymamy sam promise, żeby lokalne zapytania nie czekały na
+   * resolver; dla `wlasna` resolver zwraca to samo id → zachowanie bez zmian.
+   */
+  const fundamentId = resolveFoundationSource(projectId).then(
+    (zrodlo) => zrodlo.projectId
+  );
+
   const [
     projectRow,
     rules,
@@ -226,10 +242,12 @@ export async function getConstellationData(
       .select({ id: geoAssets.id, type: geoAssets.type })
       .from(geoAssets)
       .where(and(eq(geoAssets.projectId, projectId), isNull(geoAssets.deletedAt))),
-    db
-      .select({ id: offers.id, name: offers.name })
-      .from(offers)
-      .where(and(eq(offers.projectId, projectId), isNull(offers.deletedAt))),
+    fundamentId.then((fid) =>
+      db
+        .select({ id: offers.id, name: offers.name })
+        .from(offers)
+        .where(and(eq(offers.projectId, fid), isNull(offers.deletedAt)))
+    ),
     db
       .select({
         id: userFlows.id,
@@ -239,10 +257,12 @@ export async function getConstellationData(
       })
       .from(userFlows)
       .where(and(eq(userFlows.projectId, projectId), isNull(userFlows.deletedAt))),
-    db
-      .select({ id: competitors.id, name: competitors.name })
-      .from(competitors)
-      .where(and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))),
+    fundamentId.then((fid) =>
+      db
+        .select({ id: competitors.id, name: competitors.name })
+        .from(competitors)
+        .where(and(eq(competitors.projectId, fid), isNull(competitors.deletedAt)))
+    ),
     db
       .select({
         id: objections.id,
@@ -250,16 +270,18 @@ export async function getConstellationData(
       })
       .from(objections)
       .where(and(eq(objections.projectId, projectId), isNull(objections.deletedAt))),
-    db
-      .select({
-        id: businessProblems.id,
-        problemMd: businessProblems.problemMd,
-        priority: businessProblems.priority,
-      })
-      .from(businessProblems)
-      .where(
-        and(eq(businessProblems.projectId, projectId), isNull(businessProblems.deletedAt))
-      ),
+    fundamentId.then((fid) =>
+      db
+        .select({
+          id: businessProblems.id,
+          problemMd: businessProblems.problemMd,
+          priority: businessProblems.priority,
+        })
+        .from(businessProblems)
+        .where(
+          and(eq(businessProblems.projectId, fid), isNull(businessProblems.deletedAt))
+        )
+    ),
     db
       .select({
         id: seoKeywords.id,

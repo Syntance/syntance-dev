@@ -320,6 +320,12 @@ export function createStrategyHubMcpServer() {
       }),
     },
     async ({ projectId, section, content }) => {
+      // `businessStrategy` to encja fundamentu (W0) — odczyt idzie do projektu
+      // źródłowego, więc zapis lokalny trafiałby w miejsce, którego nikt nie
+      // czyta: klient MCP zobaczyłby „zapisano", a dane by zniknęły.
+      const locked = await foundationLocked(projectId);
+      if (locked) return locked;
+
       const fieldMap = {
         goals: "goalsMd",
         uvp: "uvpMd",

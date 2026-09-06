@@ -14,10 +14,17 @@ import {
   objections,
 } from "@/db/schema";
 import { eq, isNull, and, asc } from "drizzle-orm";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 export interface StrategyReport {
   projectName: string;
   generatedAt: string;
+  /**
+   * Nazwa projektu, z którego pochodzi fundament (W0) — obecna WYŁĄCZNIE gdy
+   * projekt dziedziczy strategię. Dla trybu `wlasna` klucza nie ma w ogóle,
+   * żeby eksport JSON pozostał bajt w bajt taki sam jak przed dziedziczeniem.
+   */
+  foundationSourceName?: string;
   goalsMd: string | null;
   uvpMd: string | null;
   positioning: {
@@ -46,8 +53,18 @@ export interface StrategyReport {
 
 /** Agreguje dane strategii projektu do jednej struktury na potrzeby eksportu (JSON/DOCX/MD). */
 export async function buildStrategyReport(projectId: string): Promise<StrategyReport> {
-  const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+  const [[project], foundation] = await Promise.all([
+    db.select().from(projects).where(eq(projects.id, projectId)),
+    resolveFoundationSource(projectId),
+  ]);
   if (!project) throw new Error("Project not found");
+
+  // Projekt w trybie `dziedziczona` czyta encje FUNDAMENTU (W0) z najbliższego
+  // przodka o trybie `wlasna` — bez tego eksport strategii projektu-dziecka
+  // miałby puste cele, UVP, pozycjonowanie i konkurencję, mimo kompletnej
+  // strategii u rodzica. Wszystko poza W0 (segmenty, lejek, kanały, KPI,
+  // obiekcje) jest ZAWSZE lokalne i zostaje na `projectId`. Nie cofaj tego.
+  const fundamentId = foundation.projectId;
 
   const [
     [biz],
@@ -60,13 +77,15 @@ export async function buildStrategyReport(projectId: string): Promise<StrategyRe
     kpiRows,
     objectionRows,
   ] = await Promise.all([
-    db.select().from(businessStrategy).where(eq(businessStrategy.projectId, projectId)),
-    db.select().from(uvp).where(eq(uvp.projectId, projectId)),
-    db.select().from(brandPositioning).where(eq(brandPositioning.projectId, projectId)),
+    // ── Fundament (W0) → `fundamentId` ───────────────────────────────────────
+    db.select().from(businessStrategy).where(eq(businessStrategy.projectId, fundamentId)),
+    db.select().from(uvp).where(eq(uvp.projectId, fundamentId)),
+    db.select().from(brandPositioning).where(eq(brandPositioning.projectId, fundamentId)),
     db
       .select()
       .from(competitors)
-      .where(and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))),
+      .where(and(eq(competitors.projectId, fundamentId), isNull(competitors.deletedAt))),
+    // ── Reszta strategii → zawsze lokalna, na `projectId` ────────────────────
     db
       .select()
       .from(segments)
@@ -112,6 +131,11 @@ export async function buildStrategyReport(projectId: string): Promise<StrategyRe
   return {
     projectName: project.name,
     generatedAt: new Date().toISOString(),
+    // Klucz dokładany warunkowo — przy `wlasna` raport ma dokładnie ten sam
+    // zestaw pól co przed wprowadzeniem dziedziczenia (eksport JSON bez zmian).
+    ...(foundation.inherited && foundation.sourceName
+      ? { foundationSourceName: foundation.sourceName }
+      : {}),
     goalsMd: biz?.goalsMd ?? null,
     uvpMd: uvpRow?.coreUvpMd ?? null,
     positioning: positioning

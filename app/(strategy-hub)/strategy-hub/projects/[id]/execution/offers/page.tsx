@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getProjectById } from "@/lib/strategy-hub/context";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 import { OffersClient } from "@/components/strategy-hub/offers-client";
 
 export const metadata = { title: "Oferty" };
@@ -18,6 +19,12 @@ export default async function OffersPage({ params }: Props) {
   }
   if (!project) notFound();
 
+  // Oferty należą do fundamentu (W0), a segmenty są lokalne dla projektu —
+  // przy dziedziczeniu nie ma poprawnego miejsca na zapis przypisania
+  // oferta↔segment, więc edytor musi to powiedzieć wprost zamiast pokazywać
+  // pusty picker, który i tak odbije się o 409.
+  const fundament = await resolveFoundationSource(id);
+
   return (
     <div className="space-y-4">
       <div>
@@ -26,7 +33,11 @@ export default async function OffersPage({ params }: Props) {
           Oferty przypisane do segmentów — fundament value proposition per grupa.
         </p>
       </div>
-      <OffersClient projectId={id} />
+      <OffersClient
+        projectId={id}
+        foundationInherited={fundament.inherited}
+        foundationSourceName={fundament.sourceName}
+      />
     </div>
   );
 }

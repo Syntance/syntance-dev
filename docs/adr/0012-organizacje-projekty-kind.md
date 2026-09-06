@@ -92,8 +92,38 @@ zastosowane, jeśli baza jest niepusta.
 
 - Faza 1 przepina granicę tenanta — najbardziej wrażliwy fragment. Wymaga testów e2e na dostępach **przed** wdrożeniem na produkcję.
 - RLS pozostaje permissive-by-default (fail-open) — bez zmian względem ADR 0005; migracja 0030 tylko przenosi klucz sesji `app.workspace_id` → `app.organization_id`.
-- `AdminUser.organization_id` zostaje jako kolumna `@deprecated` do fazy sprzątającej (expand→contract).
-- Fundament czytany poza dedykowanymi route'ami API (health score, mapa strategii, eksporty, kontekst AI) **nie jest jeszcze świadomy dziedziczenia** — do domknięcia w kolejnym kroku.
+- `AdminUser.organization_id` oraz `channels.workspace_id` zostają jako kolumny `@deprecated` do fazy sprzątającej — DROP dopiero w osobnym deployu, zgodnie z expand→contract.
+
+### Zasięg dziedziczenia (stan domknięty)
+
+Wszystkie ścieżki czytające W0 rozwiązują dziś projekt-źródło: API fundamentu
+(8 encji + generyk `[entity]`), health score, mapa strategii, canvas, konstelacja
+(dane, sceny, podsumowanie encji), graf relacji, eksporty, sync z Notion, portal
+klienta, narzędzia AI i MCP, rejestr decyzji, nitka.
+
+Zapis do W0 przy dziedziczeniu jest **odmawiany** (409 / obiekt błędu), nigdy
+przekierowywany do rodzica — w route'ach API, w narzędziach AI i MCP, w agencie
+(`applyDraft`) oraz w pullu z Notion. Powód jest jeden: zapis „w imieniu rodzica"
+po cichu zmieniłby strategię rodzeństwa i wnuków, a zapis lokalny trafiłby do
+wiersza, którego po tej zmianie nikt już nie odczytuje.
+
+### Znane ograniczenia
+
+- **Oferta ↔ segment przy dziedziczeniu.** Oferta jest z fundamentu, segmenty są
+  lokalne — nie istnieje poprawne miejsce zapisu tej relacji. Zapis zwraca 409,
+  a edytor ofert mówi wprost, że wymaga to odłączenia fundamentu. Do rozstrzygnięcia,
+  czy przypisanie ma być danymi lokalnymi, czy częścią fundamentu razem z segmentami.
+- **Ścieżki na dziedziczonych encjach.** Filtr ścieżek przepuści tylko encje bez
+  przypisanej ścieżki (`path_id IS NULL`), bo ścieżki należą do projektu oglądającego.
+  Bezpośrednia konsekwencja prostopadłości obu osi.
+- **Embeddingi.** Encje W0 są indeksowane raz, pod projektem-właścicielem. Wyszukiwanie
+  semantyczne zawężone do projektu dziedziczącego nie zwróci dziedziczonego fundamentu —
+  alternatywą byłaby duplikacja wektorów.
+- **Renderery eksportu** (`to-markdown`, `to-docx`, `to-pdf`) nie pokazują jeszcze nazwy
+  projektu-źródła; pole `foundationSourceName` czeka gotowe w `StrategyReport`.
+- **`strategy_rule_sets`** nie ma kolumny organizacyjnej: zakres `global` to domyślne
+  reguły agencji, wspólne dla wszystkich klientów. Lista nadpisań per projekt jest już
+  zawężona do bieżącej organizacji.
 
 ## Powiązane
 

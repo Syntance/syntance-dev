@@ -43,7 +43,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  * Zwraca obiekt błędu w konwencji pozostałych narzędzi (`{ error }`), nigdy
  * wyjątku — inaczej pętla narzędziowa AI dostałaby crash zamiast informacji.
  */
-async function foundationLockError(projectId: string, entityKey: string) {
+export async function foundationLockError(projectId: string, entityKey: string) {
   if (!foundationKeyForRoute(entityKey)) return null;
 
   const source = await resolveFoundationSource(projectId);

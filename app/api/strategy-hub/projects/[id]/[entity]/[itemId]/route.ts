@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   requireProjectAccess,
+  requireOwnFoundation,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
 import { getListEntity } from "@/lib/strategy-hub/entities/registry";
+import { foundationKeyForRoute } from "@/lib/strategy-hub/scope";
 import { trackChange, entityTypeFor } from "@/lib/strategy-hub/track-change";
 import { applyReviewPropagation, clearReviewFlag } from "@/lib/strategy-hub/rules/apply-review";
 
@@ -18,6 +20,14 @@ export async function PATCH(
 
   const list = getListEntity(entity);
   if (!list) return notFound("Entity");
+
+  // Encje fundamentu (W0) w projekcie dziedziczącym leżą w projekcie-źródle,
+  // więc `WHERE projectId = id` i tak by ich nie trafiło — zamiast mylącego
+  // 404 zwracamy jawne 409 z instrukcją, tak jak dedykowane route'y fundamentu.
+  if (foundationKeyForRoute(entity)) {
+    const own = await requireOwnFoundation(id);
+    if (!own.ok) return own.response;
+  }
 
   const parsed = list.patchSchema.safeParse(await req.json());
   if (!parsed.success)
@@ -63,6 +73,14 @@ export async function DELETE(
 
   const list = getListEntity(entity);
   if (!list) return notFound("Entity");
+
+  // Encje fundamentu (W0) w projekcie dziedziczącym leżą w projekcie-źródle,
+  // więc `WHERE projectId = id` i tak by ich nie trafiło — zamiast mylącego
+  // 404 zwracamy jawne 409 z instrukcją, tak jak dedykowane route'y fundamentu.
+  if (foundationKeyForRoute(entity)) {
+    const own = await requireOwnFoundation(id);
+    if (!own.ok) return own.response;
+  }
 
   const ok = await list.softDelete(id, itemId);
   if (!ok) return notFound(list.label);

@@ -3,6 +3,7 @@ import { strategyListItemsToMarkdown } from "@/lib/strategy-hub/business-strateg
 import { db } from "@/db";
 import { businessStrategy, projects } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 import {
   Document,
   Page,
@@ -58,10 +59,16 @@ function StrategyDoc({
   projectName,
   generatedAt,
   sections,
+  foundationSourceName,
 }: {
   projectName: string;
   generatedAt: string;
   sections: { title: string; md: string }[];
+  /**
+   * Nazwa projektu-źródła fundamentu — tylko przy trybie `dziedziczona`.
+   * Bez tego czytelnik PDF-a nie wie, że strategia nie powstała w tym projekcie.
+   */
+  foundationSourceName?: string;
 }) {
   return React.createElement(
     Document,
@@ -76,7 +83,10 @@ function StrategyDoc({
         React.createElement(
           Text,
           { style: styles.subtitle },
-          `Strategia biznesowa · ${generatedAt} · Syntance Strategy Hub`
+          `Strategia biznesowa · ${generatedAt} · Syntance Strategy Hub` +
+            (foundationSourceName
+              ? ` · fundament z projektu „${foundationSourceName}"`
+              : "")
         )
       ),
       ...sections.map((s, idx) =>
@@ -116,20 +126,25 @@ export async function GET(
 
   const { id } = await params;
 
-  const projRows = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, id))
-    .limit(1);
+  const [projRows, foundation] = await Promise.all([
+    db.select().from(projects).where(eq(projects.id, id)).limit(1),
+    resolveFoundationSource(id),
+  ]);
   const project = projRows[0];
   if (!project) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Projekt w trybie `dziedziczona` czyta encje FUNDAMENTU (W0) z najbliższego
+  // przodka o trybie `wlasna` — bez tego PDF strategii projektu-dziecka byłby
+  // pusty, mimo kompletnej strategii u rodzica. Nagłówek i nazwa pliku zostają
+  // na `id`, bo dokument opisuje TEN projekt. Nie cofaj tego.
+  const fundamentId = foundation.projectId;
+
   const stratRows = await db
     .select()
     .from(businessStrategy)
-    .where(eq(businessStrategy.projectId, id))
+    .where(eq(businessStrategy.projectId, fundamentId))
     .limit(1);
   const strategy = stratRows[0];
 
@@ -151,6 +166,12 @@ export async function GET(
       projectName: project.name,
       generatedAt: new Date().toLocaleDateString("pl-PL"),
       sections,
+      // Przy `wlasna` prop zostaje `undefined` → nagłówek PDF-a jest identyczny
+      // jak przed wprowadzeniem dziedziczenia.
+      foundationSourceName:
+        foundation.inherited && foundation.sourceName
+          ? foundation.sourceName
+          : undefined,
     })
   );
 

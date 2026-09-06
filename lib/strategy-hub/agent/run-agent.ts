@@ -13,6 +13,10 @@ import {
 } from "@/db/schema";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { getProjectAlerts } from "@/lib/strategy-hub/alerts";
+import {
+  foundationKeyForRoute,
+  resolveFoundationSource,
+} from "@/lib/strategy-hub/scope";
 import { getListEntity } from "@/lib/strategy-hub/entities/registry";
 import { trackChange, entityTypeFor } from "@/lib/strategy-hub/track-change";
 
@@ -77,6 +81,16 @@ async function applyDraft(
 
   const def = getListEntity(draft.entityType);
   if (!def) return false;
+
+  // Encje fundamentu (W0) czytamy z projektu-źródła, więc zapis do lokalnej
+  // tabeli trafiłby tam, gdzie nikt już nie zagląda — propozycja wyglądałaby
+  // na zastosowaną, a w UI nic by się nie zmieniło. Odmawiamy zamiast tworzyć
+  // taki cichy niewypał. Zapis do projektu-źródła też odpada: zmieniłby
+  // strategię rodzeństwa i wnuków, których agent w ogóle nie widział.
+  if (foundationKeyForRoute(draft.entityType)) {
+    const source = await resolveFoundationSource(projectId);
+    if (source.inherited) return false;
+  }
 
   if (draft.diff && draft.entityId) {
     const patch: Record<string, unknown> = {};
@@ -188,7 +202,11 @@ async function improveMode(projectId: string): Promise<ProposalDraft[]> {
 
   if (!objection || !process.env.ANTHROPIC_API_KEY) return [];
 
-  const [uvpRow] = await db.select().from(uvp).where(eq(uvp.projectId, projectId));
+  // UVP należy do fundamentu (W0) — przy `strategyMode='dziedziczona'` leży
+  // u przodka. Bez tego odpowiedź na obiekcję powstawałaby bez UVP.
+  const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
+  const [uvpRow] = await db.select().from(uvp).where(eq(uvp.projectId, fundamentId));
 
   try {
     const { object } = await generateObject<{ response: string }>({
@@ -214,11 +232,16 @@ async function improveMode(projectId: string): Promise<ProposalDraft[]> {
 async function researchMode(projectId: string): Promise<ProposalDraft[]> {
   if (!process.env.ANTHROPIC_API_KEY) return [];
 
+  // Konkurencja to fundament (W0) — listę „nie powtarzaj" bierzemy ze źródła,
+  // inaczej agent w projekcie dziedziczącym proponowałby konkurentów już
+  // opisanych u przodka. Segmenty zostają lokalne.
+  const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
   const [existingCompetitors, segmentRows] = await Promise.all([
     db
       .select({ name: competitors.name })
       .from(competitors)
-      .where(and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))),
+      .where(and(eq(competitors.projectId, fundamentId), isNull(competitors.deletedAt))),
     db
       .select({ name: segments.name })
       .from(segments)

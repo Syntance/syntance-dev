@@ -20,6 +20,7 @@ import {
   WEIGHT_LABELS,
   type StrategyListWeight,
 } from "@/lib/strategy-hub/business-strategy-lists";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 const NOTION_API = "https://api.notion.com/v1";
 const NOTION_VERSION = "2022-06-28";
@@ -331,15 +332,21 @@ function kpisToMarkdown(
 export async function pushBusinessStrategyToNotion(projectId: string) {
   const start = Date.now();
   try {
-    const projRows = await db
-      .select()
-      .from(projects)
-      .where(eq(projects.id, projectId))
-      .limit(1);
+    const [projRows, foundation] = await Promise.all([
+      db.select().from(projects).where(eq(projects.id, projectId)).limit(1),
+      resolveFoundationSource(projectId),
+    ]);
     const project = projRows[0];
     if (!project?.notionPageUrl) {
       throw new Error("Brak notion_page_url dla projektu");
     }
+
+    // Projekt w trybie `dziedziczona` czyta encje FUNDAMENTU (W0) z przodka —
+    // inaczej klient dostałby w Notion pustą stronę zamiast realnej strategii.
+    // Uwaga: mapowanie strony Notion (`notionMappings`) i log synca ZOSTAJĄ na
+    // `projectId` — strona Notion należy do tego projektu, nie do rodzica.
+    // Wszystko poza W0 (obiekcje, segmenty, KPI) jest zawsze lokalne.
+    const fundamentId = foundation.projectId;
 
     const [
       problemRows,
@@ -350,32 +357,34 @@ export async function pushBusinessStrategyToNotion(projectId: string) {
       segmentRows,
       kpiRows,
     ] = await Promise.all([
+      // ── Fundament (W0) → `fundamentId` ─────────────────────────────────────
       db
         .select()
         .from(businessProblems)
         .where(
           and(
-            eq(businessProblems.projectId, projectId),
+            eq(businessProblems.projectId, fundamentId),
             isNull(businessProblems.deletedAt)
           )
         )
         .orderBy(asc(businessProblems.orderIdx)),
-      db.select().from(uvp).where(eq(uvp.projectId, projectId)).limit(1),
+      db.select().from(uvp).where(eq(uvp.projectId, fundamentId)).limit(1),
       db
         .select()
         .from(brandPositioning)
-        .where(eq(brandPositioning.projectId, projectId))
+        .where(eq(brandPositioning.projectId, fundamentId))
         .limit(1),
       db
         .select()
         .from(competitors)
         .where(
           and(
-            eq(competitors.projectId, projectId),
+            eq(competitors.projectId, fundamentId),
             isNull(competitors.deletedAt)
           )
         )
         .orderBy(asc(competitors.createdAt)),
+      // ── Reszta strategii → zawsze lokalna, na `projectId` ──────────────────
       db
         .select()
         .from(objections)
@@ -561,6 +570,30 @@ export async function pullFromNotion(notionPageId: string) {
         status: "skipped_self_echo",
       });
       return { ok: true, skipped: "self_echo", elapsedMs: Date.now() - start };
+    }
+
+    // ── Blokada zapisu do cudzego fundamentu (W0) ──────────────────────────
+    // Pull PISZE do tabel fundamentu (`business_strategy`, `brand_positioning`).
+    // Przy trybie `dziedziczona` te wiersze należą do projektu NADRZĘDNEGO,
+    // więc zapis „w imieniu rodzica" po cichu przepisałby strategię jemu
+    // i całemu rodzeństwu — z poziomu strony Notion jednego produktu, bez
+    // śladu w żadnym UI. Odmawiamy wprost, spójnie z `requireOwnFoundation`
+    // (api-helpers) i `foundationLockError` (ai-tools-write).
+    // Świadomie rzucamy wyjątek zamiast cichego `skipped_*`: catch niżej zapisze
+    // powód jako `status: "error"` + treść w logu synca, więc widok
+    // Synchronizacji pokaże czerwony błąd, a nie szare „bez zmian".
+    // Push w drugą stronę działa normalnie (czyta z fundamentu) — blokujemy
+    // wyłącznie kierunek ZAPISU. Nie cofaj tego.
+    const foundation = await resolveFoundationSource(projectId);
+    if (foundation.inherited) {
+      const zrodlo = foundation.sourceName ? ` „${foundation.sourceName}"` : "";
+      throw new Error(
+        `Ten projekt dziedziczy fundament strategii z projektu nadrzędnego${zrodlo}, ` +
+          `więc pull z Notion nie może go nadpisać — zapis zmieniłby strategię ` +
+          `projektu źródłowego i wszystkich projektów, które z niej czytają. ` +
+          `Edytuj strategię w projekcie źródłowym albo odłącz dziedziczenie ` +
+          `w Ustawieniach projektu → Ogólne (tryb strategii: „własna").`
+      );
     }
 
     // Pobierz bloki Notion i konwertuj na markdown per sekcję

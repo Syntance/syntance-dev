@@ -6,6 +6,7 @@ import { projects as dbProjects, businessStrategy, brandPositioning } from "@/db
 import { eq, isNull, and } from "drizzle-orm";
 import { FileText, Target, Sparkles, Users, MessageSquare, Hammer, Crosshair } from "lucide-react";
 import { trackVisit } from "@/lib/strategy-hub/tracking";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 import { StrategyItemCallout } from "@/components/strategy-hub/strategy-item-callout";
 import { parseStrategyListItems } from "@/lib/strategy-hub/business-strategy-lists";
 import {
@@ -42,16 +43,22 @@ async function getStrategy(slug: string): Promise<{
     const projectId = rows[0].id;
     trackVisit(projectId, "business");
 
+    // Strategia biznesowa (legacy W0) i pozycjonowanie marki to fundament —
+    // przy `strategyMode='dziedziczona'` czytamy je z projektu-źródła, żeby
+    // klient zobaczył realną strategię. Widoczność modułu i statystyki wizyt
+    // zostają na projekcie lokalnym.
+    const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
     const [stratRows, positioningRows, vis] = await Promise.all([
       db
         .select()
         .from(businessStrategy)
-        .where(eq(businessStrategy.projectId, projectId))
+        .where(eq(businessStrategy.projectId, fundamentId))
         .limit(1),
       db
         .select()
         .from(brandPositioning)
-        .where(eq(brandPositioning.projectId, projectId))
+        .where(eq(brandPositioning.projectId, fundamentId))
         .limit(1),
       getProjectVisibility(projectId),
     ]);

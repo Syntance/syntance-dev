@@ -19,6 +19,7 @@ import {
   isEntityTypeKey,
   type EntityTypeKey,
 } from "@/lib/strategy-hub/entities/entity-types";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 export interface LedgerDecision {
   id: string;
@@ -34,6 +35,11 @@ export interface LedgerDecision {
 }
 
 async function loadLabelMaps(projectId: string): Promise<Map<string, string>> {
+  // Problemy biznesowe należą do fundamentu (W0) — przy dziedziczeniu leżą
+  // u przodka. Bez tego dziedziczony problem w decyzji pokazałby się jako
+  // gołe „problem" zamiast swojej treści. Reszta encji jest lokalna.
+  const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
   const [
     segmentRows,
     stageRows,
@@ -69,7 +75,10 @@ async function loadLabelMaps(projectId: string): Promise<Map<string, string>> {
       .select({ id: businessProblems.id, problemMd: businessProblems.problemMd })
       .from(businessProblems)
       .where(
-        and(eq(businessProblems.projectId, projectId), isNull(businessProblems.deletedAt))
+        and(
+          eq(businessProblems.projectId, fundamentId),
+          isNull(businessProblems.deletedAt)
+        )
       ),
     db
       .select({ id: userFlows.id, name: userFlows.name })

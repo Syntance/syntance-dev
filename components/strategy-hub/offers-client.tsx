@@ -38,7 +38,19 @@ interface OfferRow {
   name: string;
 }
 
-export function OffersClient({ projectId }: { projectId: string }) {
+interface OffersClientProps {
+  projectId: string;
+  /** Czy oferty pochodzą z projektu nadrzędnego (fundament dziedziczony). */
+  foundationInherited?: boolean;
+  /** Nazwa projektu-źródła — do komunikatu, gdzie edytować. */
+  foundationSourceName?: string | null;
+}
+
+export function OffersClient({
+  projectId,
+  foundationInherited = false,
+  foundationSourceName = null,
+}: OffersClientProps) {
   const [offers, setOffers] = useState<OfferRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [segmentIds, setSegmentIds] = useState<string[]>([]);
@@ -127,7 +139,25 @@ export function OffersClient({ projectId }: { projectId: string }) {
           ))}
         </select>
 
-        {selectedId && (
+        {selectedId && foundationInherited && (
+          <p className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            Oferty pochodzą z projektu
+            {foundationSourceName ? (
+              <>
+                {" "}
+                <strong>{foundationSourceName}</strong>
+              </>
+            ) : (
+              " nadrzędnego"
+            )}
+            , a segmenty są własne dla tego projektu — przypisania nie da się tu
+            zapisać, bo należałoby do dwóch różnych projektów naraz. Odłącz
+            fundament w Ustawieniach projektu → Ogólne, żeby edytować oferty
+            i ich segmenty lokalnie.
+          </p>
+        )}
+
+        {selectedId && !foundationInherited && (
           <>
             <RelationPicker
               projectId={projectId}

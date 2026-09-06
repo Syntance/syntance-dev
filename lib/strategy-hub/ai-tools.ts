@@ -30,6 +30,40 @@ import {
   createStrategyListItem,
   type StrategyListWeight,
 } from "@/lib/strategy-hub/business-strategy-lists";
+import {
+  resolveFoundationSource,
+  type FoundationSource,
+} from "@/lib/strategy-hub/scope";
+import { foundationLockError } from "@/lib/strategy-hub/ai-tools-write";
+
+// ─── Fundament (W0) w narzędziach odczytu ─────────────────────────────────────
+//
+// Projekt w trybie `dziedziczona` nie ma własnych encji FUNDAMENTU
+// (businessStrategy, businessProblems, uvp, brandPositioning, competitors,
+// brandIdentity, brandVisual, copyGuidelines, offers) — leżą one u najbliższego
+// przodka w trybie `wlasna`. Każde narzędzie sięgające po W0 rozwiązuje więc
+// `fundamentId` i czyta z niego; wszystko poza W0 (segmenty, lejek, kanały,
+// strony, KPI, obiekcje, kampanie) zostaje na oryginalnym `projectId`.
+//
+// Bez tego agent w projekcie dziedziczącym widziałby pusty fundament
+// i „uzupełniałby" go od zera — a bramka zapisu (`ai-tools-write.ts`,
+// `mcp/server.ts`) i tak odrzuciłaby każdą taką zmianę.
+
+/**
+ * Zdanie doklejane do `instruction`, gdy fundament pochodzi z innego projektu.
+ * Dla trybu `wlasna` zwraca pusty string — kontekst jest wtedy bit-w-bit taki
+ * sam jak przed wprowadzeniem dziedziczenia.
+ */
+function foundationNote(source: FoundationSource): string {
+  if (!source.inherited) return "";
+  const zrodlo = source.sourceName ? ` „${source.sourceName}"` : "";
+  return (
+    ` Uwaga: fundament strategii (problemy, UVP, pozycjonowanie, konkurencja,` +
+    ` oferty, wytyczne marki) jest dziedziczony z projektu nadrzędnego${zrodlo}` +
+    ` i tutaj jest tylko do odczytu — traktuj go jako dane wejściowe i nie` +
+    ` proponuj jego edycji w tym projekcie.`
+  );
+}
 
 // ─── Read project ─────────────────────────────────────────────────────────────
 
@@ -39,6 +73,10 @@ const readProjectTool = (projectId: string) =>
       "Czyta pełne dane projektu z bazy: informacje podstawowe, strategię biznesową (cele, UVP, konkurencja, obiekcje), segmenty, KPI, user flows, strony, frazy SEO.",
     parameters: z.object({}),
     execute: async () => {
+      // Projekt czytający fundament (W0) z przodka — tylko `businessStrategy`
+      // schodzi na `fundamentId`, reszta modułów zostaje lokalna.
+      const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
       const [proj, strat, segs, kpiRows, flows, pageRows, kwRows] =
         await Promise.all([
           db
@@ -49,7 +87,7 @@ const readProjectTool = (projectId: string) =>
           db
             .select()
             .from(businessStrategy)
-            .where(eq(businessStrategy.projectId, projectId))
+            .where(eq(businessStrategy.projectId, fundamentId))
             .limit(1),
           db
             .select()
@@ -182,6 +220,13 @@ const updateBusinessStrategyTool = (projectId: string) =>
         .describe("Dla competitors — tekst markdown"),
     }),
     execute: async ({ section, items, markdown }) => {
+      // `businessStrategy` to encja fundamentu (W0). Bez tej bramki narzędzie
+      // czatu pisałoby lokalnie, podczas gdy `read_project` czyta już ze
+      // źródła — zapis trafiałby w miejsce, którego nikt nie odczytuje.
+      // Ta sama bramka co w `buildWriteTools`, świadomie współdzielona.
+      const locked = await foundationLockError(projectId, "business-strategy");
+      if (locked) return locked;
+
       const fieldMap = {
         goals: "goalsMd",
         uvp: "uvpMd",
@@ -486,6 +531,9 @@ const listGeoAndOffersTool = (projectId: string) =>
     description: "Assety GEO/AEO oraz oferty produktowe projektu.",
     parameters: z.object({}),
     execute: async () => {
+      // Oferty należą do fundamentu (W0) — assety GEO zostają lokalne.
+      const { projectId: fundamentId } = await resolveFoundationSource(projectId);
+
       const [geo, offerRows] = await Promise.all([
         db
           .select({ id: geoAssets.id, type: geoAssets.type, status: geoAssets.status })
@@ -497,7 +545,7 @@ const listGeoAndOffersTool = (projectId: string) =>
           .select({ id: offers.id, name: offers.name, type: offers.type })
           .from(offers)
           .where(
-            and(eq(offers.projectId, projectId), isNull(offers.deletedAt))
+            and(eq(offers.projectId, fundamentId), isNull(offers.deletedAt))
           ),
       ]);
       return { geoAssets: geo, offers: offerRows };
@@ -513,6 +561,11 @@ const listGeoAndOffersTool = (projectId: string) =>
 
 /** hub_suggest_segments — kontekst do zaproponowania segmentów. */
 export async function suggestSegmentsContext(projectId: string) {
+  // Fundament (W0: strategia biznesowa, konkurencja) czytamy ze źródła
+  // dziedziczenia; projekt i segmenty zostają lokalne.
+  const foundation = await resolveFoundationSource(projectId);
+  const fundamentId = foundation.projectId;
+
   const [proj, strat, existing, comp] = await Promise.all([
     db
       .select({ name: projects.name, description: projects.description, domain: projects.domain })
@@ -523,7 +576,7 @@ export async function suggestSegmentsContext(projectId: string) {
     db
       .select({ goalsMd: businessStrategy.goalsMd, uvpMd: businessStrategy.uvpMd })
       .from(businessStrategy)
-      .where(eq(businessStrategy.projectId, projectId))
+      .where(eq(businessStrategy.projectId, fundamentId))
       .limit(1)
       .then((r) => r[0]),
     db
@@ -533,7 +586,7 @@ export async function suggestSegmentsContext(projectId: string) {
     db
       .select({ name: competitors.name, type: competitors.type })
       .from(competitors)
-      .where(and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))),
+      .where(and(eq(competitors.projectId, fundamentId), isNull(competitors.deletedAt))),
   ]);
   return {
     project: proj ?? null,
@@ -542,7 +595,8 @@ export async function suggestSegmentsContext(projectId: string) {
     existingSegments: existing,
     competitors: comp,
     instruction:
-      "Zaproponuj 1–3 segmenty, których jeszcze nie ma. Dla każdego: nazwa, persona, JTBD, główny problem, priorytet i szacunkowy % przychodów.",
+      "Zaproponuj 1–3 segmenty, których jeszcze nie ma. Dla każdego: nazwa, persona, JTBD, główny problem, priorytet i szacunkowy % przychodów." +
+      foundationNote(foundation),
   };
 }
 
@@ -679,6 +733,10 @@ const suggestChannelPlanTool = (projectId: string) =>
 
 /** hub_suggest_objections — kontekst do zaproponowania obiekcji z dowodem. */
 export async function suggestObjectionsContext(projectId: string, segmentId?: string) {
+  // Konkurencja to fundament (W0); segmenty i obiekcje zostają lokalne.
+  const foundation = await resolveFoundationSource(projectId);
+  const fundamentId = foundation.projectId;
+
   const segConds = [eq(segments.projectId, projectId), isNull(segments.deletedAt)];
   if (segmentId) segConds.push(eq(segments.id, segmentId));
   const [segRows, existingObjections, compRows] = await Promise.all([
@@ -693,7 +751,7 @@ export async function suggestObjectionsContext(projectId: string, segmentId?: st
     db
       .select({ name: competitors.name, weaknessesMd: competitors.weaknessesMd })
       .from(competitors)
-      .where(and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))),
+      .where(and(eq(competitors.projectId, fundamentId), isNull(competitors.deletedAt))),
   ]);
 
   return {
@@ -701,7 +759,8 @@ export async function suggestObjectionsContext(projectId: string, segmentId?: st
     existingObjections,
     competitors: compRows,
     instruction:
-      "Dla każdego segmentu zaproponuj 3–5 obiekcji jeszcze nieujętych — każda z odpowiedzią i konkretnym dowodem (case study, statystyka, opinia). Nie powtarzaj istniejących obiekcji.",
+      "Dla każdego segmentu zaproponuj 3–5 obiekcji jeszcze nieujętych — każda z odpowiedzią i konkretnym dowodem (case study, statystyka, opinia). Nie powtarzaj istniejących obiekcji." +
+      foundationNote(foundation),
   };
 }
 
@@ -717,6 +776,11 @@ const suggestObjectionsTool = (projectId: string) =>
 
 /** hub_analyze_strategy — audyt spójności strategii. */
 export async function analyzeStrategyContext(projectId: string) {
+  // Oferty należą do fundamentu (W0) — bez tego audyt w projekcie
+  // dziedziczącym zgłaszałby „brak ofert" mimo kompletnego fundamentu.
+  const foundation = await resolveFoundationSource(projectId);
+  const fundamentId = foundation.projectId;
+
   const [segRows, kpiRows, pageRows, flowRows, chRows, offerRows] =
     await Promise.all([
       db
@@ -742,7 +806,7 @@ export async function analyzeStrategyContext(projectId: string) {
       db
         .select({ name: offers.name })
         .from(offers)
-        .where(and(eq(offers.projectId, projectId), isNull(offers.deletedAt))),
+        .where(and(eq(offers.projectId, fundamentId), isNull(offers.deletedAt))),
     ]);
 
   const segIds = segRows.map((s) => s.id);
@@ -774,7 +838,8 @@ export async function analyzeStrategyContext(projectId: string) {
     segmentsWithoutFunnel: segmentsWithoutFunnel.map((s) => s.name),
     kpisWithoutActual: kpiRows.filter((k) => !k.actual).map((k) => k.name),
     instruction:
-      "Wskaż luki (segmenty bez lejka, KPI bez wartości, brak kanałów/stron), sprzeczności i 3 najważniejsze rekomendacje podnoszące Health Score.",
+      "Wskaż luki (segmenty bez lejka, KPI bez wartości, brak kanałów/stron), sprzeczności i 3 najważniejsze rekomendacje podnoszące Health Score." +
+      foundationNote(foundation),
   };
 }
 
@@ -788,6 +853,11 @@ const analyzeStrategyTool = (projectId: string) =>
 
 /** hub_compare_competitors — porównanie pozycjonowania z konkurencją. */
 export async function compareCompetitorsContext(projectId: string, competitorId?: string) {
+  // Pozycjonowanie i konkurencja to w całości fundament (W0) — w projekcie
+  // dziedziczącym oba komplety leżą u przodka.
+  const foundation = await resolveFoundationSource(projectId);
+  const fundamentId = foundation.projectId;
+
   const pos = await db
     .select({
       axisXLabel: brandPositioning.axisXLabel,
@@ -798,12 +868,12 @@ export async function compareCompetitorsContext(projectId: string, competitorId?
       statementMd: brandPositioning.statementMd,
     })
     .from(brandPositioning)
-    .where(eq(brandPositioning.projectId, projectId))
+    .where(eq(brandPositioning.projectId, fundamentId))
     .limit(1)
     .then((r) => r[0]);
 
   const compConds = [
-    eq(competitors.projectId, projectId),
+    eq(competitors.projectId, fundamentId),
     isNull(competitors.deletedAt),
   ];
   if (competitorId) compConds.push(eq(competitors.id, competitorId));
@@ -824,7 +894,8 @@ export async function compareCompetitorsContext(projectId: string, competitorId?
     positioning: pos ?? null,
     competitors: comp,
     instruction:
-      "Porównaj naszą pozycję z konkurentami na obu osiach quadrantu, wskaż lukę rynkową i przewagi, których możemy użyć.",
+      "Porównaj naszą pozycję z konkurentami na obu osiach quadrantu, wskaż lukę rynkową i przewagi, których możemy użyć." +
+      foundationNote(foundation),
   };
 }
 
@@ -854,6 +925,10 @@ export async function generatePageSpecContext(projectId: string, pageId: string)
     .limit(1);
   if (!page) return { error: "Podstrona nie znaleziona" };
 
+  // UVP i wytyczne copy to fundament (W0); podstrona i obiekcje są lokalne.
+  const foundation = await resolveFoundationSource(projectId);
+  const fundamentId = foundation.projectId;
+
   const [objectionRows, uvpRow, copyRow] = await Promise.all([
     db
       .select({ objectionMd: objections.objectionMd, responseMd: objections.responseMd })
@@ -863,13 +938,13 @@ export async function generatePageSpecContext(projectId: string, pageId: string)
     db
       .select({ coreUvpMd: uvp.coreUvpMd })
       .from(uvp)
-      .where(eq(uvp.projectId, projectId))
+      .where(eq(uvp.projectId, fundamentId))
       .limit(1)
       .then((r) => r[0]),
     db
       .select({ principlesMd: copyGuidelines.principlesMd, doMd: copyGuidelines.doMd })
       .from(copyGuidelines)
-      .where(eq(copyGuidelines.projectId, projectId))
+      .where(eq(copyGuidelines.projectId, fundamentId))
       .limit(1)
       .then((r) => r[0]),
   ]);
@@ -880,7 +955,8 @@ export async function generatePageSpecContext(projectId: string, pageId: string)
     uvp: uvpRow?.coreUvpMd ?? null,
     copyGuidelines: copyRow ?? null,
     instruction:
-      "Zaproponuj sekcje tej podstrony (Hero, dowód/proof, FAQ, CTA) na podstawie roli w lejku, UVP i obiekcji, które strona powinna adresować. Dla każdej sekcji: cel, krótkie copy, CTA. Trzymaj się wytycznych do copy, jeśli podane.",
+      "Zaproponuj sekcje tej podstrony (Hero, dowód/proof, FAQ, CTA) na podstawie roli w lejku, UVP i obiekcji, które strona powinna adresować. Dla każdej sekcji: cel, krótkie copy, CTA. Trzymaj się wytycznych do copy, jeśli podane." +
+      foundationNote(foundation),
   };
 }
 
