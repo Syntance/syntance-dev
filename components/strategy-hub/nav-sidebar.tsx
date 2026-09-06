@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   Settings,
   RefreshCw,
@@ -145,6 +151,63 @@ interface HealthModule {
   state: AreaState | "review";
 }
 
+// ─── Pamięć rozwinięcia obszarów ─────────────────────────────────────────────
+//
+// Stan „które obszary są rozwinięte" trzymamy w localStorage jako zewnętrznym
+// źródle czytanym przez `useSyncExternalStore` — ten sam wzorzec co motyw
+// (`theme-provider.tsx`), bo pozwala uniknąć ustawiania stanu w efekcie
+// (React 19: `set-state-in-effect`) i nie powoduje rozjazdu hydracji.
+//
+// Snapshotem jest STRING, nie Set — `useSyncExternalStore` porównuje wynik
+// przez `Object.is`, więc zwracanie nowej kolekcji przy każdym odczycie
+// zapętliłoby render.
+//
+// Preferencja jest wspólna dla wszystkich projektów: zestaw obszarów jest
+// wszędzie ten sam, a użytkownik ustawia sobie raz, jak chce mieć rozłożone menu.
+
+const AREA_KEYS: readonly AreaKey[] = [
+  "foundation",
+  "market",
+  "execution",
+  "measurement",
+  "info",
+  "settings",
+];
+
+const EXPANDED_STORAGE_KEY = "strategy-hub-expanded-areas";
+
+/** Domyślnie wszystkie obszary rozwinięte — przy pierwszym wejściu widać całość. */
+const DOMYSLNY_SNAPSHOT = AREA_KEYS.join(",");
+
+const expandedListeners = new Set<() => void>();
+
+function subscribeExpanded(callback: () => void) {
+  expandedListeners.add(callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    expandedListeners.delete(callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function readExpandedSnapshot(): string {
+  // `?? ` zamiast `||`: pusty string to poprawna wartość (użytkownik zwinął
+  // wszystko) i nie wolno jej pomylić z brakiem zapisanej preferencji.
+  return localStorage.getItem(EXPANDED_STORAGE_KEY) ?? DOMYSLNY_SNAPSHOT;
+}
+
+function isAreaKey(value: string): value is AreaKey {
+  return (AREA_KEYS as readonly string[]).includes(value);
+}
+
+function zapiszRozwiniete(keys: Set<AreaKey>) {
+  localStorage.setItem(
+    EXPANDED_STORAGE_KEY,
+    AREA_KEYS.filter((k) => keys.has(k)).join(",")
+  );
+  expandedListeners.forEach((l) => l());
+}
+
 interface ProjectListItem {
   id: string;
   name: string;
@@ -181,38 +244,37 @@ export function NavSidebar() {
   const [healthModules, setHealthModules] = useState<HealthModule[]>([]);
   const [orgProjects, setOrgProjects] = useState<ProjectListItem[]>([]);
   const [orgProjectsLoading, setOrgProjectsLoading] = useState(true);
-  const [expandedAreas, setExpandedAreas] = useState<Set<AreaKey>>(() => {
-    if (!projectId) return new Set();
-    const active = areaItems(projectId).find((item) =>
-      pathname.startsWith(item.href)
-    );
-    return active ? new Set([active.key]) : new Set();
-  });
+  const expandedSnapshot = useSyncExternalStore(
+    subscribeExpanded,
+    readExpandedSnapshot,
+    () => DOMYSLNY_SNAPSHOT
+  );
 
+  const expandedAreas = useMemo(
+    () => new Set(expandedSnapshot.split(",").filter(isAreaKey)),
+    [expandedSnapshot]
+  );
 
-  const toggleAreaExpanded = useCallback((key: AreaKey) => {
-    setExpandedAreas((prev) => {
-      const next = new Set(prev);
+  const toggleAreaExpanded = useCallback(
+    (key: AreaKey) => {
+      const next = new Set(expandedAreas);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      return next;
-    });
-  }, []);
+      zapiszRozwiniete(next);
+    },
+    [expandedAreas]
+  );
 
-  // Rozwinięcie obszaru i reset health wynikają z lokalizacji/projektu — liczymy je
-  // podczas renderu (wzorzec „poprzedni prop"), bez set-state-in-effect.
-  const [prevNav, setPrevNav] = useState({ pathname, projectId });
-  if (pathname !== prevNav.pathname || projectId !== prevNav.projectId) {
-    setPrevNav({ pathname, projectId });
-    if (!projectId) {
-      setExpandedAreas(new Set());
-    } else {
-      const active = areaItems(projectId).find((item) =>
-        pathname.startsWith(item.href)
-      );
-      setExpandedAreas(active ? new Set([active.key]) : new Set());
-    }
-    if (projectId !== prevNav.projectId) setHealthModules([]);
+  // Health liczy się per projekt — przy zmianie projektu czyścimy poprzedni wynik,
+  // żeby kropki nie pokazywały przez chwilę cudzych danych. Liczone podczas
+  // renderu (wzorzec „poprzedni prop"), bez set-state-in-effect.
+  //
+  // Rozwinięcia obszarów NIE resetujemy przy nawigacji: to zapamiętana
+  // preferencja użytkownika, a nie stan wynikający z adresu.
+  const [prevProjectId, setPrevProjectId] = useState(projectId);
+  if (projectId !== prevProjectId) {
+    setPrevProjectId(projectId);
+    setHealthModules([]);
   }
 
   useEffect(() => {
