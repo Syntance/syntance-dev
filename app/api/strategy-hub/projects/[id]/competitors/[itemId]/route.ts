@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { competitors } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   requireProjectAccess,
@@ -30,6 +30,16 @@ const patchSchema = z.object({
   priceComparison: z.enum(PRICE_COMPARISONS).optional().nullable(),
   quadrantX: coord.optional().nullable(),
   quadrantY: coord.optional().nullable(),
+  /**
+   * Wartości kolumn użytkownika, TYLKO te które się zmieniają — merge, nie
+   * nadpisanie całego obiektu (patrz PATCH). Walidacja celowo luźna: typ
+   * wartości zależy od `competitorColumns.type`, którego nie znamy tutaj bez
+   * dodatkowego zapytania — ten sam kompromis co przy innych JSONB w repo
+   * (marketData/scoring/dimensions).
+   */
+  customFields: z
+    .record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+    .optional(),
 });
 
 export async function PATCH(
@@ -48,14 +58,31 @@ export async function PATCH(
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());
 
+  const { customFields, ...rest } = parsed.data;
   const data = Object.fromEntries(
-    Object.entries(parsed.data).filter(([, v]) => v !== undefined)
+    Object.entries(rest).filter(([, v]) => v !== undefined)
   );
-  if (Object.keys(data).length === 0) return badRequest("No fields to update");
+  if (Object.keys(data).length === 0 && customFields === undefined) {
+    return badRequest("No fields to update");
+  }
+
+  // MERGE, nie zastąpienie: klient wysyła tylko zmienione klucze (zwykle
+  // jeden — edycja pojedynczej komórki), więc `SET` musiałby najpierw znać
+  // resztę obiektu. `||` w Postgresie łączy JSONB bez round-tripu po stare dane.
+  const customFieldsUpdate =
+    customFields !== undefined
+      ? sql`coalesce(${competitors.customFields}, '{}'::jsonb) || ${JSON.stringify(customFields)}::jsonb`
+      : undefined;
 
   const updated = await db
     .update(competitors)
-    .set({ ...data, updatedAt: new Date() })
+    .set({
+      ...data,
+      ...(customFieldsUpdate !== undefined
+        ? { customFields: customFieldsUpdate }
+        : {}),
+      updatedAt: new Date(),
+    })
     .where(and(eq(competitors.id, itemId), eq(competitors.projectId, id)))
     .returning();
 

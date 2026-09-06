@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Loader2, Plus, Trash2, TrendingDown, TrendingUp, Minus } from "lucide-react";
+import {
+  Check,
+  ExternalLink,
+  Loader2,
+  Minus,
+  Plus,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/strategy-hub/api-fetch";
 import { Button } from "@/components/ui/button";
@@ -9,13 +19,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /**
  * Baza konkurentów — konfigurator, nie raport. Tabela to lista rekordów
  * z kolumnami-kategoriami; klik w wiersz otwiera pełną kartę do edycji.
- * Werdykt cenowy jest jedynym polem klikalnym wprost w tabeli — reszta
+ * Werdykt cenowy jest jedynym stałym polem klikalnym wprost w tabeli — reszta
  * wymaga otwarcia karty, bo to długi tekst, nie jedna decyzja.
+ *
+ * Poza stałymi kategoriami użytkownik może dodać WŁASNE kolumny (konfigurator
+ * jak w Notion/Airtable) — patrz `COLUMN_TYPE_LIBRARY`. Definicje kolumn są
+ * wspólne dla projektu, wartości siedzą per wiersz w `customFields`.
  */
+
+export type CustomFieldValue = string | number | boolean | null;
 
 export interface CompetitorDbRow {
   id: string;
@@ -31,6 +54,30 @@ export interface CompetitorDbRow {
   notesMd: string | null;
   ourEdgeMd: string | null;
   priceComparison: string | null;
+  customFields: Record<string, CustomFieldValue> | null;
+}
+
+export interface ColumnOption {
+  value: string;
+  label: string;
+  color: string;
+}
+
+export type ColumnType =
+  | "text"
+  | "long_text"
+  | "number"
+  | "currency"
+  | "url"
+  | "checkbox"
+  | "select";
+
+export interface CompetitorColumn {
+  id: string;
+  key: string;
+  label: string;
+  type: ColumnType;
+  options: ColumnOption[] | null;
 }
 
 interface CompetitorDatabaseProps {
@@ -83,6 +130,60 @@ const PRICE_OPTIONS: {
   },
 ];
 
+/** Gotowa biblioteka typów kolumn — to jest konfigurator, nie jedno pole tekstowe. */
+const COLUMN_TYPE_LIBRARY: {
+  value: ColumnType;
+  label: string;
+  hint: string;
+}[] = [
+  { value: "text", label: "Tekst", hint: "krótka wartość, jedna linia" },
+  { value: "long_text", label: "Długi tekst", hint: "opis, edytowany w karcie" },
+  { value: "number", label: "Liczba", hint: "wartość liczbowa" },
+  { value: "currency", label: "Kwota (PLN)", hint: "liczba z sufiksem „zł”" },
+  { value: "url", label: "Link", hint: "adres z ikoną otwarcia" },
+  { value: "checkbox", label: "Checkbox", hint: "tak / nie" },
+  { value: "select", label: "Wybór jednokrotny", hint: "lista własnych opcji" },
+];
+
+/** Paleta kolorów opcji — nazwane klucze, nie dowolny hex, żeby Tailwind JIT je znalazł. */
+const OPTION_COLORS: { value: string; label: string; className: string }[] = [
+  { value: "gray", label: "Szary", className: "border-border bg-muted text-foreground" },
+  {
+    value: "red",
+    label: "Czerwony",
+    className: "border-destructive/40 bg-destructive/10 text-destructive",
+  },
+  {
+    value: "amber",
+    label: "Bursztynowy",
+    className: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  },
+  {
+    value: "emerald",
+    label: "Zielony",
+    className:
+      "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  },
+  {
+    value: "blue",
+    label: "Niebieski",
+    className: "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  },
+  {
+    value: "purple",
+    label: "Fioletowy",
+    className:
+      "border-purple-500/40 bg-purple-500/10 text-purple-600 dark:text-purple-400",
+  },
+];
+
+function optionClass(color: string): string {
+  return (
+    OPTION_COLORS.find((c) => c.value === color)?.className ??
+    OPTION_COLORS[0].className
+  );
+}
+
 function emptyRow(): CompetitorDbRow {
   return {
     id: "",
@@ -98,6 +199,7 @@ function emptyRow(): CompetitorDbRow {
     notesMd: null,
     ourEdgeMd: null,
     priceComparison: null,
+    customFields: null,
   };
 }
 
@@ -107,24 +209,44 @@ export function CompetitorDatabase({
   foundationSourceName,
 }: CompetitorDatabaseProps) {
   const [items, setItems] = useState<CompetitorDbRow[]>([]);
+  const [columns, setColumns] = useState<CompetitorColumn[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [adding, setAdding] = useState(false);
+  const [addColumnOpen, setAddColumnOpen] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ rowId: string; key: string } | null>(
+    null
+  );
 
-  const load = useCallback((signal?: AbortSignal) => {
-    apiFetch<{ items: CompetitorDbRow[] }>(
-      `/api/strategy-hub/projects/${projectId}/competitors`,
-      { signal, silent: true }
-    )
-      .then((data) => setItems(data.items ?? []))
-      .catch(() => {
-        if (!signal?.aborted) setItems([]);
-      })
-      .finally(() => {
-        if (!signal?.aborted) setLoading(false);
-      });
-  }, [projectId]);
+  const load = useCallback(
+    (signal?: AbortSignal) => {
+      Promise.all([
+        apiFetch<{ items: CompetitorDbRow[] }>(
+          `/api/strategy-hub/projects/${projectId}/competitors`,
+          { signal, silent: true }
+        ),
+        apiFetch<{ items: CompetitorColumn[] }>(
+          `/api/strategy-hub/projects/${projectId}/competitor-columns`,
+          { signal, silent: true }
+        ),
+      ])
+        .then(([competitorsRes, columnsRes]) => {
+          setItems(competitorsRes.items ?? []);
+          setColumns(columnsRes.items ?? []);
+        })
+        .catch(() => {
+          if (!signal?.aborted) {
+            setItems([]);
+            setColumns([]);
+          }
+        })
+        .finally(() => {
+          if (!signal?.aborted) setLoading(false);
+        });
+    },
+    [projectId]
+  );
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -146,7 +268,7 @@ export function CompetitorDatabase({
         `/api/strategy-hub/projects/${projectId}/competitors`,
         { method: "POST", json: { name } }
       );
-      setItems((prev) => [...prev, res.item]);
+      setItems((prev) => [...prev, { ...res.item, customFields: res.item.customFields ?? null }]);
       setDraftName("");
       // Od razu otwieramy kartę — dodanie wiersza to dopiero nazwa,
       // reszta kategorii i tak wymaga karty.
@@ -159,8 +281,21 @@ export function CompetitorDatabase({
   }
 
   async function handlePatch(id: string, patch: Partial<CompetitorDbRow>) {
-    // Optymistycznie od razu w UI — werdykt cenowy ma być błyskawiczny do klikania.
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+    // Optymistycznie od razu w UI — werdykt cenowy i pola własne mają być
+    // błyskawiczne do klikania/edycji.
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === id
+          ? {
+              ...i,
+              ...patch,
+              customFields: patch.customFields
+                ? { ...i.customFields, ...patch.customFields }
+                : i.customFields,
+            }
+          : i
+      )
+    );
     try {
       await apiFetch(`/api/strategy-hub/projects/${projectId}/competitors/${id}`, {
         method: "PATCH",
@@ -184,6 +319,30 @@ export function CompetitorDatabase({
     }
   }
 
+  function handleColumnAdded(column: CompetitorColumn) {
+    setColumns((prev) => [...prev, column]);
+    setAddColumnOpen(false);
+  }
+
+  async function handleColumnDelete(column: CompetitorColumn) {
+    if (
+      !window.confirm(
+        `Usunąć kolumnę „${column.label}”? Wartości w niej wpisane znikną z widoku dla wszystkich konkurentów.`
+      )
+    ) {
+      return;
+    }
+    setColumns((prev) => prev.filter((c) => c.id !== column.id));
+    try {
+      await apiFetch(
+        `/api/strategy-hub/projects/${projectId}/competitor-columns/${column.id}`,
+        { method: "DELETE" }
+      );
+    } catch {
+      load();
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center rounded-xl border border-border bg-card py-16">
@@ -191,6 +350,10 @@ export function CompetitorDatabase({
       </div>
     );
   }
+
+  // 6 stałych kolumn + własne + (przy edycji: przycisk "+ kolumna" i kolumna
+  // akcji usuwania — dwa dodatkowe nagłówki, patrz <thead> niżej).
+  const totalCols = 6 + columns.length + (foundationInherited ? 0 : 2);
 
   return (
     <div className="space-y-3">
@@ -219,6 +382,36 @@ export function CompetitorDatabase({
               <th className="p-3 font-medium">Specjalizacja</th>
               <th className="p-3 font-medium">Cena vs. nasza</th>
               <th className="p-3 font-medium">Nasz wyróżnik</th>
+              {columns.map((col) => (
+                <th key={col.id} className="group/col p-3 font-medium">
+                  <span className="inline-flex items-center gap-1.5">
+                    {col.label}
+                    {!foundationInherited && (
+                      <button
+                        type="button"
+                        onClick={() => handleColumnDelete(col)}
+                        aria-label={`Usuń kolumnę ${col.label}`}
+                        className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover/col:opacity-100"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    )}
+                  </span>
+                </th>
+              ))}
+              {!foundationInherited && (
+                <th className="w-9 p-2">
+                  <button
+                    type="button"
+                    onClick={() => setAddColumnOpen(true)}
+                    aria-label="Dodaj kolumnę"
+                    title="Dodaj kolumnę"
+                    className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
+                </th>
+              )}
               {!foundationInherited && <th className="w-9 p-3" />}
             </tr>
           </thead>
@@ -300,6 +493,24 @@ export function CompetitorDatabase({
                   <td className="max-w-[16rem] p-3 text-muted-foreground">
                     <span className="line-clamp-1">{c.ourEdgeMd ?? "—"}</span>
                   </td>
+                  {columns.map((col) => (
+                    <td key={col.id} className="p-3">
+                      <CustomFieldCell
+                        column={col}
+                        value={c.customFields?.[col.key] ?? null}
+                        editing={
+                          editingCell?.rowId === c.id && editingCell.key === col.key
+                        }
+                        readOnly={foundationInherited}
+                        onStartEdit={() => setEditingCell({ rowId: c.id, key: col.key })}
+                        onStopEdit={() => setEditingCell(null)}
+                        onChange={(value) =>
+                          handlePatch(c.id, { customFields: { [col.key]: value } })
+                        }
+                      />
+                    </td>
+                  ))}
+                  {!foundationInherited && <td className="p-3" />}
                   {!foundationInherited && (
                     <td className="p-3">
                       <button
@@ -318,10 +529,7 @@ export function CompetitorDatabase({
 
             {items.length === 0 && (
               <tr>
-                <td
-                  colSpan={foundationInherited ? 6 : 7}
-                  className="p-8 text-center text-muted-foreground"
-                >
+                <td colSpan={totalCols} className="p-8 text-center text-muted-foreground">
                   Brak konkurentów. Dodaj pierwszego poniżej.
                 </td>
               </tr>
@@ -365,23 +573,377 @@ export function CompetitorDatabase({
 
       <CompetitorSheet
         item={openItem}
+        columns={columns}
         readOnly={foundationInherited}
         onClose={() => setOpenId(null)}
         onSave={(patch) => openItem && handlePatch(openItem.id, patch)}
         onDelete={() => openItem && handleDelete(openItem.id)}
       />
+
+      <AddColumnDialog
+        open={addColumnOpen}
+        onClose={() => setAddColumnOpen(false)}
+        projectId={projectId}
+        onAdded={handleColumnAdded}
+      />
     </div>
+  );
+}
+
+/** Pojedyncza komórka kolumny użytkownika — renderuje się i edytuje wg typu. */
+function CustomFieldCell({
+  column,
+  value,
+  editing,
+  readOnly,
+  onStartEdit,
+  onStopEdit,
+  onChange,
+}: {
+  column: CompetitorColumn;
+  value: CustomFieldValue;
+  editing: boolean;
+  readOnly: boolean;
+  onStartEdit: () => void;
+  onStopEdit: () => void;
+  onChange: (value: CustomFieldValue) => void;
+}) {
+  const [draft, setDraft] = useState(value === null ? "" : String(value));
+
+  const [prevEditing, setPrevEditing] = useState(editing);
+  if (editing !== prevEditing) {
+    setPrevEditing(editing);
+    if (editing) setDraft(value === null ? "" : String(value));
+  }
+
+  function commit() {
+    if (column.type === "number" || column.type === "currency") {
+      const num = draft.trim() === "" ? null : Number(draft.replace(",", "."));
+      onChange(Number.isFinite(num) ? num : null);
+    } else {
+      onChange(draft.trim() === "" ? null : draft);
+    }
+    onStopEdit();
+  }
+
+  if (column.type === "checkbox") {
+    const checked = value === true;
+    return (
+      <button
+        type="button"
+        disabled={readOnly}
+        aria-pressed={checked}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "flex size-5 items-center justify-center rounded border transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+          checked
+            ? "border-brand bg-brand text-white"
+            : "border-border text-transparent hover:border-brand/40"
+        )}
+      >
+        <Check className="size-3" />
+      </button>
+    );
+  }
+
+  if (column.type === "select") {
+    const options = column.options ?? [];
+    if (readOnly) {
+      const opt = options.find((o) => o.value === value);
+      return opt ? (
+        <span
+          className={cn(
+            "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px]",
+            optionClass(opt.color)
+          )}
+        >
+          {opt.label}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      );
+    }
+    return (
+      <select
+        value={typeof value === "string" ? value : ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="h-6 rounded-md border border-border bg-transparent px-1.5 text-[11px] outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        <option value="">—</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (column.type === "long_text") {
+    // Długi tekst edytuje się w karcie — tu tylko podgląd, żeby nie zaśmiecać wiersza.
+    return (
+      <span className="line-clamp-1 text-muted-foreground">
+        {typeof value === "string" && value ? value : "—"}
+      </span>
+    );
+  }
+
+  // text / number / currency / url — klik zamienia w input, blur/Enter zapisuje.
+  if (editing && !readOnly) {
+    return (
+      <input
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- input montuje się dopiero po kliknięciu w komórkę; bez fokusu trzeba by kliknąć drugi raz.
+        autoFocus
+        value={draft}
+        // Zawsze "text": <input type="number"> psuje UX dla przecinków/separatorów
+        // tysięcy, więc liczby też trzymamy jako text + inputMode="decimal".
+        type="text"
+        inputMode={column.type === "number" || column.type === "currency" ? "decimal" : undefined}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") onStopEdit();
+        }}
+        className="h-6 w-full min-w-[6rem] rounded-md border border-brand/40 bg-background px-1.5 text-[11px] outline-none"
+      />
+    );
+  }
+
+  const display =
+    value === null || value === undefined || value === ""
+      ? "—"
+      : column.type === "currency"
+        ? `${value} zł`
+        : String(value);
+
+  return (
+    <button
+      type="button"
+      disabled={readOnly}
+      onClick={onStartEdit}
+      className={cn(
+        "block max-w-[10rem] truncate text-left disabled:cursor-default",
+        column.type === "url" && value ? "text-brand underline-offset-2 hover:underline" : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {column.type === "url" && typeof value === "string" && value ? (
+        <span className="inline-flex items-center gap-1">
+          {value}
+          <ExternalLink className="size-2.5 shrink-0" />
+        </span>
+      ) : (
+        display
+      )}
+    </button>
+  );
+}
+
+function AddColumnDialog({
+  open,
+  onClose,
+  projectId,
+  onAdded,
+}: {
+  open: boolean;
+  onClose: () => void;
+  projectId: string;
+  onAdded: (column: CompetitorColumn) => void;
+}) {
+  const [label, setLabel] = useState("");
+  const [type, setType] = useState<ColumnType>("text");
+  const [options, setOptions] = useState<ColumnOption[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (open) {
+      setLabel("");
+      setType("text");
+      setOptions([]);
+    }
+  }
+
+  function addOption() {
+    const n = options.length;
+    setOptions((prev) => [
+      ...prev,
+      {
+        value: `opcja_${n + 1}`,
+        label: "",
+        color: OPTION_COLORS[n % OPTION_COLORS.length].value,
+      },
+    ]);
+  }
+
+  function updateOption(i: number, patch: Partial<ColumnOption>) {
+    setOptions((prev) => prev.map((o, idx) => (idx === i ? { ...o, ...patch } : o)));
+  }
+
+  function removeOption(i: number) {
+    setOptions((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  const validOptions = options.filter((o) => o.label.trim());
+  const canSave =
+    label.trim().length > 0 && (type !== "select" || validOptions.length > 0);
+
+  async function handleSave() {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      const res = await apiFetch<{ item: CompetitorColumn }>(
+        `/api/strategy-hub/projects/${projectId}/competitor-columns`,
+        {
+          method: "POST",
+          json: {
+            label: label.trim(),
+            type,
+            options:
+              type === "select"
+                ? validOptions.map((o, i) => ({
+                    value: o.value || `opcja_${i + 1}`,
+                    label: o.label.trim(),
+                    color: o.color,
+                  }))
+                : undefined,
+          },
+        }
+      );
+      onAdded(res.item);
+    } catch {
+      // apiFetch pokazał już toast.
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nowa kolumna</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <Field label="Nazwa kolumny">
+            <Input
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- pole otwiera się dopiero po kliknięciu „Dodaj kolumnę" — bezpośredni skutek akcji użytkownika.
+              autoFocus
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="np. Zespół, Rok założenia, Case study…"
+              className="h-8 text-sm"
+            />
+          </Field>
+
+          <Field label="Typ pola">
+            <div className="grid grid-cols-2 gap-1.5">
+              {COLUMN_TYPE_LIBRARY.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => setType(t.value)}
+                  className={cn(
+                    "rounded-md border p-2 text-left transition-colors",
+                    type === t.value
+                      ? "border-brand bg-brand/5"
+                      : "border-border hover:border-brand/40"
+                  )}
+                >
+                  <span className="block text-xs font-medium">{t.label}</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    {t.hint}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          {type === "select" && (
+            <Field label="Opcje wyboru">
+              <div className="space-y-1.5">
+                {options.map((o, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <div className="flex gap-1">
+                      {OPTION_COLORS.map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          title={c.label}
+                          onClick={() => updateOption(i, { color: c.value })}
+                          className={cn(
+                            "size-4 shrink-0 rounded-full border",
+                            c.className.split(" ")[1],
+                            o.color === c.value
+                              ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
+                              : ""
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <Input
+                      value={o.label}
+                      onChange={(e) => updateOption(i, { label: e.target.value })}
+                      placeholder={`Opcja ${i + 1}`}
+                      className="h-7 flex-1 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeOption(i)}
+                      aria-label="Usuń opcję"
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={addOption}
+                  className="h-7 gap-1.5 text-xs"
+                >
+                  <Plus className="size-3.5" />
+                  Dodaj opcję
+                </Button>
+              </div>
+            </Field>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            Anuluj
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            className="gap-1.5"
+          >
+            {saving && <Loader2 className="size-3.5 animate-spin" />}
+            Dodaj kolumnę
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 function CompetitorSheet({
   item,
+  columns,
   readOnly,
   onClose,
   onSave,
   onDelete,
 }: {
   item: CompetitorDbRow | null;
+  columns: CompetitorColumn[];
   readOnly: boolean;
   onClose: () => void;
   onSave: (patch: Partial<CompetitorDbRow>) => void;
@@ -406,6 +968,11 @@ function CompetitorSheet({
   function debouncedSave(patchObj: Partial<CompetitorDbRow>) {
     if (timer) clearTimeout(timer);
     setTimer(setTimeout(() => onSave(patchObj), 500));
+  }
+
+  function setCustomField(key: string, value: CustomFieldValue) {
+    patch("customFields", { ...draft.customFields, [key]: value });
+    onSave({ customFields: { [key]: value } });
   }
 
   const type = asType(draft.type);
@@ -605,9 +1172,136 @@ function CompetitorSheet({
               className="min-h-16 resize-none text-sm"
             />
           </Field>
+
+          {columns.length > 0 && (
+            <div className="space-y-4 border-t border-border pt-4">
+              <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Własne kolumny
+              </h4>
+              {columns.map((col) => (
+                <CustomFieldInput
+                  key={col.id}
+                  column={col}
+                  value={draft.customFields?.[col.key] ?? null}
+                  readOnly={readOnly}
+                  onChange={(value) => setCustomField(col.key, value)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function CustomFieldInput({
+  column,
+  value,
+  readOnly,
+  onChange,
+}: {
+  column: CompetitorColumn;
+  value: CustomFieldValue;
+  readOnly: boolean;
+  onChange: (value: CustomFieldValue) => void;
+}) {
+  const [text, setText] = useState(value === null ? "" : String(value));
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setText(value === null ? "" : String(value));
+  }
+
+  if (column.type === "checkbox") {
+    return (
+      <Field label={column.label}>
+        <button
+          type="button"
+          disabled={readOnly}
+          aria-pressed={value === true}
+          onClick={() => onChange(!(value === true))}
+          className={cn(
+            "flex h-8 items-center gap-2 rounded-md border px-2.5 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+            value === true
+              ? "border-brand bg-brand/5 text-brand"
+              : "border-border text-muted-foreground"
+          )}
+        >
+          <span
+            className={cn(
+              "flex size-4 items-center justify-center rounded border",
+              value === true ? "border-brand bg-brand text-white" : "border-border"
+            )}
+          >
+            {value === true && <Check className="size-3" />}
+          </span>
+          {value === true ? "Tak" : "Nie"}
+        </button>
+      </Field>
+    );
+  }
+
+  if (column.type === "select") {
+    return (
+      <Field label={column.label}>
+        <select
+          value={typeof value === "string" ? value : ""}
+          disabled={readOnly}
+          onChange={(e) => onChange(e.target.value || null)}
+          className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+        >
+          <option value="">—</option>
+          {(column.options ?? []).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+    );
+  }
+
+  if (column.type === "long_text") {
+    return (
+      <Field label={column.label}>
+        <Textarea
+          value={text}
+          disabled={readOnly}
+          onChange={(e) => {
+            setText(e.target.value);
+            onChange(e.target.value || null);
+          }}
+          className="min-h-16 resize-none text-sm"
+        />
+      </Field>
+    );
+  }
+
+  return (
+    <Field label={column.label}>
+      <Input
+        value={text}
+        disabled={readOnly}
+        // Zawsze "text": <input type="number"> psuje UX dla przecinków/separatorów
+        // tysięcy, więc liczby też trzymamy jako text + inputMode="decimal".
+        type="text"
+        inputMode={
+          column.type === "number" || column.type === "currency" ? "decimal" : undefined
+        }
+        onChange={(e) => {
+          setText(e.target.value);
+          if (column.type === "number" || column.type === "currency") {
+            const num = e.target.value.trim() === "" ? null : Number(e.target.value.replace(",", "."));
+            onChange(Number.isFinite(num) ? num : null);
+          } else {
+            onChange(e.target.value || null);
+          }
+        }}
+        placeholder={column.type === "url" ? "https://…" : undefined}
+        className="h-8 text-sm"
+      />
+    </Field>
   );
 }
 

@@ -335,6 +335,13 @@ export const competitors = pgTable(
      * Osobne pole od `pricingMd` (opis) — to jest KLIKALNA ocena, nie tekst.
      */
     priceComparison: varchar("price_comparison", { length: 20 }),
+    /**
+     * Wartości kolumn zdefiniowanych przez użytkownika (`competitorColumns`):
+     * `{ [columnKey]: string | number | boolean | null }`. Definicje kolumn
+     * są wspólne dla całego projektu — ten JSONB trzyma tylko wartości TEGO
+     * wiersza, tak samo jak `segments.marketData`/`scoring` obok siebie.
+     */
+    customFields: jsonb("custom_fields"),
     quadrantX: real("quadrant_x"),
     quadrantY: real("quadrant_y"),
     source: varchar("source", { length: 20 }).notNull().default("hub"),
@@ -346,6 +353,34 @@ export const competitors = pgTable(
     index("competitors_project_idx").on(t.projectId),
     index("competitors_segment_idx").on(t.segmentId),
   ]
+);
+
+/**
+ * Definicje kolumn dodawanych przez użytkownika do bazy konkurentów —
+ * rejestr per projekt, współdzielony przez wszystkie wiersze `competitors`.
+ * `key` jest stabilnym identyfikatorem używanym jako klucz w
+ * `competitors.customFields` (slug z `label`, unikalny w obrębie projektu —
+ * pilnowany w warstwie aplikacji, nie unique index, bo soft-delete musi
+ * pozwalać na ponowne użycie tej samej etykiety).
+ */
+export const competitorColumns = pgTable(
+  "competitor_columns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    key: varchar("key", { length: 60 }).notNull(),
+    label: varchar("label", { length: 255 }).notNull(),
+    /** text | long_text | number | currency | url | checkbox | select */
+    type: varchar("type", { length: 20 }).notNull(),
+    /** Tylko dla `type: select` — [{value, label, color}]. */
+    options: jsonb("options"),
+    orderIdx: integer("order_idx").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [index("competitor_columns_project_idx").on(t.projectId)]
 );
 
 /**
