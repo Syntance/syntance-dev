@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
-  ChevronLeft,
-  ChevronRight,
   ExternalLink,
   Loader2,
   Minus,
+  MoreVertical,
   Plus,
   Trash2,
   TrendingDown,
@@ -269,6 +268,19 @@ export function CompetitorDatabase({
     null
   );
 
+  // ── Przeciąganie kolumn (bez biblioteki DnD — Pointer Events) ────────────
+  //
+  // `hoveredColId`/`draggingColId` sterują wizualiami całej kolumny (nagłówek
+  // + każda komórka), `dragOverColId` wskazuje, gdzie wyląduje po puszczeniu.
+  // `dragOverColIdRef` istnieje osobno od stanu, bo listener `pointerup` jest
+  // rejestrowany RAZ przy `pointerdown` — bez refa czytałby tam nieaktualną
+  // (z chwili startu) wartość zamiast tej z ostatniego `pointermove`.
+  const [hoveredColId, setHoveredColId] = useState<string | null>(null);
+  const [draggingColId, setDraggingColId] = useState<string | null>(null);
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null);
+  const dragOverColIdRef = useRef<string | null>(null);
+  const thRefs = useRef<Map<string, HTMLTableCellElement>>(new Map());
+
   const load = useCallback(
     (signal?: AbortSignal) => {
       Promise.all([
@@ -386,6 +398,10 @@ export function CompetitorDatabase({
       return;
     }
     setColumns((prev) => prev.filter((c) => c.id !== column.id));
+    // Dialog mógł być otwarty właśnie na tej kolumnie (usuwanie żyje w jego
+    // wnętrzu) — zamykamy go tylko wtedy, żeby nie zostać z formularzem
+    // edycji encji, która już nie istnieje.
+    setColumnDialog((cur) => (cur !== "new" && cur?.id === column.id ? null : cur));
     try {
       await apiFetch(
         `/api/strategy-hub/projects/${projectId}/competitor-columns/${column.id}`,
@@ -396,31 +412,115 @@ export function CompetitorDatabase({
     }
   }
 
-  /** Przesuwanie = zamiana orderIdx z sąsiadem. Działa bez biblioteki DnD. */
-  async function handleColumnMove(column: CompetitorColumn, direction: "left" | "right") {
-    const idx = columns.findIndex((c) => c.id === column.id);
-    const neighborIdx = direction === "left" ? idx - 1 : idx + 1;
-    const neighbor = columns[neighborIdx];
-    if (!neighbor) return;
+  /**
+   * Przeciąganie kolumny — pointerdown na nazwie startuje śledzenie, pointermove
+   * (na `window`, bo pointer wychodzi poza `<th>`) liczy, nad którym nagłówkiem
+   * jest kursor po X, pointerup zapisuje nową kolejność. Działa dla przesunięcia
+   * o dowolną liczbę miejsc, nie tylko sąsiada — stąd `commitColumnReorder`
+   * poniżej PATCH-uje każdą kolumnę, której pozycja realnie się zmieniła.
+   */
+  function handleColumnDragStart(e: React.PointerEvent, column: CompetitorColumn) {
+    // `draggingColId !== null` blokuje start drugiego przeciągania nad pierwszym
+    // (np. przy multi-touch) — bez tego dwie pary listenerów na `window` biłyby
+    // się nawzajem o `dragOverColIdRef`.
+    if (foundationInherited || e.button !== 0 || draggingColId !== null) return;
+    e.preventDefault();
+    setDraggingColId(column.id);
+    setDragOverColId(column.id);
+    dragOverColIdRef.current = column.id;
 
+    function onMove(ev: PointerEvent) {
+      let over: string | null = null;
+      for (const [id, el] of thRefs.current) {
+        const r = el.getBoundingClientRect();
+        if (ev.clientX >= r.left && ev.clientX <= r.right) {
+          over = id;
+          break;
+        }
+      }
+      if (over && over !== dragOverColIdRef.current) {
+        dragOverColIdRef.current = over;
+        setDragOverColId(over);
+      }
+    }
+
+    function cleanup() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      setDraggingColId(null);
+      setDragOverColId(null);
+      dragOverColIdRef.current = null;
+    }
+
+    function onUp() {
+      const overId = dragOverColIdRef.current;
+      cleanup();
+      if (overId && overId !== column.id) {
+        void commitColumnReorder(column.id, overId);
+      }
+    }
+
+    // System (np. alt-tab, przeciągnięcie poza okno przeglądarki na dotyku)
+    // potrafi anulować sekwencję pointera bez `pointerup` — bez tego listenery
+    // zostałyby zawieszone na `window`, a kolumna "utknęłaby" w stanie uniesionym.
+    function onCancel() {
+      cleanup();
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+  }
+
+  async function commitColumnReorder(draggedId: string, overId: string) {
+    const fromIdx = columns.findIndex((c) => c.id === draggedId);
+    const toIdx = columns.findIndex((c) => c.id === overId);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+
+    const before = columns;
     const reordered = [...columns];
-    [reordered[idx], reordered[neighborIdx]] = [reordered[neighborIdx], reordered[idx]];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
     setColumns(reordered);
 
+    // Tylko kolumny, których pozycja realnie się przesunęła — ruch o kilka
+    // miejsc rusza wszystkimi "po drodze", nie tylko przeciąganą i sąsiadem.
+    // Każda dostaje jako orderIdx swoją BIEŻĄCĄ pozycję w tablicy (nie starą
+    // wartość z bazy) — ten sam, sprawdzony trik co przy zamianie sąsiadów:
+    // sortowanie względem nietkniętych kolumn zostaje poprawne niezależnie
+    // od tego, jakie realne orderIdx mają w bazie.
+    const changed = reordered
+      .map((c, idx) => ({ c, idx }))
+      .filter(({ c, idx }) => before[idx]?.id !== c.id);
+
     try {
-      await Promise.all([
-        apiFetch(
-          `/api/strategy-hub/projects/${projectId}/competitor-columns/${column.id}`,
-          { method: "PATCH", json: { orderIdx: neighborIdx } }
-        ),
-        apiFetch(
-          `/api/strategy-hub/projects/${projectId}/competitor-columns/${neighbor.id}`,
-          { method: "PATCH", json: { orderIdx: idx } }
-        ),
-      ]);
+      await Promise.all(
+        changed.map(({ c, idx }) =>
+          apiFetch(
+            `/api/strategy-hub/projects/${projectId}/competitor-columns/${c.id}`,
+            { method: "PATCH", json: { orderIdx: idx } }
+          )
+        )
+      );
     } catch {
       load();
     }
+  }
+
+  /** Wspólne wizualia całej kolumny (nagłówek + każda komórka) — hover, cel upuszczenia, uniesienie podczas przeciągania. */
+  function columnCellClass(col: CompetitorColumn): string {
+    const isDragging = draggingColId === col.id;
+    const isDropTarget =
+      dragOverColId === col.id && draggingColId !== null && draggingColId !== col.id;
+    const isHovered = hoveredColId === col.id && draggingColId === null;
+    return cn(
+      "transition-[background-color,box-shadow] duration-150",
+      isHovered && "bg-muted/40",
+      isDropTarget && "bg-brand/10",
+      isDragging &&
+        "relative z-20 shadow-xl [transform:perspective(800px)_rotateX(2deg)_scale(1.03)]"
+    );
   }
 
   if (loading) {
@@ -465,51 +565,45 @@ export function CompetitorDatabase({
                 przesuwanie, edycja etykiety i kolor działają na nich tak samo.
               */}
               <th className="p-3 font-medium">Konkurent</th>
-              {columns.map((col, colIdx) => (
-                <th key={col.id} className="group/col p-3 font-medium">
+              {columns.map((col) => (
+                <th
+                  key={col.id}
+                  ref={(el) => {
+                    if (el) thRefs.current.set(col.id, el);
+                    else thRefs.current.delete(col.id);
+                  }}
+                  onMouseEnter={() => setHoveredColId(col.id)}
+                  onMouseLeave={() =>
+                    setHoveredColId((cur) => (cur === col.id ? null : cur))
+                  }
+                  className={cn("p-3 font-medium", columnCellClass(col))}
+                >
                   <span className="inline-flex items-center gap-1">
-                    {!foundationInherited && (
-                      <button
-                        type="button"
-                        disabled={colIdx === 0}
-                        onClick={() => handleColumnMove(col, "left")}
-                        aria-label={`Przesuń kolumnę ${col.label} w lewo`}
-                        title="Przesuń w lewo"
-                        className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground group-hover/col:opacity-100 disabled:pointer-events-none disabled:opacity-0"
-                      >
-                        <ChevronLeft className="size-3" />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setColumnDialog(col)}
-                      className="max-w-[10rem] truncate hover:text-brand hover:underline"
-                      title="Edytuj kolumnę"
+                    <span
+                      onPointerDown={(e) => handleColumnDragStart(e, col)}
+                      style={{ touchAction: "none" }}
+                      title={
+                        foundationInherited
+                          ? undefined
+                          : "Przeciągnij, żeby zmienić kolejność"
+                      }
+                      className={cn(
+                        "max-w-[10rem] truncate select-none",
+                        !foundationInherited &&
+                          (draggingColId === col.id ? "cursor-grabbing" : "cursor-grab")
+                      )}
                     >
                       {col.label}
-                    </button>
+                    </span>
                     {!foundationInherited && (
                       <button
                         type="button"
-                        disabled={colIdx === columns.length - 1}
-                        onClick={() => handleColumnMove(col, "right")}
-                        aria-label={`Przesuń kolumnę ${col.label} w prawo`}
-                        title="Przesuń w prawo"
-                        className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground group-hover/col:opacity-100 disabled:pointer-events-none disabled:opacity-0"
+                        onClick={() => setColumnDialog(col)}
+                        aria-label={`Edytuj kolumnę ${col.label}`}
+                        title="Edytuj kolumnę"
+                        className="shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
                       >
-                        <ChevronRight className="size-3" />
-                      </button>
-                    )}
-                    {/* Systemowa kolumna reprezentuje prawdziwe dane — nie da się jej usunąć, tylko przesunąć/przemianować/pokolorować. */}
-                    {!foundationInherited && col.source === "custom" && (
-                      <button
-                        type="button"
-                        onClick={() => handleColumnDelete(col)}
-                        aria-label={`Usuń kolumnę ${col.label}`}
-                        title="Usuń kolumnę"
-                        className="text-muted-foreground/40 opacity-0 transition-opacity hover:text-destructive group-hover/col:opacity-100"
-                      >
-                        <X className="size-3" />
+                        <MoreVertical className="size-3.5" />
                       </button>
                     )}
                   </span>
@@ -562,7 +656,14 @@ export function CompetitorDatabase({
                   </td>
                   {columns.map((col) =>
                     col.source === "system" ? (
-                      <td key={col.id} className="p-3">
+                      <td
+                        key={col.id}
+                        onMouseEnter={() => setHoveredColId(col.id)}
+                        onMouseLeave={() =>
+                          setHoveredColId((cur) => (cur === col.id ? null : cur))
+                        }
+                        className={cn("p-3", columnCellClass(col))}
+                      >
                         <SystemFieldCell
                           column={col}
                           row={c}
@@ -571,7 +672,14 @@ export function CompetitorDatabase({
                         />
                       </td>
                     ) : (
-                      <td key={col.id} className="p-3">
+                      <td
+                        key={col.id}
+                        onMouseEnter={() => setHoveredColId(col.id)}
+                        onMouseLeave={() =>
+                          setHoveredColId((cur) => (cur === col.id ? null : cur))
+                        }
+                        className={cn("p-3", columnCellClass(col))}
+                      >
                         <CustomFieldCell
                           column={col}
                           value={c.customFields?.[col.key] ?? null}
@@ -664,6 +772,11 @@ export function CompetitorDatabase({
         onClose={() => setColumnDialog(null)}
         projectId={projectId}
         onSaved={handleColumnSaved}
+        onDelete={
+          columnDialog && columnDialog !== "new" && columnDialog.source === "custom"
+            ? () => handleColumnDelete(columnDialog)
+            : undefined
+        }
       />
     </div>
   );
@@ -917,12 +1030,15 @@ function ColumnFormDialog({
   onClose,
   projectId,
   onSaved,
+  onDelete,
 }: {
   open: boolean;
   initial: CompetitorColumn | null;
   onClose: () => void;
   projectId: string;
   onSaved: (column: CompetitorColumn) => void;
+  /** Obecny tylko przy edycji kolumny WŁASNEJ — systemowej nie da się usunąć. */
+  onDelete?: () => void;
 }) {
   const [label, setLabel] = useState("");
   const [type, setType] = useState<ColumnType>("text");
@@ -1016,8 +1132,19 @@ function ColumnFormDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+        <DialogHeader className="flex-row items-center justify-between space-y-0">
           <DialogTitle>{initial ? "Edytuj kolumnę" : "Nowa kolumna"}</DialogTitle>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              aria-label="Usuń kolumnę"
+              title="Usuń kolumnę"
+              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          )}
         </DialogHeader>
 
         <div className="space-y-4">
