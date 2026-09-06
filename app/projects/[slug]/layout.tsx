@@ -9,7 +9,7 @@ import { db } from "@/db";
 import { projects as dbProjects } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 import { getProjectVisibility } from "@/lib/strategy-hub/visibility";
-import { getWorkspaceBrandingForProject } from "@/lib/client-portal/branding";
+import { getOrganizationBrandingForProject } from "@/lib/client-portal/branding";
 import Image from "next/image";
 
 interface Props {
@@ -42,7 +42,7 @@ export default async function ProjectDashboardLayout({ children, params }: Props
   // Widoczność modułów (z relacyjnej bazy Drizzle, po slug)
   let hiddenModules: string[] = [];
   let inProgressModules: string[] = [];
-  let branding: Awaited<ReturnType<typeof getWorkspaceBrandingForProject>> = null;
+  let branding: Awaited<ReturnType<typeof getOrganizationBrandingForProject>> = null;
   try {
     const [dbProject] = await db
       .select({ id: dbProjects.id })
@@ -57,7 +57,7 @@ export default async function ProjectDashboardLayout({ children, params }: Props
       inProgressModules = Object.entries(vis.modules)
         .filter(([, s]) => s === "in_progress")
         .map(([k]) => k);
-      branding = await getWorkspaceBrandingForProject(dbProject.id).catch(() => null);
+      branding = await getOrganizationBrandingForProject(dbProject.id).catch(() => null);
     }
   } catch {
     // brak danych = wszystko widoczne

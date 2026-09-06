@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { projectClients, projects } from "@/db/schema";
 import { getClientSession } from "@/lib/auth";
 import { getStrategyHubAccess, assertProjectAccess } from "@/lib/strategy-hub/context";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 /**
  * Sprawdza dostęp do Strategy Hub w API route.
@@ -83,6 +84,41 @@ export async function requireProjectReadAccess(projectId: string) {
     role: "client" as const,
     session,
     projectId,
+  };
+}
+
+/**
+ * Bramka zapisu dla encji FUNDAMENTU (W0) — przepuszcza tylko projekty, które
+ * mają własny fundament (`strategyMode = 'wlasna'` albo zerwany łańcuch).
+ * Projekt w trybie `dziedziczona` dostaje 409 z kodem `FOUNDATION_INHERITED`.
+ *
+ * DLACZEGO blokujemy zapis, zamiast przekierować go do projektu-rodzica:
+ * dziedziczenie jest read-through, więc zapis „w imieniu rodzica" nadpisałby
+ * fundament WSZYSTKIM rodzeństwu i wnukom, które czytają z tego samego źródła.
+ * Ktoś edytujący pojedynczy produkt po cichu przepisałby strategię całej firmy
+ * — i nie zobaczyłby tego w żadnym UI, bo formularz wyglądałby jak lokalny.
+ * Odłączenie od rodzica ma pozostać jawną, świadomą decyzją podjętą
+ * w Ustawieniach projektu → Ogólne, a nie efektem ubocznym zapisu formularza.
+ *
+ * Używaj w handlerach POST/PATCH/PUT/DELETE, PO sprawdzeniu dostępu.
+ */
+export async function requireOwnFoundation(projectId: string) {
+  const source = await resolveFoundationSource(projectId);
+  if (!source.inherited) return { ok: true as const };
+
+  const zrodlo = source.sourceName ? ` „${source.sourceName}"` : "";
+  return {
+    ok: false as const,
+    response: NextResponse.json(
+      {
+        error:
+          `Ten projekt dziedziczy fundament strategii z projektu nadrzędnego${zrodlo}, ` +
+          `więc nie można go edytować lokalnie. Odłącz dziedziczenie w Ustawieniach ` +
+          `projektu → Ogólne (tryb strategii: „własna"), a potem zapisz zmiany.`,
+        code: "FOUNDATION_INHERITED",
+      },
+      { status: 409 }
+    ),
   };
 }
 

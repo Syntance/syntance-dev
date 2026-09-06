@@ -4,13 +4,13 @@ import { useState } from "react";
 import { CheckCircle2, Save, Image as ImageIcon, Palette, Globe, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { WorkspaceBranding } from "@/lib/client-portal/branding";
+import type { OrganizationBranding } from "@/lib/client-portal/branding";
 
 interface Props {
-  initial: WorkspaceBranding & { status: string };
+  initial: OrganizationBranding & { status: string };
 }
 
-function colorFor(colors: WorkspaceBranding["colors"], role: string, fallback: string) {
+function colorFor(colors: OrganizationBranding["colors"], role: string, fallback: string) {
   return colors.find((c) => c.role === role)?.value ?? fallback;
 }
 

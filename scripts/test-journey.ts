@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "../db";
 import {
   projects,
-  workspaces,
+  organizations,
   segments,
   purchaseStages,
   funnelElements,
@@ -32,115 +32,117 @@ async function test(name: string, fn: () => void | Promise<void>) {
 }
 
 async function run() {
-  const wsId = randomUUID();
+  const organizationId = randomUUID();
   const projectId = randomUUID();
-  await db.insert(workspaces).values({
-    id: wsId,
+  await db.insert(organizations).values({
+    id: organizationId,
     name: "Test journey",
     ownerId: randomUUID(),
     ownerEmail: `test-${randomUUID()}@example.com`,
   });
   await db.insert(projects).values({
     id: projectId,
-    workspaceId: wsId,
+    organizationId,
     name: "Projekt journey",
     slug: `test-jr-${randomUUID().slice(0, 8)}`,
   });
 
-  const [segment] = await db
-    .insert(segments)
-    .values({ projectId, name: "Segment N", code: "N", priority: 5 })
-    .returning();
+  try {
+    const [segment] = await db
+      .insert(segments)
+      .values({ projectId, name: "Segment N", code: "N", priority: 5 })
+      .returning();
 
-  // Trzy etapy: marketingowy → wspólny → sprzedażowy (retencja, ostatni).
-  const [stage0] = await db
-    .insert(purchaseStages)
-    .values({
-      segmentId: segment.id,
-      name: "Uświadomienie",
-      orderIdx: 0,
-      ownerSide: "marketing",
-      questions: "Dlaczego to boli?",
-    })
-    .returning();
-  const [stage1] = await db
-    .insert(purchaseStages)
-    .values({
-      segmentId: segment.id,
-      name: "Porównanie ofert",
-      orderIdx: 1,
-      ownerSide: "shared",
-    })
-    .returning();
-  const [stage2] = await db
-    .insert(purchaseStages)
-    .values({
-      segmentId: segment.id,
-      name: "Lojalność",
-      orderIdx: 2,
-      phase: "retencja",
-      ownerSide: "sales",
-      exitCriterion: "Odnowienie umowy",
-    })
-    .returning();
+    // Trzy etapy: marketingowy → wspólny → sprzedażowy (retencja, ostatni).
+    const [stage0] = await db
+      .insert(purchaseStages)
+      .values({
+        segmentId: segment.id,
+        name: "Uświadomienie",
+        orderIdx: 0,
+        ownerSide: "marketing",
+        questions: "Dlaczego to boli?",
+      })
+      .returning();
+    const [stage1] = await db
+      .insert(purchaseStages)
+      .values({
+        segmentId: segment.id,
+        name: "Porównanie ofert",
+        orderIdx: 1,
+        ownerSide: "shared",
+      })
+      .returning();
+    const [stage2] = await db
+      .insert(purchaseStages)
+      .values({
+        segmentId: segment.id,
+        name: "Lojalność",
+        orderIdx: 2,
+        phase: "retencja",
+        ownerSide: "sales",
+        exitCriterion: "Odnowienie umowy",
+      })
+      .returning();
 
-  const [element] = await db
-    .insert(funnelElements)
-    .values({
-      stageId: stage0.id,
-      segmentId: segment.id,
-      name: "Artykuł edukacyjny",
-      position: 0,
-    })
-    .returning();
+    const [element] = await db
+      .insert(funnelElements)
+      .values({
+        stageId: stage0.id,
+        segmentId: segment.id,
+        name: "Artykuł edukacyjny",
+        position: 0,
+      })
+      .returning();
 
-  const channelRows = await db.execute<{ id: string }>(
-    sql`INSERT INTO channels (project_id, workspace_id, name) VALUES (${projectId}::uuid, ${wsId}::uuid, 'LinkedIn') RETURNING id`
-  );
-  const channelId = channelRows[0]?.id;
-  assert.ok(channelId);
+    // `channels.workspace_id` to relikt sprzed 0028 (nullable, FK już na
+    // `organizations`) — nie ma go w db/schema.ts, więc insert idzie SQL-em.
+    const channelRows = await db.execute<{ id: string }>(
+      sql`INSERT INTO channels (project_id, workspace_id, name) VALUES (${projectId}::uuid, ${organizationId}::uuid, 'LinkedIn') RETURNING id`
+    );
+    const channelId = channelRows[0]?.id;
+    assert.ok(channelId);
 
-  await db.insert(entityRelations).values([
-    {
+    await db.insert(entityRelations).values([
+      {
+        projectId,
+        sourceType: "element",
+        sourceId: element.id,
+        targetType: "channel",
+        targetId: channelId,
+        relationType: "publikowany_w",
+        source: "human",
+      },
+      {
+        projectId,
+        sourceType: "element",
+        sourceId: element.id,
+        targetType: "stage",
+        targetId: stage1.id,
+        relationType: "prowadzi_do_etapu",
+        source: "human",
+      },
+    ]);
+
+    const [activity] = await db
+      .insert(salesActivities)
+      .values({ stageId: stage1.id, name: "Discovery call", type: "discovery" })
+      .returning();
+
+    const [pitch] = await db
+      .insert(salesPitches)
+      .values({ projectId, title: "Pitch wartości", segmentId: segment.id })
+      .returning();
+    await db.insert(entityRelations).values({
       projectId,
-      sourceType: "element",
-      sourceId: element.id,
-      targetType: "channel",
-      targetId: channelId,
-      relationType: "publikowany_w",
-      source: "human",
-    },
-    {
-      projectId,
-      sourceType: "element",
-      sourceId: element.id,
+      sourceType: "sales_pitch",
+      sourceId: pitch.id,
       targetType: "stage",
       targetId: stage1.id,
-      relationType: "prowadzi_do_etapu",
+      relationType: "uzywany_w_etapie",
       source: "human",
-    },
-  ]);
+    });
 
-  const [activity] = await db
-    .insert(salesActivities)
-    .values({ stageId: stage1.id, name: "Discovery call", type: "discovery" })
-    .returning();
-
-  const [pitch] = await db
-    .insert(salesPitches)
-    .values({ projectId, title: "Pitch wartości", segmentId: segment.id })
-    .returning();
-  await db.insert(entityRelations).values({
-    projectId,
-    sourceType: "sales_pitch",
-    sourceId: pitch.id,
-    targetType: "stage",
-    targetId: stage1.id,
-    relationType: "uzywany_w_etapie",
-    source: "human",
-  });
-
-  try {
     await test("journeyCoverage: defaulty konfiguracji reguł", () => {
       const parsed = RulesConfigSchema.parse({
         version: 2,
@@ -259,8 +261,10 @@ async function run() {
       assert.ok(tables.includes("kpis"));
     });
   } finally {
+    // Sprzątamy CAŁĄ piaskownicę — projekt i organizację tego przebiegu.
+    // Sam projekt zostawiałby organizacje-śmieci w selektorze organizacji.
     await db.delete(projects).where(eq(projects.id, projectId));
-    await db.delete(workspaces).where(eq(workspaces.id, wsId));
+    await db.delete(organizations).where(eq(organizations.id, organizationId));
   }
 
   console.log(`\ntest-journey: ${passed} testów OK`);

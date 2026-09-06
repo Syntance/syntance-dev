@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/db";
 import { projects, timeEntries } from "@/db/schema";
 import {
   requireApiAccess,
+  badRequest,
+  notFound,
   requireProjectAccess,
 } from "@/lib/strategy-hub/api-helpers";
-import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import {
+  getOrganizationRole,
+  listOrganizationsForAdmin,
+} from "@/lib/strategy-hub/context";
 import {
   computeDurationMinutes,
   isWorkType,
@@ -17,7 +23,32 @@ import {
   toDateKey,
   toMonthKey,
 } from "@/lib/strategy-hub/time-tracking";
-import { and, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+
+/** Opcjonalne zawężenie podsumowania do jednej organizacji (query param). */
+const scopeSchema = z.object({
+  organizationId: z.string().uuid().optional(),
+});
+
+/**
+ * Organizacje, z których admin może liczyć podsumowanie czasu.
+ *
+ * Admin należy do WIELU organizacji, więc domyślnie sumujemy wpisy ze
+ * wszystkich. Jawny `organizationId` zawęża zakres, ale dopiero po sprawdzeniu
+ * członkostwa — `null` oznacza organizację spoza jego zasięgu.
+ */
+async function resolveOrganizationIds(
+  email: string,
+  organizationId: string | undefined
+): Promise<string[] | null> {
+  if (organizationId) {
+    const role = await getOrganizationRole(email, organizationId);
+    return role ? [organizationId] : null;
+  }
+
+  const organizacje = await listOrganizationsForAdmin(email);
+  return organizacje.map((o) => o.organization.id);
+}
 
 function emptyWorkTypeMap(): Record<
   WorkType,
@@ -45,16 +76,29 @@ export async function GET(req: NextRequest) {
   const to = toParam ? new Date(toParam) : now;
   to.setHours(23, 59, 59, 999);
 
+  const scope = scopeSchema.safeParse({
+    organizationId: searchParams.get("organizationId") ?? undefined,
+  });
+  if (!scope.success) {
+    return badRequest("Invalid input", scope.error.flatten());
+  }
+
+  const organizationIds = await resolveOrganizationIds(
+    auth.access.session.email,
+    scope.data.organizationId
+  );
+  if (!organizationIds) return notFound("Organizacja");
+
   if (projectId) {
     const projectAuth = await requireProjectAccess(projectId);
     if (!projectAuth.ok) return projectAuth.response;
   }
 
-  const ws = await getOrCreateWorkspaceForAdmin(auth.access.session.email);
-
   const conditions = [
     isNull(timeEntries.deletedAt),
-    eq(projects.workspaceId, ws.id),
+    // Admin bez organizacji: `inArray` z pustą tablicą daje `false`,
+    // czyli zero wyników — fail-closed, nigdy „wszystko".
+    inArray(projects.organizationId, organizationIds),
     gte(timeEntries.startedAt, from),
     lte(timeEntries.startedAt, to),
   ];

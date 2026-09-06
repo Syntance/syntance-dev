@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
-  LayoutGrid,
   Settings,
   RefreshCw,
   Sparkles,
@@ -22,12 +21,17 @@ import {
   ChevronRight,
   SlidersHorizontal,
   NotebookPen,
+  Building2,
+  GitBranch,
+  Package,
+  Plus,
 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
+  SidebarGroupAction,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
@@ -41,6 +45,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useProject, useProjectIdFromPath } from "@/components/strategy-hub/project-context";
 import { PathSelector } from "@/components/strategy-hub/path-selector";
+import { OrgSwitcher } from "@/components/strategy-hub/org-switcher";
 import { useProjectLiveUpdates } from "@/lib/strategy-hub/use-live-updates";
 import {
   type AreaKey,
@@ -54,14 +59,13 @@ import {
 } from "@/lib/strategy-hub/area-routes";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  {
-    label: "Projekty",
-    href: "/strategy-hub",
-    icon: LayoutGrid,
-    exact: true,
-  },
-];
+/** Rola w BIEŻĄCEJ organizacji — po polsku, bo trafia wprost do stopki sidebara. */
+function etykietaRoli(role: string): string {
+  if (role === "owner") return "właściciel";
+  if (role === "member") return "członek";
+  if (role === "client") return "klient";
+  return role;
+}
 
 const customAppItems = [
   {
@@ -147,6 +151,32 @@ interface HealthModule {
   state: AreaState | "review";
 }
 
+interface ProjectListItem {
+  id: string;
+  name: string;
+  icon: string | null;
+  kind: string;
+}
+
+/** Ikona typu projektu (firma/gałąź/produkt) — używana tylko gdy projekt nie ma własnej emoji. */
+const KIND_ICONS: Record<string, typeof Building2> = {
+  firma: Building2,
+  galaz: GitBranch,
+  produkt: Package,
+};
+
+function ProjectRowIcon({ icon, kind }: { icon: string | null; kind: string }) {
+  if (icon) {
+    return (
+      <span className="flex size-4 shrink-0 items-center justify-center text-[13px] leading-none">
+        {icon}
+      </span>
+    );
+  }
+  const KindIcon = KIND_ICONS[kind] ?? Building2;
+  return <KindIcon className="size-4 shrink-0" />;
+}
+
 export function NavSidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -155,6 +185,8 @@ export function NavSidebar() {
   const projectId = projectFromContext?.id ?? projectIdFromPath;
   const [user, setUser] = useState<{ name: string; email: string; role: string } | null>(null);
   const [healthModules, setHealthModules] = useState<HealthModule[]>([]);
+  const [orgProjects, setOrgProjects] = useState<ProjectListItem[]>([]);
+  const [orgProjectsLoading, setOrgProjectsLoading] = useState(true);
   const [expandedAreas, setExpandedAreas] = useState<Set<AreaKey>>(() => {
     if (!projectId) return new Set();
     const active = areaItems(projectId).find((item) =>
@@ -196,6 +228,59 @@ export function NavSidebar() {
       .catch(() => null);
   }, []);
 
+  // Lista projektów pod selektorem organizacji. Serwer sam rozstrzyga, która
+  // organizacja jest bieżąca (cookie `sh_org`) — sidebar nie musi znać jej id,
+  // wystarczy, że wie KIEDY ją odpytać ponownie: raz przy montowaniu i za
+  // każdym razem, gdy OrgSwitcher zgłosi zmianę organizacji.
+  const fetchOrgProjects = useCallback((signal?: AbortSignal) => {
+    // Celowo NIE ustawiamy tu `loading = true`: ta funkcja jest wołana wprost
+    // z efektu, a synchroniczny setState w ciele efektu łamie
+    // `react-hooks/set-state-in-effect`. Przy przełączeniu organizacji lista
+    // przez moment pokazuje poprzednie projekty zamiast migać pustką — lepszy
+    // kompromis niż dodatkowy stan pośredni.
+    fetch("/api/strategy-hub/projects", { signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { projects?: ProjectListItem[] } | null) => {
+        setOrgProjects(data?.projects ?? []);
+      })
+      .catch(() => {
+        if (!signal?.aborted) setOrgProjects([]);
+      })
+      .finally(() => {
+        if (!signal?.aborted) setOrgProjectsLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetchOrgProjects(ctrl.signal);
+    return () => ctrl.abort();
+  }, [fetchOrgProjects]);
+
+  // Projekt otwarty z bezpośredniego linku może należeć do organizacji INNEJ
+  // niż ta wskazana ciasteczkiem `sh_org` (np. zakładka sprzed przełączenia).
+  // Dokładamy go na górę listy z kontekstu strony — bez tego wyglądałby, jakby
+  // nie dało się go podświetlić ani rozwinąć jego menu.
+  const listaProjektow: ProjectListItem[] =
+    projectId &&
+    projectFromContext &&
+    !orgProjects.some((p) => p.id === projectId)
+      ? [
+          {
+            id: projectFromContext.id,
+            name: projectFromContext.name,
+            icon: projectFromContext.icon ?? null,
+            kind: "firma",
+          },
+          ...orgProjects,
+        ]
+      : orgProjects;
+
+  /** Projekt, którego dotyczy menu pod listą — do nazwania tej sekcji. */
+  const aktywnyProjekt = projectId
+    ? listaProjektow.find((p) => p.id === projectId)
+    : undefined;
+
   const fetchHealth = useCallback((signal?: AbortSignal) => {
     if (!projectId) return;
     fetch(`/api/strategy-hub/projects/${projectId}/health`, { signal })
@@ -233,10 +318,10 @@ export function NavSidebar() {
 
   return (
     <Sidebar variant="sidebar" collapsible="icon">
-      <SidebarHeader className="box-border flex h-12 shrink-0 flex-row items-center gap-0 border-b border-border px-4 py-0">
+      <SidebarHeader className="box-border flex shrink-0 flex-col gap-2 border-b border-border px-3 py-2">
         <Link
           href="/strategy-hub"
-          className="flex items-center gap-2.5 min-w-0"
+          className="flex h-7 items-center gap-2.5 min-w-0 px-1"
         >
           <div className="size-7 rounded-lg bg-brand flex items-center justify-center shrink-0 shadow-[var(--brand-glow)]">
             <Sparkles className="size-3.5 text-white" />
@@ -245,36 +330,72 @@ export function NavSidebar() {
             Strategy Hub
           </span>
         </Link>
+        <OrgSwitcher onOrganizationChange={() => fetchOrgProjects()} />
       </SidebarHeader>
 
       <SidebarContent>
+        {/*
+          Lista projektów bieżącej organizacji — płaska, bez zagnieżdżania.
+          Podświetla się ten, na którym jesteś; menu projektu jest OSOBNĄ sekcją
+          niżej, nie rozwija się pod klikniętym wierszem.
+        */}
         <SidebarGroup>
-          <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
-            Nawigacja
+          <SidebarGroupLabel
+            render={<Link href="/strategy-hub" />}
+            className="group-data-[collapsible=icon]:hidden"
+          >
+            Projekty
           </SidebarGroupLabel>
+          <SidebarGroupAction
+            render={<Link href="/strategy-hub/projects/new" />}
+            title="Nowy projekt"
+          >
+            <Plus />
+            <span className="sr-only">Nowy projekt</span>
+          </SidebarGroupAction>
+
           <SidebarMenu>
-            {navItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                  render={<Link href={item.href} />}
-                  isActive={isActive(item.href, item.exact)}
-                  tooltip={item.label}
-                >
-                  <item.icon className="size-4" />
-                  <span>{item.label}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
+            {listaProjektow.map((project) => {
+              const projectActive = project.id === projectId;
+
+              return (
+                <SidebarMenuItem key={project.id}>
+                  <SidebarMenuButton
+                    render={<Link href={`/strategy-hub/projects/${project.id}`} />}
+                    isActive={projectActive}
+                    tooltip={project.name}
+                  >
+                    <ProjectRowIcon icon={project.icon} kind={project.kind} />
+                    <span className="flex-1 truncate">{project.name}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+
+            {!orgProjectsLoading && listaProjektow.length === 0 && (
+              <li className="px-2 py-1.5 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+                Brak projektów.{" "}
+                <Link href="/strategy-hub/projects/new" className="text-brand hover:underline">
+                  Utwórz pierwszy
+                </Link>
+                .
+              </li>
+            )}
           </SidebarMenu>
         </SidebarGroup>
 
+        {/*
+          Menu wybranego projektu — OSOBNE sekcje pod listą, nie zagnieżdżone
+          w niej. Zmieniają się wraz z projektem, na którym jesteś; gdy żaden
+          nie jest otwarty, sekcje po prostu znikają.
+        */}
         {projectId && (
           <>
             <SidebarSeparator />
             <PathSelector projectId={projectId} />
             <SidebarGroup>
               <SidebarGroupLabel className="group-data-[collapsible=icon]:hidden">
-                Projekt
+                <span className="truncate">{aktywnyProjekt?.name ?? "Projekt"}</span>
               </SidebarGroupLabel>
               <SidebarMenu>
                 {projectViewItems(projectId).map((item) => (
@@ -447,7 +568,7 @@ export function NavSidebar() {
             </span>
           </div>
           <span className="text-xs text-muted-foreground truncate group-data-[collapsible=icon]:hidden flex-1">
-            {user ? `${user.name} · ${user.role}` : "…"}
+            {user ? `${user.name} · ${etykietaRoli(user.role)}` : "…"}
           </span>
           <button
             type="button"

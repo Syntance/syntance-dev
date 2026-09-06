@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import { getCurrentOrganizationForAdmin } from "@/lib/strategy-hub/context";
 import { requireApiAccess } from "@/lib/strategy-hub/api-helpers";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
@@ -9,7 +9,12 @@ export async function GET() {
   const auth = await requireApiAccess();
   if (!auth.ok) return auth.response;
 
-  const ws = await getOrCreateWorkspaceForAdmin(auth.access.session.email);
+  // Granica tenanta: lista jest zawężona do BIEŻĄCEJ organizacji admina
+  // (jawny wybór z ciasteczka `sh_org`), nie do „wszystkich, których jest
+  // właścicielem" — jeden admin należy dziś do wielu organizacji.
+  const organization = await getCurrentOrganizationForAdmin(
+    auth.access.session.email
+  );
 
   const rows = await db
     .select({
@@ -18,11 +23,17 @@ export async function GET() {
       icon: projects.icon,
       slug: projects.slug,
       status: projects.status,
+      kind: projects.kind,
       hourlyRateDevelopment: projects.hourlyRateDevelopment,
       hourlyRateMaintenance: projects.hourlyRateMaintenance,
     })
     .from(projects)
-    .where(and(isNull(projects.deletedAt), eq(projects.workspaceId, ws.id)))
+    .where(
+      and(
+        isNull(projects.deletedAt),
+        eq(projects.organizationId, organization.id)
+      )
+    )
     .orderBy(desc(projects.updatedAt));
 
   return NextResponse.json({ projects: rows });

@@ -3,7 +3,12 @@ import { db } from "@/db";
 import { uvp } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import {
+  requireProjectAccess,
+  requireOwnFoundation,
+  badRequest,
+} from "@/lib/strategy-hub/api-helpers";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 const differentiatorSchema = z.object({
   title: z.string().min(1),
@@ -25,7 +30,15 @@ export async function GET(
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
 
-  const rows = await db.select().from(uvp).where(eq(uvp.projectId, id)).limit(1);
+  // UVP to fundament (W0): czytamy z projektu-źródła, ale autoryzacja
+  // została wykonana na `id` pytającego — nigdy na projekcie źródłowym.
+  const readId = (await resolveFoundationSource(id)).projectId;
+
+  const rows = await db
+    .select()
+    .from(uvp)
+    .where(eq(uvp.projectId, readId))
+    .limit(1);
   return NextResponse.json({ item: rows[0] ?? null });
 }
 
@@ -36,6 +49,9 @@ export async function PATCH(
   const { id } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+  // Zapis wyłącznie do własnego fundamentu — patrz JSDoc requireOwnFoundation.
+  const own = await requireOwnFoundation(id);
+  if (!own.ok) return own.response;
 
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());

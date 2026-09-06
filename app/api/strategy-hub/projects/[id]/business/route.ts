@@ -5,7 +5,10 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { sendStrategyUpdatedEmail } from "@/lib/email";
 import { getStrategyHubAccess } from "@/lib/strategy-hub/context";
-import { requireProjectAccess } from "@/lib/strategy-hub/api-helpers";
+import {
+  requireProjectAccess,
+  requireOwnFoundation,
+} from "@/lib/strategy-hub/api-helpers";
 import { getProjectClients } from "@/lib/client-portal/queries";
 
 const patchSchema = z.object({
@@ -22,6 +25,10 @@ export async function PATCH(
   const { id } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+  // `businessStrategy` to legacy fundament (W0: cele, UVP, konkurencja,
+  // obiekcje) — obowiązuje ta sama reguła co dla nowych encji fundamentu.
+  const own = await requireOwnFoundation(id);
+  if (!own.ok) return own.response;
 
   const body = await req.json();
   const parsed = patchSchema.safeParse(body);

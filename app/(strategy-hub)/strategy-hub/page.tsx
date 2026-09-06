@@ -1,11 +1,22 @@
 import Link from "next/link";
-import { Plus, ArrowRight, Globe, Calendar, RefreshCw } from "lucide-react";
+import {
+  Plus,
+  ArrowRight,
+  Globe,
+  Calendar,
+  RefreshCw,
+  Building2,
+  GitBranch,
+  Package,
+  Link2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { db } from "@/db";
-import { projects } from "@/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
-import { requireStrategyHubAccess, getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import {
+  requireStrategyHubAccess,
+  getCurrentOrganizationForAdmin,
+} from "@/lib/strategy-hub/context";
+import { getProjectTree, type ProjectTreeNode } from "@/lib/strategy-hub/scope";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Aktywny",
@@ -24,48 +35,71 @@ const STATUS_COLORS: Record<
   archived: "secondary",
 };
 
-async function getProjects(workspaceId: string) {
-  try {
-    return await db
-      .select()
-      .from(projects)
-      .where(and(isNull(projects.deletedAt), eq(projects.workspaceId, workspaceId)))
-      .orderBy(projects.createdAt);
-  } catch {
-    return [];
-  }
+const KIND_LABELS: Record<string, string> = {
+  firma: "Firma",
+  galaz: "Gałąź",
+  produkt: "Produkt",
+};
+
+const KIND_ICONS: Record<string, typeof Building2> = {
+  firma: Building2,
+  galaz: GitBranch,
+  produkt: Package,
+};
+
+function policzWezly(wezly: ProjectTreeNode[]): number {
+  return wezly.reduce((n, w) => n + 1 + policzWezly(w.children), 0);
 }
 
 export default async function StrategyHubPage() {
   const access = await requireStrategyHubAccess();
-  const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
-  const allProjects = await getProjects(ws.id);
+  const organization = await getCurrentOrganizationForAdmin(access.session.email);
+  const drzewo = await getProjectTree(organization.id);
+  const liczba = policzWezly(drzewo);
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Projekty</h1>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight truncate">
+              {organization.name}
+            </h1>
+            <Badge variant="outline" className="shrink-0 text-[10px]">
+              Organizacja
+            </Badge>
+          </div>
           <p className="text-sm text-muted-foreground mt-1">
-            {allProjects.length === 0
+            {liczba === 0
               ? "Brak projektów. Utwórz pierwszy."
-              : `${allProjects.length} ${allProjects.length === 1 ? "projekt" : "projekty"}`}
+              : `${liczba} ${projektySuffix(liczba)} w tej organizacji`}
           </p>
         </div>
-        <Button asChild size="sm" className="bg-brand hover:bg-brand/90 text-white gap-1.5">
-          <Link href="/strategy-hub/projects/new">
-            <Plus className="size-4" />
-            Nowy projekt
-          </Link>
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button asChild size="sm" variant="outline" className="gap-1.5">
+            <Link href={`/strategy-hub/org/${organization.id}`}>
+              Podsumowanie
+            </Link>
+          </Button>
+          <Button
+            asChild
+            size="sm"
+            className="bg-brand hover:bg-brand/90 text-white gap-1.5"
+          >
+            <Link href="/strategy-hub/projects/new">
+              <Plus className="size-4" />
+              Nowy projekt
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      {allProjects.length === 0 ? (
+      {liczba === 0 ? (
         <EmptyState />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {allProjects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+        <div className="space-y-6">
+          {drzewo.map((wezel) => (
+            <GalazDrzewa key={wezel.id} wezel={wezel} poziom={0} />
           ))}
         </div>
       )}
@@ -73,20 +107,35 @@ export default async function StrategyHubPage() {
   );
 }
 
-function ProjectCard({
-  project,
+/**
+ * Jedna gałąź drzewa: projekt + wcięte dzieci. Wcięcie robimy paddingiem
+ * z pionową linią zamiast zagnieżdżonych gridów — dzięki temu karta ma tę samą
+ * szerokość niezależnie od poziomu i nie ucieka poza kolumnę.
+ */
+function GalazDrzewa({
+  wezel,
+  poziom,
 }: {
-  project: {
-    id: string;
-    name: string;
-    icon: string | null;
-    slug: string;
-    status: string;
-    domain: string | null;
-    clientName: string | null;
-    updatedAt: Date;
-  };
+  wezel: ProjectTreeNode;
+  poziom: number;
 }) {
+  return (
+    <div className={poziom > 0 ? "border-l border-border pl-4 ml-4" : undefined}>
+      <ProjectCard project={wezel} />
+      {wezel.children.length > 0 && (
+        <div className="mt-3 space-y-3">
+          {wezel.children.map((dziecko) => (
+            <GalazDrzewa key={dziecko.id} wezel={dziecko} poziom={poziom + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectCard({ project }: { project: ProjectTreeNode }) {
+  const KindIcon = KIND_ICONS[project.kind] ?? Building2;
+
   return (
     <Link
       href={`/strategy-hub/projects/${project.id}`}
@@ -108,15 +157,30 @@ function ProjectCard({
             )}
           </div>
         </div>
-        <Badge
-          variant={STATUS_COLORS[project.status] ?? "secondary"}
-          className="text-[10px] px-1.5 h-4 shrink-0"
-        >
-          {STATUS_LABELS[project.status] ?? project.status}
-        </Badge>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Badge
+            variant="outline"
+            className="gap-1 text-[10px] px-1.5 h-4 font-normal"
+          >
+            <KindIcon className="size-2.5" />
+            {KIND_LABELS[project.kind] ?? project.kind}
+          </Badge>
+          <Badge
+            variant={STATUS_COLORS[project.status] ?? "secondary"}
+            className="text-[10px] px-1.5 h-4"
+          >
+            {STATUS_LABELS[project.status] ?? project.status}
+          </Badge>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        {project.strategyMode === "dziedziczona" && (
+          <span className="flex items-center gap-1 shrink-0 text-brand/80">
+            <Link2 className="size-3" />
+            Fundament dziedziczony
+          </span>
+        )}
         {project.domain && (
           <span className="flex items-center gap-1 truncate">
             <Globe className="size-3 shrink-0" />
@@ -145,8 +209,8 @@ function EmptyState() {
       </div>
       <h3 className="font-medium text-sm mb-1">Brak projektów</h3>
       <p className="text-xs text-muted-foreground mb-5 max-w-xs">
-        Utwórz pierwszy projekt i zacznij budować strategię dla swojego klienta —
-        albo zaimportuj istniejącą strukturę z Notion.
+        Utwórz pierwszy projekt w tej organizacji — całą firmę, jej gałąź albo
+        pojedynczy produkt. Możesz też zaimportować strukturę z Notion.
       </p>
       <div className="flex items-center gap-2">
         <Button asChild size="sm" className="bg-brand hover:bg-brand/90 text-white gap-1.5">
@@ -164,4 +228,12 @@ function EmptyState() {
       </div>
     </div>
   );
+}
+
+function projektySuffix(n: number): string {
+  if (n === 1) return "projekt";
+  const ostatnia = n % 10;
+  const przedostatnia = Math.floor(n / 10) % 10;
+  if (przedostatnia !== 1 && ostatnia >= 2 && ostatnia <= 4) return "projekty";
+  return "projektów";
 }

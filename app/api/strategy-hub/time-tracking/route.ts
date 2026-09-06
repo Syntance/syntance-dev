@@ -5,18 +5,48 @@ import { projects, timeEntries } from "@/db/schema";
 import {
   requireApiAccess,
   badRequest,
+  notFound,
   requireProjectAccess,
 } from "@/lib/strategy-hub/api-helpers";
-import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import {
+  getOrganizationRole,
+  listOrganizationsForAdmin,
+} from "@/lib/strategy-hub/context";
 import {
   computeDurationMinutes,
   isWorkType,
   resolveHourlyRate,
   type TimeEntryRow,
 } from "@/lib/strategy-hub/time-tracking";
-import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 
 const workTypeSchema = z.enum(["development", "maintenance"]);
+
+/** Opcjonalne zawężenie listy do jednej organizacji (query param). */
+const scopeSchema = z.object({
+  organizationId: z.string().uuid().optional(),
+});
+
+/**
+ * Organizacje, z których admin może oglądać wpisy czasu.
+ *
+ * Admin należy do WIELU organizacji, więc „moje wpisy" to wpisy ze wszystkich
+ * jego organizacji. Jawny `organizationId` zawęża wynik, ale dopiero po
+ * sprawdzeniu członkostwa — `null` oznacza organizację spoza jego zasięgu
+ * (obsługiwane jak brak zasobu, żeby nie zdradzać cudzych identyfikatorów).
+ */
+async function resolveOrganizationIds(
+  email: string,
+  organizationId: string | undefined
+): Promise<string[] | null> {
+  if (organizationId) {
+    const role = await getOrganizationRole(email, organizationId);
+    return role ? [organizationId] : null;
+  }
+
+  const organizacje = await listOrganizationsForAdmin(email);
+  return organizacje.map((o) => o.organization.id);
+}
 
 const createSchema = z.discriminatedUnion("action", [
   z.object({
@@ -77,7 +107,18 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get("to");
   const activeOnly = searchParams.get("active") === "true";
 
-  const ws = await getOrCreateWorkspaceForAdmin(auth.access.session.email);
+  const scope = scopeSchema.safeParse({
+    organizationId: searchParams.get("organizationId") ?? undefined,
+  });
+  if (!scope.success) {
+    return badRequest("Invalid input", scope.error.flatten());
+  }
+
+  const organizationIds = await resolveOrganizationIds(
+    auth.access.session.email,
+    scope.data.organizationId
+  );
+  if (!organizationIds) return notFound("Organizacja");
 
   if (projectId) {
     const projectAuth = await requireProjectAccess(projectId);
@@ -86,7 +127,9 @@ export async function GET(req: NextRequest) {
 
   const conditions = [
     isNull(timeEntries.deletedAt),
-    eq(projects.workspaceId, ws.id),
+    // Admin bez organizacji: `inArray` z pustą tablicą daje `false`,
+    // czyli zero wyników — fail-closed, nigdy „wszystko".
+    inArray(projects.organizationId, organizationIds),
   ];
 
   if (projectId) {
@@ -221,7 +264,7 @@ export async function POST(req: NextRequest) {
         projectIcon: projects.icon,
         hourlyRateDevelopment: projects.hourlyRateDevelopment,
         hourlyRateMaintenance: projects.hourlyRateMaintenance,
-        workspaceId: projects.workspaceId,
+        organizationId: projects.organizationId,
       })
       .from(timeEntries)
       .innerJoin(projects, eq(timeEntries.projectId, projects.id))
@@ -231,8 +274,10 @@ export async function POST(req: NextRequest) {
     const row = rows[0];
     if (!row) return badRequest("Wpis nie znaleziony.");
 
-    const ws = await getOrCreateWorkspaceForAdmin(email);
-    if (row.workspaceId !== ws.id) {
+    // Wpis musi leżeć w KTÓREJKOLWIEK organizacji admina — członkostwo
+    // rozstrzyga wyłącznie `organizationMembers`.
+    const role = await getOrganizationRole(email, row.organizationId);
+    if (!role) {
       return badRequest("Brak dostępu do tego wpisu.");
     }
 

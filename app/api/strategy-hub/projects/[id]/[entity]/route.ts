@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   requireProjectAccess,
   requireProjectReadAccess,
+  requireOwnFoundation,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
@@ -10,6 +11,10 @@ import {
   getListEntity,
   getSingletonEntity,
 } from "@/lib/strategy-hub/entities/registry";
+import {
+  foundationKeyForRoute,
+  resolveProjectIdForEntity,
+} from "@/lib/strategy-hub/scope";
 import { trackChange, entityTypeFor } from "@/lib/strategy-hub/track-change";
 import {
   filterRecordsForClient,
@@ -43,9 +48,14 @@ export async function GET(
     });
   }
 
+  // Encje FUNDAMENTU (W0) czytamy z projektu-źródła (dziedziczenie read-through).
+  // Autoryzacja i filtrowanie klienckie zostają na projekcie z URL-a — dostęp
+  // przyznaje projekt, który użytkownik otworzył, nie ten, z którego czytamy dane.
+  const sourceId = await resolveProjectIdForEntity(id, entity);
+
   const list = getListEntity(entity);
   if (list) {
-    let items = await list.list(id, pathId, siteId);
+    let items = await list.list(sourceId, pathId, siteId);
     if (auth.role === "client") {
       const vis = await getProjectVisibility(id);
       const entityType = CLIENT_FILTER_ENTITIES[entity];
@@ -62,7 +72,7 @@ export async function GET(
 
   const singleton = getSingletonEntity(entity);
   if (singleton)
-    return NextResponse.json({ item: (await singleton.get(id)) ?? null });
+    return NextResponse.json({ item: (await singleton.get(sourceId)) ?? null });
 
   return notFound("Entity");
 }
@@ -74,6 +84,13 @@ export async function POST(
   const { id, entity } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+
+  // Fundament dziedziczony jest read-only lokalnie — 409 zamiast cichego
+  // zapisu do rekordów, których ten projekt i tak nie czyta.
+  if (foundationKeyForRoute(entity)) {
+    const own = await requireOwnFoundation(id);
+    if (!own.ok) return own.response;
+  }
 
   const list = getListEntity(entity);
   if (!list) return notFound("Entity");
@@ -104,6 +121,11 @@ export async function PATCH(
   const { id, entity } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+
+  if (foundationKeyForRoute(entity)) {
+    const own = await requireOwnFoundation(id);
+    if (!own.ok) return own.response;
+  }
 
   const singleton = getSingletonEntity(entity);
   if (!singleton) return notFound("Entity");

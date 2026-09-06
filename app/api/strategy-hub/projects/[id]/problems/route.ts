@@ -3,7 +3,12 @@ import { db } from "@/db";
 import { businessProblems } from "@/db/schema";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
-import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import {
+  requireProjectAccess,
+  requireOwnFoundation,
+  badRequest,
+} from "@/lib/strategy-hub/api-helpers";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 const createSchema = z.object({
   problemMd: z.string().min(1),
@@ -21,6 +26,9 @@ export async function GET(
   const { id } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+  // Problemy to fundament (W0): czytamy z projektu-źródła, ale autoryzacja
+  // została wykonana na `id` pytającego — nigdy na projekcie źródłowym.
+  const readId = (await resolveFoundationSource(id)).projectId;
   const pathId = new URL(req.url).searchParams.get("pathId");
   const pathFilter = pathId
     ? or(eq(businessProblems.pathId, pathId), isNull(businessProblems.pathId))
@@ -31,7 +39,7 @@ export async function GET(
     .from(businessProblems)
     .where(
       and(
-        eq(businessProblems.projectId, id),
+        eq(businessProblems.projectId, readId),
         isNull(businessProblems.deletedAt),
         pathFilter
       )
@@ -48,6 +56,9 @@ export async function POST(
   const { id } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+  // Zapis wyłącznie do własnego fundamentu — patrz JSDoc requireOwnFoundation.
+  const own = await requireOwnFoundation(id);
+  if (!own.ok) return own.response;
 
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());

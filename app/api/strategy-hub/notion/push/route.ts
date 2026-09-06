@@ -12,8 +12,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "projectId wymagane" }, { status: 400 });
   }
 
-  // Izolacja workspace: bez tego dowolny zalogowany admin mógł wypchnąć
-  // treść do Notion dowolnego projektu, nawet spoza własnego workspace.
+  // Izolacja organizacji: bez tego dowolny zalogowany admin mógł wypchnąć
+  // treść do Notion dowolnego projektu, także z cudzej organizacji.
+  // `assertProjectAccess` rozstrzyga dostęp wyłącznie przez `organizationMembers`.
   const access = await assertProjectAccess(projectId);
   if (!access.ok) {
     return NextResponse.json(

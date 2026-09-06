@@ -3,12 +3,13 @@ import { ArrowLeft, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { projects, strategyRuleSets } from "@/db/schema";
-import { isNull, ne } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { resolveRules } from "@/lib/strategy-hub/rules/resolve";
 import { RulesConfigSchema } from "@/lib/strategy-hub/rules/types";
 import {
   requireStrategyHubAccess,
-  getAdminRole,
+  getCurrentOrganizationForAdmin,
+  getOrganizationRole,
 } from "@/lib/strategy-hub/context";
 import { RulesEditor } from "./rules-editor";
 
@@ -16,9 +17,10 @@ export const metadata = { title: "Reguły strategii" };
 
 export default async function RulesSettingsPage() {
   // Logikę strategii (gap engine, health, locki, alerty) konfiguruje wyłącznie
-  // właściciel workspace — członkowie widzą komunikat zamiast edytora.
+  // właściciel bieżącej organizacji — członkowie widzą komunikat zamiast edytora.
   const access = await requireStrategyHubAccess();
-  const role = await getAdminRole(access.session.email);
+  const organization = await getCurrentOrganizationForAdmin(access.session.email);
+  const role = await getOrganizationRole(access.session.email, organization.id);
   if (role !== "owner") {
     return (
       <div className="w-full min-w-0 space-y-6">
@@ -34,7 +36,7 @@ export default async function RulesSettingsPage() {
           <Lock className="mx-auto size-6 text-muted-foreground/50" />
           <p className="mt-2 text-sm text-muted-foreground">
             Logikę strategii (gap engine, health score, locki, alerty) może
-            zmieniać tylko właściciel workspace.
+            zmieniać tylko właściciel organizacji.
           </p>
         </div>
       </div>
@@ -44,10 +46,17 @@ export default async function RulesSettingsPage() {
   const globalConfig = await resolveRules();
 
   const [projectRows, overrideRows] = await Promise.all([
+    // Do wyboru zakresu tylko projekty bieżącej organizacji — „owner" nie jest
+    // dostępem globalnym do wszystkich klientów.
     db
       .select({ id: projects.id, name: projects.name })
       .from(projects)
-      .where(isNull(projects.deletedAt))
+      .where(
+        and(
+          eq(projects.organizationId, organization.id),
+          isNull(projects.deletedAt)
+        )
+      )
       .limit(50),
     db
       .select()
@@ -77,6 +86,10 @@ export default async function RulesSettingsPage() {
           <h1 className="text-xl font-semibold">Reguły strategii</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Silnik reguł — moduły, połączenia mapy, korelacje grafu, alerty i paleta.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Zakres globalny to domyślne reguły agencji — wspólne dla wszystkich
+            organizacji. Zakres projektu nadpisuje je punktowo.
           </p>
         </div>
       </div>

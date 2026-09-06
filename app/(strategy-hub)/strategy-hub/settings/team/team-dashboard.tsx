@@ -11,10 +11,18 @@ import type { TeamMember } from "@/lib/strategy-hub/team";
 interface Props {
   initialMembers: TeamMember[];
   currentEmail: string;
+  /** Rola zalogowanego admina W TEJ organizacji, nie globalna. */
   currentRole: "owner" | "member";
+  /** Organizacja, której dotyczy lista — admin może należeć do kilku. */
+  organizationName: string;
 }
 
-export function TeamDashboard({ initialMembers, currentEmail, currentRole }: Props) {
+export function TeamDashboard({
+  initialMembers,
+  currentEmail,
+  currentRole,
+  organizationName,
+}: Props) {
   const [members, setMembers] = useState(initialMembers);
   const [email, setEmail] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -84,9 +92,12 @@ export function TeamDashboard({ initialMembers, currentEmail, currentRole }: Pro
               <UserPlus className="size-3.5 text-brand" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Zaproś współpracownika</h2>
+              <h2 className="text-sm font-semibold text-foreground">
+                Zaproś współpracownika do organizacji {organizationName}
+              </h2>
               <p className="text-xs text-muted-foreground">
-                Otrzyma email z linkiem do ustawienia hasła (ważny 7 dni)
+                Nowe konto otrzyma email z linkiem do ustawienia hasła (ważny 7
+                dni). Istniejące konto dostanie dostęp od razu.
               </p>
             </div>
           </div>
@@ -116,59 +127,65 @@ export function TeamDashboard({ initialMembers, currentEmail, currentRole }: Pro
         </form>
       ) : (
         <p className="text-xs text-muted-foreground rounded-lg border border-border/60 bg-card/40 p-3">
-          Tylko właściciel workspace może zapraszać i usuwać członków zespołu.
+          Tylko właściciel organizacji {organizationName} może zapraszać i usuwać
+          członków zespołu.
         </p>
       )}
 
-      <div className="rounded-xl border border-border/60 bg-card/40 divide-y divide-border/40">
-        {members.map((m) => {
-          const isSelf = m.email.toLowerCase() === currentEmail.toLowerCase();
-          return (
-            <div key={m.id} className="flex items-center justify-between gap-3 p-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className={cn(
-                    "size-8 rounded-full flex items-center justify-center shrink-0",
-                    m.role === "owner"
-                      ? "bg-brand/10 border border-brand/20"
-                      : "bg-muted border border-border/60"
-                  )}
-                >
-                  {m.role === "owner" ? (
-                    <ShieldCheck className="size-3.5 text-brand" />
-                  ) : (
-                    <Shield className="size-3.5 text-muted-foreground" />
-                  )}
+      <div className="space-y-2">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Członkowie organizacji {organizationName}
+        </h2>
+        <div className="rounded-xl border border-border/60 bg-card/40 divide-y divide-border/40">
+          {members.map((m) => {
+            const isSelf = m.email.toLowerCase() === currentEmail.toLowerCase();
+            return (
+              <div key={m.id} className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={cn(
+                      "size-8 rounded-full flex items-center justify-center shrink-0",
+                      m.role === "owner"
+                        ? "bg-brand/10 border border-brand/20"
+                        : "bg-muted border border-border/60"
+                    )}
+                  >
+                    {m.role === "owner" ? (
+                      <ShieldCheck className="size-3.5 text-brand" />
+                    ) : (
+                      <Shield className="size-3.5 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {m.email} {isSelf && <span className="text-muted-foreground">(Ty)</span>}
+                    </p>
+                    <Badge variant="outline" className="text-[10px] mt-0.5">
+                      {m.role === "owner" ? "Właściciel" : "Członek"}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {m.email} {isSelf && <span className="text-muted-foreground">(Ty)</span>}
-                  </p>
-                  <Badge variant="outline" className="text-[10px] mt-0.5">
-                    {m.role === "owner" ? "Właściciel" : "Członek"}
-                  </Badge>
-                </div>
-              </div>
 
-              {isOwner && !isSelf && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleRemove(m.id)}
-                  disabled={removingId === m.id}
-                  aria-label={`Usuń ${m.email} z zespołu`}
-                  className="text-muted-foreground hover:text-destructive shrink-0"
-                >
-                  {removingId === m.id ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-3.5" />
-                  )}
-                </Button>
-              )}
-            </div>
-          );
-        })}
+                {isOwner && !isSelf && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemove(m.id)}
+                    disabled={removingId === m.id}
+                    aria-label={`Usuń ${m.email} z zespołu`}
+                    className="text-muted-foreground hover:text-destructive shrink-0"
+                  >
+                    {removingId === m.id ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-3.5" />
+                    )}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

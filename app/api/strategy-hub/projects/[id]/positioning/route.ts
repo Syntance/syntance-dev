@@ -3,7 +3,12 @@ import { db } from "@/db";
 import { brandPositioning } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import {
+  requireProjectAccess,
+  requireOwnFoundation,
+  badRequest,
+} from "@/lib/strategy-hub/api-helpers";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 /** Quadrant współrzędne: -1.0 (lewo/dół) → 0 (środek) → 1.0 (prawo/góra). */
 const coord = z.number().min(-1).max(1);
@@ -36,10 +41,14 @@ export async function GET(
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
 
+  // Pozycjonowanie to fundament (W0): czytamy z projektu-źródła, ale autoryzacja
+  // została wykonana na `id` pytającego — nigdy na projekcie źródłowym.
+  const readId = (await resolveFoundationSource(id)).projectId;
+
   const rows = await db
     .select()
     .from(brandPositioning)
-    .where(eq(brandPositioning.projectId, id))
+    .where(eq(brandPositioning.projectId, readId))
     .limit(1);
   return NextResponse.json({ item: rows[0] ?? null });
 }
@@ -51,6 +60,9 @@ export async function PATCH(
   const { id } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+  // Zapis wyłącznie do własnego fundamentu — patrz JSDoc requireOwnFoundation.
+  const own = await requireOwnFoundation(id);
+  if (!own.ok) return own.response;
 
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());

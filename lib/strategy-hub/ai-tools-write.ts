@@ -15,6 +15,10 @@ import {
 } from "@/lib/strategy-hub/relations/store";
 import { relationCreateSchema } from "@/lib/strategy-hub/relations/schemas";
 import { RELATION_TYPES } from "@/lib/strategy-hub/entities/entity-types";
+import {
+  foundationKeyForRoute,
+  resolveFoundationSource,
+} from "@/lib/strategy-hub/scope";
 
 const entityKeyEnum = z.enum(
   listEntityKeys() as [string, ...string[]]
@@ -26,6 +30,34 @@ const relationTypeKeys = Object.keys(RELATION_TYPES) as [string, ...string[]];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Bramka integralności dla zapisów agenta AI do encji FUNDAMENTU (W0).
+ *
+ * Projekt w trybie `dziedziczona` czyta fundament z przodka, więc lokalny
+ * zapis albo przepadłby po cichu (nikt tych rekordów nie czyta), albo — gdyby
+ * kiedykolwiek trafił do źródła — przepisał strategię rodzica i całego
+ * rodzeństwa. Agent nie ma jak tego zauważyć, dlatego odmawiamy wprost.
+ *
+ * Zwraca obiekt błędu w konwencji pozostałych narzędzi (`{ error }`), nigdy
+ * wyjątku — inaczej pętla narzędziowa AI dostałaby crash zamiast informacji.
+ */
+async function foundationLockError(projectId: string, entityKey: string) {
+  if (!foundationKeyForRoute(entityKey)) return null;
+
+  const source = await resolveFoundationSource(projectId);
+  if (!source.inherited) return null;
+
+  const zrodlo = source.sourceName ? ` „${source.sourceName}"` : "";
+  return {
+    error:
+      `Projekt dziedziczy fundament strategii z projektu nadrzędnego${zrodlo}, ` +
+      `więc encji „${entityKey}" nie można tu zapisać. Edytuj ją w projekcie ` +
+      `źródłowym albo odłącz dziedziczenie w Ustawieniach projektu → Ogólne ` +
+      `(tryb strategii: „własna").`,
+    code: "FOUNDATION_INHERITED" as const,
+  };
 }
 
 export interface WriteToolsOptions {
@@ -51,6 +83,9 @@ export function buildWriteTools(
       execute: async ({ entityKey, data }) => {
         const def = getListEntity(entityKey);
         if (!def) return { error: "Nieznany typ encji" };
+
+        const locked = await foundationLockError(projectId, entityKey);
+        if (locked) return locked;
 
         const parsed = def.createSchema.safeParse(data);
         if (!parsed.success) {
@@ -85,6 +120,9 @@ export function buildWriteTools(
       execute: async ({ entityKey, itemId, data }) => {
         const def = getListEntity(entityKey);
         if (!def) return { error: "Nieznany typ encji" };
+
+        const locked = await foundationLockError(projectId, entityKey);
+        if (locked) return locked;
 
         const parsed = def.patchSchema.safeParse(data);
         if (!parsed.success) {
@@ -130,6 +168,9 @@ export function buildWriteTools(
         const def = getListEntity(entityKey);
         if (!def) return { error: "Nieznany typ encji" };
 
+        const locked = await foundationLockError(projectId, entityKey);
+        if (locked) return locked;
+
         const ok = await def.softDelete(projectId, itemId);
         if (!ok) return { error: "Encja nie istnieje" };
 
@@ -156,6 +197,9 @@ export function buildWriteTools(
       execute: async ({ entityKey, data }) => {
         const def = getSingletonEntity(entityKey);
         if (!def) return { error: "Nieznany singleton" };
+
+        const locked = await foundationLockError(projectId, entityKey);
+        if (locked) return locked;
 
         const parsed = def.patchSchema.safeParse(data);
         if (!parsed.success) {

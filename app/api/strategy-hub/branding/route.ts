@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { workspaceBranding } from "@/db/schema";
+import { organizationBranding } from "@/db/schema";
 import { getAdminSession } from "@/lib/auth";
-import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
-import { getWorkspaceBrandingForWorkspace } from "@/lib/client-portal/branding";
+import { getCurrentOrganizationForAdmin } from "@/lib/strategy-hub/context";
+import { getOrganizationBranding } from "@/lib/client-portal/branding";
 
 const ColorSchema = z.object({
   name: z.string().min(1).max(60),
@@ -23,12 +23,13 @@ const BrandingPatchSchema = z.object({
     .optional(),
 });
 
+/** Branding bieżącej organizacji admina (wybór z ciasteczka `sh_org`). */
 export async function GET() {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const ws = await getOrCreateWorkspaceForAdmin(session.email);
-  const branding = await getWorkspaceBrandingForWorkspace(ws.id);
+  const organization = await getCurrentOrganizationForAdmin(session.email);
+  const branding = await getOrganizationBranding(organization.id);
   return NextResponse.json({ branding });
 }
 
@@ -44,19 +45,22 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  const ws = await getOrCreateWorkspaceForAdmin(session.email);
+  // Zapis zawsze na bieżącej organizacji admina — członkostwo weryfikuje
+  // `getCurrentOrganizationForAdmin`, więc branding jednego klienta nie może
+  // nadpisać brandingu innego.
+  const organization = await getCurrentOrganizationForAdmin(session.email);
 
   await db
-    .insert(workspaceBranding)
+    .insert(organizationBranding)
     .values({
-      workspaceId: ws.id,
+      organizationId: organization.id,
       logoFileId: parsed.data.logoUrl ?? null,
       colors: parsed.data.colors ?? [],
       customDomain: parsed.data.customDomain ?? null,
       status: "active",
     })
     .onConflictDoUpdate({
-      target: workspaceBranding.workspaceId,
+      target: organizationBranding.organizationId,
       set: {
         logoFileId: parsed.data.logoUrl ?? null,
         colors: parsed.data.colors ?? [],
@@ -65,6 +69,6 @@ export async function PATCH(req: NextRequest) {
       },
     });
 
-  const branding = await getWorkspaceBrandingForWorkspace(ws.id);
+  const branding = await getOrganizationBranding(organization.id);
   return NextResponse.json({ branding });
 }

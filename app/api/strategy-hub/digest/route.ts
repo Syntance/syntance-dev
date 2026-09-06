@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { projects, workspaces, healthScoreSnapshots, digestLog } from "@/db/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import {
+  projects,
+  organizations,
+  organizationMembers,
+  adminUsers,
+  healthScoreSnapshots,
+  digestLog,
+} from "@/db/schema";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { buildWeeklyDigest, sendWeeklyDigest } from "@/lib/strategy-hub/digest";
 import { computeProjectHealth } from "@/lib/strategy-hub/health-score";
 import { isCronAuthorized, cronUnauthorizedResponse } from "@/lib/strategy-hub/api-helpers";
@@ -24,22 +31,68 @@ export async function POST(req: NextRequest) {
   return runDigest(body);
 }
 
+/**
+ * Adres, na który idzie digest organizacji: e-mail admina z rolą `owner`
+ * w `organizationMembers` (najstarsze członkostwo, żeby wynik był
+ * deterministyczny przy kilku właścicielach).
+ *
+ * Świadomie NIE sięgamy po `organizations.ownerEmail` — to wyłącznie ślad po
+ * twórcy (@deprecated). Migracja 0031 założyła każdemu takiemu właścicielowi
+ * wiersz członkostwa, więc odbiorca jest ten sam, a źródło prawdy jedno.
+ */
+async function findOrganizationOwnerEmail(
+  organizationId: string
+): Promise<string | null> {
+  const [row] = await db
+    .select({ email: adminUsers.email })
+    .from(organizationMembers)
+    .innerJoin(adminUsers, eq(adminUsers.id, organizationMembers.adminUserId))
+    .where(
+      and(
+        eq(organizationMembers.organizationId, organizationId),
+        eq(organizationMembers.role, "owner")
+      )
+    )
+    .orderBy(asc(organizationMembers.createdAt))
+    .limit(1);
+
+  return row?.email ?? null;
+}
+
 async function runDigest(body: { projectId?: string; email?: string }) {
+  // Join z `organizations` odsiewa projekty archiwalnych organizacji:
+  // migracja 0033 ustawiła `deleted_at` organizacjom-śmieciom po testach,
+  // a do takich nie wysyłamy ani digestu, ani nie budujemy im snapshotów.
   const projectRows = body.projectId
     ? await db
-        .select({ id: projects.id, workspaceId: projects.workspaceId })
+        .select({ id: projects.id, organizationId: projects.organizationId })
         .from(projects)
+        .innerJoin(
+          organizations,
+          eq(organizations.id, projects.organizationId)
+        )
         .where(
-          and(eq(projects.id, body.projectId), isNull(projects.deletedAt))
+          and(
+            eq(projects.id, body.projectId),
+            isNull(projects.deletedAt),
+            isNull(organizations.deletedAt)
+          )
         )
         .limit(1)
     : await db
-        .select({ id: projects.id, workspaceId: projects.workspaceId })
+        .select({ id: projects.id, organizationId: projects.organizationId })
         .from(projects)
-        .where(isNull(projects.deletedAt))
+        .innerJoin(
+          organizations,
+          eq(organizations.id, projects.organizationId)
+        )
+        .where(and(isNull(projects.deletedAt), isNull(organizations.deletedAt)))
         .limit(20);
 
   const results: { projectId: string; sent: boolean; reason?: string }[] = [];
+  // Cache odbiorców per organizacja — jeden cron obsługuje wiele projektów
+  // tej samej organizacji, nie ma po co pytać bazy raz na projekt.
+  const odbiorcyOrganizacji = new Map<string, string | null>();
 
   for (const p of projectRows) {
     // Snapshot health score — niezależnie od tego, czy digest email się wyśle,
@@ -64,12 +117,13 @@ async function runDigest(body: { projectId?: string; email?: string }) {
 
     let email = body.email;
     if (!email) {
-      const [ws] = await db
-        .select({ ownerEmail: workspaces.ownerEmail })
-        .from(workspaces)
-        .where(eq(workspaces.id, p.workspaceId))
-        .limit(1);
-      email = ws?.ownerEmail ?? undefined;
+      if (!odbiorcyOrganizacji.has(p.organizationId)) {
+        odbiorcyOrganizacji.set(
+          p.organizationId,
+          await findOrganizationOwnerEmail(p.organizationId)
+        );
+      }
+      email = odbiorcyOrganizacji.get(p.organizationId) ?? undefined;
     }
 
     if (!email) {

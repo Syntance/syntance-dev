@@ -18,27 +18,75 @@ import { relations } from "drizzle-orm";
 
 // ─── Multi-tenancy ───────────────────────────────────────────────────────────
 
-export const workspaces = pgTable("workspaces", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: varchar("name", { length: 255 }).notNull(),
-  ownerId: uuid("owner_id").notNull(),
-  ownerEmail: varchar("owner_email", { length: 255 }).unique(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+/**
+ * Organizacja = klient agencji i jednocześnie granica tenanta (dawniej
+ * `workspaces`). W środku żyją projekty, a każdy projekt niesie własną
+ * strategię — organizacja nie trzyma encji strategicznych, tylko tożsamość
+ * klienta, dostępy i widok zbiorczy.
+ *
+ * `ownerEmail` NIE jest już unikalne i NIE rozstrzyga dostępu — to ślad po
+ * twórcy. O dostępie decyduje wyłącznie `organizationMembers`, bo jeden admin
+ * agencji należy dziś do wielu organizacji.
+ */
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 255 }).notNull(),
+    slug: varchar("slug", { length: 100 }),
+    ownerId: uuid("owner_id").notNull(),
+    /** @deprecated Ślad po twórcy; autoryzacja idzie przez `organizationMembers`. */
+    ownerEmail: varchar("owner_email", { length: 255 }),
+    logoFileId: varchar("logo_file_id", { length: 255 }),
+    status: varchar("status", { length: 50 }).notNull().default("active"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  (t) => [uniqueIndex("organizations_slug_uq").on(t.slug)]
+);
+
+/**
+ * Członkostwo admina agencji w organizacji — JEDYNE źródło prawdy o dostępie.
+ * Rola jest rolą W ORGANIZACJI, nie globalną: 'owner' zarządza organizacją
+ * i jej członkami, 'member' ma pełny dostęp do projektów bez zarządzania.
+ * Brak wiersza = brak dostępu; nie ma "superadmina" widzącego cudze organizacje.
+ */
+export const organizationMembers = pgTable(
+  "organization_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /**
+     * FK → `AdminUser.id`, zakładane w migracji SQL 0031. Bez `references()`
+     * po stronie Drizzle, bo `adminUsers` deklarujemy niżej w pliku i forward
+     * reference wywróciłaby inicjalizację modułu.
+     */
+    adminUserId: text("admin_user_id").notNull(),
+    role: varchar("role", { length: 20 }).notNull().default("member"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("organization_members_org_idx").on(t.organizationId),
+    index("organization_members_admin_idx").on(t.adminUserId),
+    uniqueIndex("organization_members_uq").on(t.organizationId, t.adminUserId),
+  ]
+);
 
 export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     email: varchar("email", { length: 255 }).notNull().unique(),
-    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+    organizationId: uuid("organization_id").references(() => organizations.id, {
       onDelete: "cascade",
     }),
     role: varchar("role", { length: 20 }).notNull().default("client"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("users_workspace_idx").on(t.workspaceId)]
+  (t) => [index("users_organization_idx").on(t.organizationId)]
 );
 
 // ─── Projekty ────────────────────────────────────────────────────────────────
@@ -47,13 +95,38 @@ export const projects = pgTable(
   "projects",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    workspaceId: uuid("workspace_id")
+    organizationId: uuid("organization_id")
       .notNull()
-      .references(() => workspaces.id, { onDelete: "cascade" }),
+      .references(() => organizations.id, { onDelete: "cascade" }),
     slug: varchar("slug", { length: 100 }).notNull(),
     name: varchar("name", { length: 255 }).notNull(),
     icon: varchar("icon", { length: 10 }),
     status: varchar("status", { length: 50 }).notNull().default("active"),
+    /**
+     * Czym jest ten projekt w organizacji: `firma` (cała firma klienta),
+     * `galaz` (gałąź / dywizja), `produkt` (produkt lub usługa).
+     * Steruje prezentacją i drzewem w widoku organizacji — nie zmienia
+     * zestawu dostępnych modułów.
+     */
+    kind: varchar("kind", { length: 20 }).notNull().default("firma"),
+    /**
+     * Rodzic w drzewie organizacji (produkt → gałąź → firma). Opcjonalny:
+     * płaska lista projektów jest poprawnym stanem.
+     */
+    parentProjectId: uuid("parent_project_id").references(
+      (): AnyPgColumn => projects.id,
+      { onDelete: "set null" }
+    ),
+    /**
+     * `wlasna` — projekt ma własny fundament (W0: problemy, UVP, pozycjonowanie,
+     * konkurenci, marka, oferty). `dziedziczona` — fundament czytany z
+     * najbliższego przodka o trybie `wlasna` (patrz `lib/strategy-hub/scope.ts`).
+     * Oś ORGANIZACYJNA; nie mylić ze `strategyPaths`, które są wariantem
+     * strategii WEWNĄTRZ jednego projektu.
+     */
+    strategyMode: varchar("strategy_mode", { length: 20 })
+      .notNull()
+      .default("wlasna"),
     domain: varchar("domain", { length: 255 }),
     description: text("description"),
     clientName: varchar("client_name", { length: 255 }),
@@ -64,7 +137,7 @@ export const projects = pgTable(
     previewUrl: text("preview_url"),
     /**
      * Etap realizacji widoczny klientowi (design/development/qa/review/live) —
-     * ODDZIELNY od `status` (cykl życia workspace: active/paused/completed/archived),
+     * ODDZIELNY od `status` (cykl życia projektu: active/paused/completed/archived),
      * dawniej Sanity `project.status`. NIE mylić tych dwóch pól (Faza 16, M2).
      */
     deliveryStatus: varchar("delivery_status", { length: 50 })
@@ -79,16 +152,20 @@ export const projects = pgTable(
     deletedAt: timestamp("deleted_at"),
   },
   (t) => [
-    index("projects_workspace_idx").on(t.workspaceId),
-    index("projects_slug_workspace_idx").on(t.slug, t.workspaceId),
+    index("projects_organization_idx").on(t.organizationId),
+    index("projects_slug_organization_idx").on(t.slug, t.organizationId),
+    index("projects_parent_idx").on(t.parentProjectId),
   ]
 );
 
 // ─── Ścieżki strategii (równoległe strategie per projekt) ───────────────────
 
 /**
- * Ścieżka strategii — pozwala prowadzić kilka równoległych strategii
- * w ramach jednego projektu (np. rynek PL vs rynek DE, segment B2B vs B2C).
+ * Ścieżka strategii — DODATEK wewnątrz projektu: kilka równoległych wariantów
+ * tej samej strategii (np. rynek PL vs rynek DE, segment B2B vs B2C).
+ * Oś PROSTOPADŁA do organizacji: podział na firmę / gałąź / produkt robimy
+ * osobnymi PROJEKTAMI (`projects.kind`), a warianty jednego projektu —
+ * ścieżkami. Ścieżka nigdy nie wychodzi poza swój projekt.
  * Encje takie jak segmenty, kanały, KPI mogą być przypisane do konkretnej
  * ścieżki lub pozostać "ogólne" (path_id IS NULL — widoczne we wszystkich ścieżkach).
  */
@@ -1273,16 +1350,33 @@ export const timeEntries = pgTable(
 
 // ─── Relations ────────────────────────────────────────────────────────────────
 
-export const workspacesRelations = relations(workspaces, ({ many }) => ({
+export const organizationsRelations = relations(organizations, ({ many }) => ({
   projects: many(projects),
   users: many(users),
+  members: many(organizationMembers),
 }));
 
+export const organizationMembersRelations = relations(
+  organizationMembers,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [organizationMembers.organizationId],
+      references: [organizations.id],
+    }),
+  })
+);
+
 export const projectsRelations = relations(projects, ({ one, many }) => ({
-  workspace: one(workspaces, {
-    fields: [projects.workspaceId],
-    references: [workspaces.id],
+  organization: one(organizations, {
+    fields: [projects.organizationId],
+    references: [organizations.id],
   }),
+  parent: one(projects, {
+    fields: [projects.parentProjectId],
+    references: [projects.id],
+    relationName: "projectTree",
+  }),
+  children: many(projects, { relationName: "projectTree" }),
   businessStrategy: one(businessStrategy, {
     fields: [projects.id],
     references: [businessStrategy.projectId],
@@ -2115,12 +2209,12 @@ export const offerPages = pgTable(
   (t) => [primaryKey({ columns: [t.offerId, t.pageId] })]
 );
 
-// ─── Strategy Hub 2.1 — white-label workspace ───────────────────────────────
+// ─── Strategy Hub 2.1 — white-label per organizacja ──────────────────────────
 
-export const workspaceBranding = pgTable("workspace_branding", {
-  workspaceId: uuid("workspace_id")
+export const organizationBranding = pgTable("organization_branding", {
+  organizationId: uuid("organization_id")
     .primaryKey()
-    .references(() => workspaces.id, { onDelete: "cascade" }),
+    .references(() => organizations.id, { onDelete: "cascade" }),
   logoFileId: varchar("logo_file_id", { length: 255 }),
   /** [{name, value, role}] — paleta OKLCH */
   colors: jsonb("colors"),
@@ -2151,8 +2245,12 @@ export const adminUsers = pgTable("AdminUser", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
   passwordHash: text("passwordHash").notNull(),
-  /** Współdzielony workspace zespołu (Faza 17, Role SaaS) — nullable dla starych kont, patrz ADR. */
-  workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+  /**
+   * @deprecated Zastąpione przez `organizationMembers`. Kolumna zostaje do fazy
+   * sprzątającej (expand→contract) jako źródło backfillu — NIE używać jej do
+   * autoryzacji: admin agencji należy dziś do wielu organizacji.
+   */
+  organizationId: uuid("organization_id").references(() => organizations.id, {
     onDelete: "set null",
   }),
   /** 'owner' (może zarządzać zespołem) | 'member' (pełny dostęp do projektów, bez zarządzania zespołem). */

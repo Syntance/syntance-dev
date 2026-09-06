@@ -1,13 +1,20 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { projects, businessStrategy } from "@/db/schema";
-import { requireStrategyHubAccess, getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import {
+  requireStrategyHubAccess,
+  getCurrentOrganizationForAdmin,
+} from "@/lib/strategy-hub/context";
 import { NewProjectForm } from "./new-project-form";
 
 export const metadata = { title: "Nowy projekt" };
+
+const kindSchema = z.enum(["firma", "galaz", "produkt"]);
 
 async function createProject(formData: FormData) {
   "use server";
@@ -33,12 +40,40 @@ async function createProject(formData: FormData) {
   if (!slug) return;
 
   const access = await requireStrategyHubAccess();
-  const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
+  const organization = await getCurrentOrganizationForAdmin(access.session.email);
+
+  const kind = kindSchema.catch("firma").parse(formData.get("kind"));
+
+  // Rodzic musi leżeć w TEJ SAMEJ organizacji — inaczej drzewo przeciekłoby
+  // między klientami. Nieprawidłowa wartość jest cicho ignorowana (projekt
+  // powstaje na najwyższym poziomie), nie przerywa tworzenia.
+  const zgloszonyRodzic = formData.get("parentProjectId");
+  let parentProjectId: string | null = null;
+  if (typeof zgloszonyRodzic === "string" && zgloszonyRodzic !== "") {
+    const [rodzic] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.id, zgloszonyRodzic),
+          eq(projects.organizationId, organization.id),
+          isNull(projects.deletedAt)
+        )
+      )
+      .limit(1);
+    parentProjectId = rodzic?.id ?? null;
+  }
+
+  // Dziedziczenie bez rodzica nie ma sensu — łańcuch nie miałby dokąd prowadzić.
+  const strategyMode =
+    parentProjectId && formData.get("dziedziczyFundament") === "1"
+      ? "dziedziczona"
+      : "wlasna";
 
   const [project] = await db
     .insert(projects)
     .values({
-      workspaceId: ws.id,
+      organizationId: organization.id,
       name,
       slug: slug.toLowerCase().replace(/\s+/g, "-"),
       clientName: clientName || null,
@@ -46,6 +81,9 @@ async function createProject(formData: FormData) {
       description: description || null,
       icon: icon || "🏢",
       status: "active",
+      kind,
+      parentProjectId,
+      strategyMode,
     })
     .returning();
 
@@ -58,7 +96,21 @@ async function createProject(formData: FormData) {
   redirect(`/strategy-hub/projects/${project.id}`);
 }
 
-export default function NewProjectPage() {
+export default async function NewProjectPage() {
+  const access = await requireStrategyHubAccess();
+  const organization = await getCurrentOrganizationForAdmin(access.session.email);
+
+  const parentOptions = await db
+    .select({ id: projects.id, name: projects.name, kind: projects.kind })
+    .from(projects)
+    .where(
+      and(
+        eq(projects.organizationId, organization.id),
+        isNull(projects.deletedAt)
+      )
+    )
+    .orderBy(asc(projects.name));
+
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div className="flex items-center gap-3">
@@ -75,7 +127,11 @@ export default function NewProjectPage() {
         </div>
       </div>
 
-      <NewProjectForm action={createProject} />
+      <NewProjectForm
+        action={createProject}
+        organizationName={organization.name}
+        parentOptions={parentOptions}
+      />
     </div>
   );
 }

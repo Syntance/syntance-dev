@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getAdminSession } from "@/lib/auth";
-import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
-import { getWorkspaceBrandingForWorkspace } from "@/lib/client-portal/branding";
+import { getCurrentOrganizationForAdmin } from "@/lib/strategy-hub/context";
+import { getOrganizationBranding } from "@/lib/client-portal/branding";
 import { BrandingDashboard } from "./branding-dashboard";
 
 export const metadata = { title: "Branding (white-label)" };
@@ -13,8 +13,9 @@ export default async function BrandingSettingsPage() {
   const session = await getAdminSession();
   if (!session) redirect("/login");
 
-  const ws = await getOrCreateWorkspaceForAdmin(session.email);
-  const branding = await getWorkspaceBrandingForWorkspace(ws.id);
+  // Branding jest per organizacja — edytujemy tę, w której admin aktualnie pracuje.
+  const organization = await getCurrentOrganizationForAdmin(session.email);
+  const branding = await getOrganizationBranding(organization.id);
 
   return (
     <div className="w-full min-w-0 max-w-2xl space-y-6">

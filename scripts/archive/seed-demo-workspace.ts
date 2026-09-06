@@ -1,9 +1,16 @@
 /**
- * Tworzy workspace i przykładowy projekt dla konta demo.
- * Użycie: npx tsx --env-file=.env.local scripts/seed-demo-workspace.ts
+ * ARCHIWUM. Tworzy organizację (dawniej „workspace") i przykładowy projekt dla
+ * konta demo.
+ * Użycie: npx tsx --env-file=.env.local scripts/archive/seed-demo-workspace.ts
+ *
+ * UWAGA: skrypt NIE nadaje dostępu — po przejściu na organizacje o dostępie
+ * admina decyduje wyłącznie wiersz w `organizationMembers`, a `ownerEmail` jest
+ * już tylko śladem po twórcy. Żeby konto demo zobaczyło tę organizację, trzeba
+ * dopisać członkostwo (patrz scripts/seed-local-accounts.ts). Zostawione bez
+ * zmian, bo plik jest archiwalny i nie wchodzi do żadnego pipeline'u.
  */
 import { db } from "@/db";
-import { workspaces, projects, businessStrategy } from "@/db/schema";
+import { organizations, projects, businessStrategy } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 const DEMO_EMAIL = process.env.DEMO_EMAIL ?? "demo@syntance.dev";
@@ -11,30 +18,35 @@ const DEMO_EMAIL = process.env.DEMO_EMAIL ?? "demo@syntance.dev";
 async function main() {
   const normalized = DEMO_EMAIL.toLowerCase().trim();
 
-  // Pobierz lub utwórz workspace demo
-  let ws = (
-    await db.select().from(workspaces).where(eq(workspaces.ownerEmail, normalized)).limit(1)
+  // Pobierz lub utwórz organizację demo
+  let org = (
+    await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.ownerEmail, normalized))
+      .limit(1)
   )[0];
 
-  if (!ws) {
-    [ws] = await db
-      .insert(workspaces)
+  if (!org) {
+    [org] = await db
+      .insert(organizations)
       .values({
         name: "Demo",
+        slug: "demo",
         ownerEmail: normalized,
         ownerId: "00000000-0000-0000-0000-000000000002",
       })
       .returning();
-    console.log(`✅ Workspace demo utworzony: ${ws.id}`);
+    console.log(`✅ Organizacja demo utworzona: ${org.id}`);
   } else {
-    console.log(`ℹ️  Workspace demo już istnieje: ${ws.id}`);
+    console.log(`ℹ️  Organizacja demo już istnieje: ${org.id}`);
   }
 
   // Sprawdź czy projekt demo już istnieje
   const existing = await db
     .select()
     .from(projects)
-    .where(eq(projects.workspaceId, ws.id))
+    .where(eq(projects.organizationId, org.id))
     .limit(1);
 
   if (existing.length > 0) {
@@ -46,7 +58,7 @@ async function main() {
   const [project] = await db
     .insert(projects)
     .values({
-      workspaceId: ws.id,
+      organizationId: org.id,
       name: "Syntance",
       slug: "syntance-demo",
       icon: "⚡",

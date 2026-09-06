@@ -49,11 +49,45 @@ import {
   auditChildKeys,
   kpiChildKeys,
 } from "@/lib/strategy-hub/entities/registry";
+import {
+  foundationKeyForRoute,
+  resolveFoundationSource,
+} from "@/lib/strategy-hub/scope";
 
 function jsonText(data: unknown) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
   };
+}
+
+/**
+ * Bramka integralności dla zapisów MCP do encji FUNDAMENTU (W0).
+ *
+ * Projekt w trybie `dziedziczona` czyta fundament z przodka. Lokalny zapis
+ * agenta albo przepadłby po cichu (nikt tych rekordów nie czyta), albo —
+ * gdyby trafił do źródła — przepisał strategię rodzica i całego rodzeństwa.
+ * Zwracamy więc czytelną odmowę w konwencji błędów tych narzędzi
+ * (`jsonText({ error })`), a nie wyjątek.
+ */
+async function foundationLocked(projectId: string) {
+  const source = await resolveFoundationSource(projectId);
+  if (!source.inherited) return null;
+
+  const zrodlo = source.sourceName ? ` „${source.sourceName}"` : "";
+  return jsonText({
+    error:
+      `Projekt dziedziczy fundament strategii z projektu nadrzędnego${zrodlo}, ` +
+      `więc zapis encji fundamentu jest tu zablokowany. Edytuj dane w projekcie ` +
+      `źródłowym albo odłącz dziedziczenie w Ustawieniach projektu → Ogólne ` +
+      `(tryb strategii: „własna").`,
+    code: "FOUNDATION_INHERITED",
+  });
+}
+
+/** Jak wyżej, ale tylko dla encji, które faktycznie należą do W0. */
+async function foundationLockedForEntity(projectId: string, entity: string) {
+  if (!foundationKeyForRoute(entity)) return null;
+  return foundationLocked(projectId);
 }
 
 /** Bezpieczne wykonanie z czytelnym błędem walidacji Zod dla agenta AI. */
@@ -332,6 +366,9 @@ export function createStrategyHubMcpServer() {
       }),
     },
     async ({ id, projectId, ...rest }) => {
+      const locked = await foundationLocked(projectId);
+      if (locked) return locked;
+
       if (id) {
         const updated = await db
           .update(businessProblems)
@@ -365,6 +402,9 @@ export function createStrategyHubMcpServer() {
       }),
     },
     async ({ projectId, ...rest }) => {
+      const locked = await foundationLocked(projectId);
+      if (locked) return locked;
+
       const filtered = Object.fromEntries(
         Object.entries(rest).filter(([, v]) => v !== undefined)
       );
@@ -407,6 +447,9 @@ export function createStrategyHubMcpServer() {
       }),
     },
     async ({ projectId, ...rest }) => {
+      const locked = await foundationLocked(projectId);
+      if (locked) return locked;
+
       const filtered = Object.fromEntries(
         Object.entries(rest).filter(([, v]) => v !== undefined)
       );
@@ -443,6 +486,9 @@ export function createStrategyHubMcpServer() {
       }),
     },
     async ({ id, projectId, ...rest }) => {
+      const locked = await foundationLocked(projectId);
+      if (locked) return locked;
+
       if (id) {
         const updated = await db
           .update(competitors)
@@ -611,12 +657,16 @@ export function createStrategyHubMcpServer() {
         data: dataSchema,
       }),
     },
-    async ({ projectId, entity, data }) =>
-      safeRun(async () => {
+    async ({ projectId, entity, data }) => {
+      const locked = await foundationLockedForEntity(projectId, entity);
+      if (locked) return locked;
+
+      return safeRun(async () => {
         const def = getListEntity(entity);
         if (!def) throw new Error(`Unknown list entity: ${entity}`);
         return def.create(projectId, def.createSchema.parse(data));
-      })
+      });
+    }
   );
 
   server.registerTool(
@@ -630,8 +680,11 @@ export function createStrategyHubMcpServer() {
         data: dataSchema,
       }),
     },
-    async ({ projectId, entity, itemId, data }) =>
-      safeRun(async () => {
+    async ({ projectId, entity, itemId, data }) => {
+      const locked = await foundationLockedForEntity(projectId, entity);
+      if (locked) return locked;
+
+      return safeRun(async () => {
         const def = getListEntity(entity);
         if (!def) throw new Error(`Unknown list entity: ${entity}`);
         return (
@@ -639,7 +692,8 @@ export function createStrategyHubMcpServer() {
             error: "not found",
           }
         );
-      })
+      });
+    }
   );
 
   server.registerTool(
@@ -652,12 +706,16 @@ export function createStrategyHubMcpServer() {
         itemId: z.string().uuid(),
       }),
     },
-    async ({ projectId, entity, itemId }) =>
-      safeRun(async () => {
+    async ({ projectId, entity, itemId }) => {
+      const locked = await foundationLockedForEntity(projectId, entity);
+      if (locked) return locked;
+
+      return safeRun(async () => {
         const def = getListEntity(entity);
         if (!def) throw new Error(`Unknown list entity: ${entity}`);
         return { ok: await def.softDelete(projectId, itemId) };
-      })
+      });
+    }
   );
 
   // — Singletony (project-scoped) —
@@ -689,12 +747,16 @@ export function createStrategyHubMcpServer() {
         data: dataSchema,
       }),
     },
-    async ({ projectId, entity, data }) =>
-      safeRun(async () => {
+    async ({ projectId, entity, data }) => {
+      const locked = await foundationLockedForEntity(projectId, entity);
+      if (locked) return locked;
+
+      return safeRun(async () => {
         const def = getSingletonEntity(entity);
         if (!def) throw new Error(`Unknown singleton: ${entity}`);
         return def.upsert(projectId, def.patchSchema.parse(data));
-      })
+      });
+    }
   );
 
   // — Dzieci scoped (segment/page/audit/kpi) —

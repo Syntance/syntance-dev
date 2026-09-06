@@ -1,15 +1,29 @@
 import { randomUUID } from "crypto";
 import { db } from "@/db";
-import { adminUsers, passwordResetTokens, workspaces } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { adminUsers, organizationMembers, passwordResetTokens } from "@/db/schema";
+import { and, asc, count, eq } from "drizzle-orm";
 import { generateResetToken } from "@/lib/auth";
 import { sendTeamInviteEmail } from "@/lib/email";
-import { getAdminRole, getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import {
+  getCurrentOrganizationForAdmin,
+  getOrganizationRole,
+  type OrganizationRole,
+} from "@/lib/strategy-hub/context";
 
 export interface TeamMember {
+  /** `AdminUser.id` — stabilny identyfikator konta, także w innych organizacjach. */
   id: string;
   email: string;
-  role: "owner" | "member";
+  role: OrganizationRole;
+}
+
+/** Zespół bieżącej organizacji wraz z kontekstem, w którym go pokazujemy. */
+export interface TeamOverview {
+  organizationId: string;
+  organizationName: string;
+  /** Rola pytającego W TEJ organizacji — decyduje o widoczności akcji zarządczych. */
+  currentRole: OrganizationRole;
+  members: TeamMember[];
 }
 
 export class TeamAccessError extends Error {
@@ -19,63 +33,152 @@ export class TeamAccessError extends Error {
   }
 }
 
-/** Rzuca TeamAccessError, jeśli `requesterEmail` nie jest ownerem workspace. */
-async function assertOwner(requesterEmail: string): Promise<void> {
-  const role = await getAdminRole(requesterEmail);
+function normalizeEmail(email: string): string {
+  return email.toLowerCase().trim();
+}
+
+function toRole(value: string): OrganizationRole {
+  return value === "owner" ? "owner" : "member";
+}
+
+/**
+ * Rzuca TeamAccessError, jeśli `requesterEmail` nie jest ownerem TEJ organizacji.
+ * Brak członkostwa też kończy się błędem — `getOrganizationRole` zwraca wtedy
+ * null, a rola 'owner' w innej organizacji nic tutaj nie znaczy.
+ */
+async function assertOwner(
+  requesterEmail: string,
+  organizationId: string
+): Promise<void> {
+  const role = await getOrganizationRole(requesterEmail, organizationId);
   if (role !== "owner") {
     throw new TeamAccessError(
-      "Tylko właściciel workspace może zarządzać zespołem."
+      "Tylko właściciel organizacji może zarządzać zespołem."
     );
   }
 }
 
-export async function listWorkspaceMembers(
-  requesterEmail: string
+/** Członkowie organizacji: `organizationMembers` JOIN `AdminUser` po adminUserId. */
+async function listMembersOfOrganization(
+  organizationId: string
 ): Promise<TeamMember[]> {
-  const ws = await getOrCreateWorkspaceForAdmin(requesterEmail);
   const rows = await db
-    .select({ id: adminUsers.id, email: adminUsers.email, role: adminUsers.role })
-    .from(adminUsers)
-    .where(eq(adminUsers.workspaceId, ws.id));
+    .select({
+      id: adminUsers.id,
+      email: adminUsers.email,
+      role: organizationMembers.role,
+    })
+    .from(organizationMembers)
+    .innerJoin(adminUsers, eq(adminUsers.id, organizationMembers.adminUserId))
+    .where(eq(organizationMembers.organizationId, organizationId))
+    .orderBy(asc(adminUsers.email));
 
   return rows.map((r) => ({
     id: r.id,
     email: r.email,
-    role: r.role === "member" ? "member" : "owner",
+    role: toRole(r.role),
   }));
 }
 
+/** Liczba ownerów organizacji — strażnik przed osieroceniem organizacji. */
+async function countOwners(organizationId: string): Promise<number> {
+  const [row] = await db
+    .select({ value: count() })
+    .from(organizationMembers)
+    .where(
+      and(
+        eq(organizationMembers.organizationId, organizationId),
+        eq(organizationMembers.role, "owner")
+      )
+    );
+  return row?.value ?? 0;
+}
+
+/** Członkowie bieżącej organizacji admina. */
+export async function listOrganizationMembers(
+  requesterEmail: string
+): Promise<TeamMember[]> {
+  const organization = await getCurrentOrganizationForAdmin(requesterEmail);
+  return listMembersOfOrganization(organization.id);
+}
+
 /**
- * Zaprasza nowego admina do workspace właściciela. Tworzy konto AdminUser
- * bez hasła (placeholder hash, nigdy nie weryfikowalny — patrz set-password
- * flow z purpose='admin_invite', który je nadpisze prawdziwym hashem).
+ * Komplet danych ekranu „Zespół": która organizacja, jaka rola pytającego,
+ * jacy członkowie. Jedno wejście, żeby UI i API nie rozjechały się co do
+ * organizacji, której dotyczy lista.
+ */
+export async function getTeamOverview(
+  requesterEmail: string
+): Promise<TeamOverview> {
+  const organization = await getCurrentOrganizationForAdmin(requesterEmail);
+  const [members, role] = await Promise.all([
+    listMembersOfOrganization(organization.id),
+    getOrganizationRole(requesterEmail, organization.id),
+  ]);
+
+  return {
+    organizationId: organization.id,
+    organizationName: organization.name,
+    // Brak wiersza członkostwa (wyścig z usunięciem) → najniższe uprawnienia.
+    currentRole: role ?? "member",
+    members,
+  };
+}
+
+/**
+ * Zaprasza admina do bieżącej organizacji.
+ *
+ * Konto AdminUser powstaje tylko wtedy, gdy adresu jeszcze nie ma w systemie —
+ * z placeholderowym hashem (nigdy nieweryfikowalnym) i tokenem
+ * purpose='admin_invite', który set-password nadpisze prawdziwym hashem.
+ * Konto, które już istnieje (bo należy do innej organizacji), dostaje wyłącznie
+ * nowe członkostwo — bez tokenu i bez linku do ustawiania hasła, bo taki link
+ * na cudze, działające konto byłby ścieżką przejęcia go przez dowolnego ownera.
  */
 export async function inviteMember(
   requesterEmail: string,
   inviteeEmail: string
 ): Promise<TeamMember> {
-  await assertOwner(requesterEmail);
+  const organization = await getCurrentOrganizationForAdmin(requesterEmail);
+  await assertOwner(requesterEmail, organization.id);
 
-  const normalized = inviteeEmail.toLowerCase().trim();
+  const normalized = normalizeEmail(inviteeEmail);
   if (!normalized || !normalized.includes("@")) {
     throw new TeamAccessError("Nieprawidłowy adres e-mail.");
   }
 
-  const ws = await getOrCreateWorkspaceForAdmin(requesterEmail);
-
   const [existing] = await db
-    .select({ id: adminUsers.id, workspaceId: adminUsers.workspaceId })
+    .select({ id: adminUsers.id, email: adminUsers.email })
     .from(adminUsers)
     .where(eq(adminUsers.email, normalized))
     .limit(1);
 
   if (existing) {
-    if (existing.workspaceId === ws.id) {
+    const [membership] = await db
+      .select({ id: organizationMembers.id })
+      .from(organizationMembers)
+      .where(
+        and(
+          eq(organizationMembers.organizationId, organization.id),
+          eq(organizationMembers.adminUserId, existing.id)
+        )
+      )
+      .limit(1);
+
+    if (membership) {
       throw new TeamAccessError("Ta osoba jest już w zespole.");
     }
-    throw new TeamAccessError(
-      "Ten adres e-mail jest już powiązany z innym kontem."
-    );
+
+    await db
+      .insert(organizationMembers)
+      .values({
+        organizationId: organization.id,
+        adminUserId: existing.id,
+        role: "member",
+      })
+      .onConflictDoNothing();
+
+    return { id: existing.id, email: existing.email, role: "member" };
   }
 
   const [member] = await db
@@ -83,13 +186,21 @@ export async function inviteMember(
     .values({
       id: randomUUID(),
       email: normalized,
-      // Placeholder — bcrypt hash losowego UUID; nigdy nie da się nim zalogować
-      // dopóki właściciel konta nie ustawi hasła przez link z emaila.
+      // Placeholder — nigdy nie da się nim zalogować, dopóki właściciel konta
+      // nie ustawi hasła przez link z emaila.
       passwordHash: `invite:${randomUUID()}`,
-      workspaceId: ws.id,
       role: "member",
     })
     .returning();
+
+  await db
+    .insert(organizationMembers)
+    .values({
+      organizationId: organization.id,
+      adminUserId: member.id,
+      role: "member",
+    })
+    .onConflictDoNothing();
 
   const token = generateResetToken();
   await db.insert(passwordResetTokens).values({
@@ -100,34 +211,56 @@ export async function inviteMember(
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   });
 
-  const [wsRow] = await db
-    .select({ name: workspaces.name })
-    .from(workspaces)
-    .where(eq(workspaces.id, ws.id))
-    .limit(1);
-
-  await sendTeamInviteEmail(normalized, token, wsRow?.name ?? "Syntance");
+  await sendTeamInviteEmail(normalized, token, organization.name);
 
   return { id: member.id, email: member.email, role: "member" };
 }
 
+/**
+ * Usuwa członka z bieżącej organizacji: kasujemy WYŁĄCZNIE wiersz
+ * `organizationMembers`. Konto AdminUser zostaje, bo może należeć do innych
+ * organizacji — usunięcie go odebrałoby dostęp również tam.
+ */
 export async function removeMember(
   requesterEmail: string,
   memberId: string
 ): Promise<void> {
-  await assertOwner(requesterEmail);
-  const ws = await getOrCreateWorkspaceForAdmin(requesterEmail);
+  const organization = await getCurrentOrganizationForAdmin(requesterEmail);
+  await assertOwner(requesterEmail, organization.id);
 
   const [target] = await db
-    .select({ id: adminUsers.id, email: adminUsers.email })
-    .from(adminUsers)
-    .where(and(eq(adminUsers.id, memberId), eq(adminUsers.workspaceId, ws.id)))
+    .select({
+      email: adminUsers.email,
+      role: organizationMembers.role,
+    })
+    .from(organizationMembers)
+    .innerJoin(adminUsers, eq(adminUsers.id, organizationMembers.adminUserId))
+    .where(
+      and(
+        eq(organizationMembers.organizationId, organization.id),
+        eq(organizationMembers.adminUserId, memberId)
+      )
+    )
     .limit(1);
 
-  if (!target) throw new TeamAccessError("Nie znaleziono członka zespołu.");
-  if (target.email.toLowerCase().trim() === requesterEmail.toLowerCase().trim()) {
+  if (!target) {
+    throw new TeamAccessError("Nie znaleziono członka zespołu w tej organizacji.");
+  }
+  if (normalizeEmail(target.email) === normalizeEmail(requesterEmail)) {
     throw new TeamAccessError("Nie możesz usunąć samego siebie z zespołu.");
   }
+  if (toRole(target.role) === "owner" && (await countOwners(organization.id)) <= 1) {
+    throw new TeamAccessError(
+      "Nie możesz usunąć ostatniego właściciela organizacji."
+    );
+  }
 
-  await db.delete(adminUsers).where(eq(adminUsers.id, memberId));
+  await db
+    .delete(organizationMembers)
+    .where(
+      and(
+        eq(organizationMembers.organizationId, organization.id),
+        eq(organizationMembers.adminUserId, memberId)
+      )
+    );
 }

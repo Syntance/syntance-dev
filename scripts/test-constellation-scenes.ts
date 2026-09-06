@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "../db";
 import {
   projects,
-  workspaces,
+  organizations,
   segments,
   purchaseStages,
   funnelElements,
@@ -26,132 +26,145 @@ async function test(name: string, fn: () => void | Promise<void>) {
   console.log("  ✓", name);
 }
 
-async function createTestProject(): Promise<string> {
-  const wsId = randomUUID();
+async function createTestProject(): Promise<{
+  projectId: string;
+  organizationId: string;
+}> {
+  const organizationId = randomUUID();
   const projectId = randomUUID();
-  await db.insert(workspaces).values({
-    id: wsId,
+  await db.insert(organizations).values({
+    id: organizationId,
     name: "Test constellation scenes",
     ownerId: randomUUID(),
     ownerEmail: `test-${randomUUID()}@example.com`,
   });
   await db.insert(projects).values({
     id: projectId,
-    workspaceId: wsId,
+    organizationId,
     name: "Projekt test scen",
     slug: `test-scene-${randomUUID().slice(0, 8)}`,
   });
-  return projectId;
+  return { projectId, organizationId };
 }
 
-async function cleanupProject(projectId: string) {
+/**
+ * Sprząta CAŁĄ piaskownicę: projekt i organizację utworzoną na ten przebieg.
+ * Kasowanie samego projektu zostawiało organizacje-śmieci, które po refaktorze
+ * trafiały do selektora organizacji (migracja 0033 sprząta zaległości).
+ * Wiersze `organizationMembers` lecą kaskadowo po FK.
+ */
+async function cleanupProject(projectId: string, organizationId: string) {
   await db.delete(projects).where(eq(projects.id, projectId));
+  await db.delete(organizations).where(eq(organizations.id, organizationId));
 }
 
 async function run() {
-  const projectId = await createTestProject();
+  const { projectId, organizationId } = await createTestProject();
 
-  const [segment] = await db
-    .insert(segments)
-    .values({ projectId, name: "Seg sceny", code: "SC1" })
-    .returning();
+  try {
+    const [segment] = await db
+      .insert(segments)
+      .values({ projectId, name: "Seg sceny", code: "SC1" })
+      .returning();
 
-  const [stage] = await db
-    .insert(purchaseStages)
-    .values({
-      segmentId: segment.id,
-      name: "Etap test",
-      phase: "awareness",
-      orderIdx: 0,
-    })
-    .returning();
+    const [stage] = await db
+      .insert(purchaseStages)
+      .values({
+        segmentId: segment.id,
+        name: "Etap test",
+        phase: "awareness",
+        orderIdx: 0,
+      })
+      .returning();
 
-  const [element] = await db
-    .insert(funnelElements)
-    .values({
-      stageId: stage.id,
-      segmentId: segment.id,
-      name: "Element test",
-      format: "Post",
-      status: "active",
-      position: 0,
-    })
-    .returning();
+    const [element] = await db
+      .insert(funnelElements)
+      .values({
+        stageId: stage.id,
+        segmentId: segment.id,
+        name: "Element test",
+        format: "Post",
+        status: "active",
+        position: 0,
+      })
+      .returning();
 
-  const [flow] = await db
-    .insert(userFlows)
-    .values({
+    const [flow] = await db
+      .insert(userFlows)
+      .values({
+        projectId,
+        segmentId: segment.id,
+        entryElementId: element.id,
+        name: "Flow test",
+        status: "active",
+      })
+      .returning();
+
+    const [page] = await db
+      .insert(pages)
+      .values({
+        projectId,
+        name: "Landing test",
+        urlPath: "/test",
+        status: "draft",
+      })
+      .returning();
+
+    await createRelation(
       projectId,
-      segmentId: segment.id,
-      entryElementId: element.id,
-      name: "Flow test",
-      status: "active",
-    })
-    .returning();
+      {
+        source: { type: "flow", id: flow.id },
+        target: { type: "page", id: page.id },
+        relationType: "prowadzi_przez",
+      },
+      { source: "human" }
+    );
 
-  const [page] = await db
-    .insert(pages)
-    .values({
-      projectId,
-      name: "Landing test",
-      urlPath: "/test",
-      status: "draft",
-    })
-    .returning();
+    await test("scena entity: flow ma element/segment upstream i page downstream", async () => {
+      const scene = await getConstellationScene(projectId, {
+        level: "entity",
+        ref: { type: "flow", id: flow.id },
+      });
 
-  await createRelation(
-    projectId,
-    {
-      source: { type: "flow", id: flow.id },
-      target: { type: "page", id: page.id },
-      relationType: "prowadzi_przez",
-    },
-    { source: "human" }
-  );
+      const upstreamIds = new Set(scene.upstream.map((n) => n.id));
+      assert.ok(
+        upstreamIds.has(entityNodeId("element", element.id)),
+        "brak elementu w upstream"
+      );
+      assert.ok(
+        upstreamIds.has(entityNodeId("segment", segment.id)),
+        "brak segmentu w upstream"
+      );
 
-  await test("scena entity: flow ma element/segment upstream i page downstream", async () => {
-    const scene = await getConstellationScene(projectId, {
-      level: "entity",
-      ref: { type: "flow", id: flow.id },
+      const downstreamIds = new Set(scene.downstream.map((n) => n.id));
+      assert.ok(
+        downstreamIds.has(entityNodeId("page", page.id)),
+        "brak podstrony w downstream"
+      );
     });
 
-    const upstreamIds = new Set(scene.upstream.map((n) => n.id));
-    assert.ok(
-      upstreamIds.has(entityNodeId("element", element.id)),
-      "brak elementu w upstream"
-    );
-    assert.ok(
-      upstreamIds.has(entityNodeId("segment", segment.id)),
-      "brak segmentu w upstream"
-    );
+    await test("scena area lejek: segmenty upstream, strona downstream (AREA_DEPENDENCIES)", async () => {
+      const scene = await getConstellationScene(projectId, {
+        level: "area",
+        area: "lejek",
+      });
 
-    const downstreamIds = new Set(scene.downstream.map((n) => n.id));
-    assert.ok(
-      downstreamIds.has(entityNodeId("page", page.id)),
-      "brak podstrony w downstream"
-    );
-  });
+      const upstreamIds = new Set(scene.upstream.map((n) => n.id));
+      assert.ok(
+        upstreamIds.has(areaNodeId("segmenty")),
+        "brak obszaru segmenty w upstream"
+      );
 
-  await test("scena area lejek: segmenty upstream, strona downstream (AREA_DEPENDENCIES)", async () => {
-    const scene = await getConstellationScene(projectId, {
-      level: "area",
-      area: "lejek",
+      const downstreamIds = new Set(scene.downstream.map((n) => n.id));
+      assert.ok(
+        downstreamIds.has(areaNodeId("strona")),
+        "brak obszaru strona w downstream"
+      );
     });
+  } finally {
+    await cleanupProject(projectId, organizationId);
+  }
 
-    const upstreamIds = new Set(scene.upstream.map((n) => n.id));
-    assert.ok(
-      upstreamIds.has(areaNodeId("segmenty")),
-      "brak obszaru segmenty w upstream"
-    );
-
-    const downstreamIds = new Set(scene.downstream.map((n) => n.id));
-    assert.ok(
-      downstreamIds.has(areaNodeId("strona")),
-      "brak obszaru strona w downstream"
-    );
-  });
-
-  await cleanupProject(projectId);
   console.log(`\n${passed} testów scen konstelacji OK`);
   process.exit(0);
 }

@@ -5,36 +5,51 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "crypto";
 import { db } from "@/db";
-import { projects, workspaces } from "@/db/schema";
+import { projects, organizations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { getListEntity } from "@/lib/strategy-hub/entities/registry";
 import { undoBatch } from "@/lib/strategy-hub/undo";
 import { trackChange } from "@/lib/strategy-hub/track-change";
 
-async function createTestProject(): Promise<string> {
-  const wsId = randomUUID();
+async function createTestProject(): Promise<{
+  projectId: string;
+  organizationId: string;
+}> {
+  const organizationId = randomUUID();
   const projectId = randomUUID();
-  await db.insert(workspaces).values({
-    id: wsId,
+  await db.insert(organizations).values({
+    id: organizationId,
     name: "Test undo",
     ownerId: randomUUID(),
     ownerEmail: `test-undo-${randomUUID()}@example.com`,
   });
   await db.insert(projects).values({
     id: projectId,
-    workspaceId: wsId,
+    organizationId,
     name: "Projekt test undo",
     slug: `test-undo-${randomUUID().slice(0, 8)}`,
   });
-  return projectId;
+  return { projectId, organizationId };
+}
+
+/**
+ * Sprząta CAŁĄ piaskownicę: projekt i organizację utworzoną na ten przebieg.
+ * Kasowanie samego projektu zostawiało organizacje-śmieci, które po refaktorze
+ * trafiały do selektora organizacji (migracja 0033 sprząta zaległości).
+ * Wiersze `organizationMembers` lecą kaskadowo po FK.
+ */
+async function cleanupProject(projectId: string, organizationId: string) {
+  await db.delete(projects).where(eq(projects.id, projectId));
+  await db.delete(organizations).where(eq(organizations.id, organizationId));
 }
 
 async function main() {
   const prevVoyage = process.env.VOYAGE_API_KEY;
   delete process.env.VOYAGE_API_KEY;
 
+  const { projectId, organizationId } = await createTestProject();
+
   try {
-  const projectId = await createTestProject();
   const segmentsDef = getListEntity("segments");
   assert.ok(segmentsDef);
 
@@ -107,9 +122,9 @@ async function main() {
   r = await undoBatch(projectId, batchUpdate, null);
   assert.equal(r.undone, 0);
 
-  await db.delete(projects).where(eq(projects.id, projectId));
   console.log("\n✅ test-undo OK");
   } finally {
+    await cleanupProject(projectId, organizationId);
     if (prevVoyage) process.env.VOYAGE_API_KEY = prevVoyage;
   }
   process.exit(0);

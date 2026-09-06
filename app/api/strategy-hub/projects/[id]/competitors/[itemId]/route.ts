@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   requireProjectAccess,
+  requireOwnFoundation,
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
@@ -34,6 +35,11 @@ export async function PATCH(
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
 
+  // Bez tej bramki edycja konkurenta z fundamentu dziedziczonego kończy się
+  // mylącym 404 (rekord należy do przodka) zamiast czytelnym 409.
+  const own = await requireOwnFoundation(id);
+  if (!own.ok) return own.response;
+
   const parsed = patchSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());
 
@@ -59,6 +65,9 @@ export async function DELETE(
   const { id, itemId } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+
+  const own = await requireOwnFoundation(id);
+  if (!own.ok) return own.response;
 
   const updated = await db
     .update(competitors)

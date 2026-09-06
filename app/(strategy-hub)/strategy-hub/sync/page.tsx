@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import {
   requireStrategyHubAccess,
-  getOrCreateWorkspaceForAdmin,
+  getCurrentOrganizationForAdmin,
 } from "@/lib/strategy-hub/context";
 import { db } from "@/db";
 import { projects, notionSyncLog } from "@/db/schema";
@@ -13,11 +13,11 @@ export const metadata: Metadata = {
 };
 
 /**
- * Scoped do workspace admina — bez tego widok pokazywał projekty WSZYSTKICH
- * workspace'ów (wyciek multi-tenant, audyt 2026-07). Log synca dociągany
- * jednym zapytaniem `DISTINCT ON` zamiast N+1 per projekt.
+ * Scoped do bieżącej organizacji — bez tego widok pokazywał projekty
+ * WSZYSTKICH tenantów (wyciek multi-tenant, audyt 2026-07). Log synca
+ * dociągany jednym zapytaniem `DISTINCT ON` zamiast N+1 per projekt.
  */
-async function getSyncProjects(workspaceId: string): Promise<SyncProject[]> {
+async function getSyncProjects(organizationId: string): Promise<SyncProject[]> {
   const rows = await db
     .select({
       id: projects.id,
@@ -26,7 +26,7 @@ async function getSyncProjects(workspaceId: string): Promise<SyncProject[]> {
       notionPageUrl: projects.notionPageUrl,
     })
     .from(projects)
-    .where(and(isNull(projects.deletedAt), eq(projects.workspaceId, workspaceId)))
+    .where(and(isNull(projects.deletedAt), eq(projects.organizationId, organizationId)))
     .orderBy(desc(projects.updatedAt));
 
   if (rows.length === 0) return [];
@@ -67,7 +67,7 @@ async function getSyncProjects(workspaceId: string): Promise<SyncProject[]> {
 
 export default async function SyncPage() {
   const access = await requireStrategyHubAccess();
-  const ws = await getOrCreateWorkspaceForAdmin(access.session.email);
-  const items = await getSyncProjects(ws.id);
+  const organization = await getCurrentOrganizationForAdmin(access.session.email);
+  const items = await getSyncProjects(organization.id);
   return <SyncDashboard projects={items} />;
 }

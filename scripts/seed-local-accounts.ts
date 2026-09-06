@@ -8,65 +8,98 @@ import { db } from "@/db";
 import {
   adminUsers,
   clientUsers,
+  organizationMembers,
+  organizations,
   projectClients,
   projects,
-  workspaces,
 } from "@/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 import { hashPassword } from "@/lib/auth";
 
-async function getOrCreateWorkspaceForAdminSeed(email: string) {
-  const normalized = email.toLowerCase().trim();
-  const [adminRow] = await db
-    .select()
-    .from(adminUsers)
-    .where(eq(adminUsers.email, normalized))
-    .limit(1);
-
-  if (adminRow?.workspaceId) {
-    const [ws] = await db
-      .select()
-      .from(workspaces)
-      .where(eq(workspaces.id, adminRow.workspaceId))
-      .limit(1);
-    if (ws) return ws;
-  }
-
-  const existing = await db
-    .select()
-    .from(workspaces)
-    .where(eq(workspaces.ownerEmail, normalized))
-    .limit(1);
-
-  const ws =
-    existing[0] ??
-    (
-      await db
-        .insert(workspaces)
-        .values({
-          name: normalized.split("@")[0] ?? "Workspace",
-          ownerEmail: normalized,
-          ownerId: "00000000-0000-0000-0000-000000000001",
-        })
-        .returning()
-    )[0];
-
-  if (adminRow && !adminRow.workspaceId) {
-    await db
-      .update(adminUsers)
-      .set({ workspaceId: ws.id })
-      .where(eq(adminUsers.id, adminRow.id));
-  }
-
-  return ws;
+/** Slug organizacji z dowolnego tekstu (ten sam kształt co w context.ts). */
+function toSlug(input: string): string {
+  const base = input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-+|-+$)/g, "");
+  return base.slice(0, 90) || "organizacja";
 }
 
-async function ensureAdminWorkspaceProject(adminEmail: string) {
-  const ws = await getOrCreateWorkspaceForAdminSeed(adminEmail);
+/** Wolny slug — indeks `organizations_slug_uq` jest globalny. */
+async function findFreeSlug(base: string): Promise<string> {
+  let slug = base;
+  for (let i = 2; i < 100; i += 1) {
+    const [taken] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, slug))
+      .limit(1);
+    if (!taken) return slug;
+    slug = `${base}-${i}`;
+  }
+  return `${base}-${randomUUID().slice(0, 8)}`;
+}
+
+/**
+ * Organizacja konta seedowego + JEGO CZŁONKOSTWO.
+ *
+ * O dostępie admina decyduje wyłącznie wiersz w `organizationMembers` —
+ * `organizations.ownerEmail` jest tylko śladem po twórcy, a
+ * `adminUsers.organizationId` jest @deprecated. Bez wstawienia członkostwa
+ * zaseedowane konto nie zobaczyłoby żadnej organizacji.
+ */
+async function getOrCreateOrganizationForAdminSeed(
+  adminUserId: string,
+  email: string
+) {
+  const normalized = email.toLowerCase().trim();
+
+  const [existing] = await db
+    .select({ organization: organizations })
+    .from(organizationMembers)
+    .innerJoin(
+      organizations,
+      eq(organizations.id, organizationMembers.organizationId)
+    )
+    .where(
+      and(
+        eq(organizationMembers.adminUserId, adminUserId),
+        isNull(organizations.deletedAt)
+      )
+    )
+    .limit(1);
+
+  if (existing) return existing.organization;
+
+  const name = normalized.split("@")[0] ?? "Organizacja";
+  const [org] = await db
+    .insert(organizations)
+    .values({
+      name,
+      slug: await findFreeSlug(toSlug(name)),
+      ownerEmail: normalized,
+      ownerId: "00000000-0000-0000-0000-000000000001",
+    })
+    .returning();
+
+  await db
+    .insert(organizationMembers)
+    .values({ organizationId: org.id, adminUserId, role: "owner" })
+    .onConflictDoNothing();
+
+  console.log(`Organization created for admin: ${org.name} (${org.id})`);
+  return org;
+}
+
+async function ensureAdminOrganizationProject(
+  adminUserId: string,
+  adminEmail: string
+) {
+  const org = await getOrCreateOrganizationForAdminSeed(adminUserId, adminEmail);
   const [existing] = await db
     .select({ id: projects.id, name: projects.name })
     .from(projects)
-    .where(and(eq(projects.workspaceId, ws.id), isNull(projects.deletedAt)))
+    .where(and(eq(projects.organizationId, org.id), isNull(projects.deletedAt)))
     .limit(1);
 
   if (existing) {
@@ -82,9 +115,9 @@ async function ensureAdminWorkspaceProject(adminEmail: string) {
   if (anyProject) {
     await db
       .update(projects)
-      .set({ workspaceId: ws.id, updatedAt: new Date() })
+      .set({ organizationId: org.id, updatedAt: new Date() })
       .where(eq(projects.id, anyProject.id));
-    console.log(`Assigned project to admin workspace: ${anyProject.name}`);
+    console.log(`Assigned project to admin organization: ${anyProject.name}`);
     return anyProject;
   }
 
@@ -94,13 +127,15 @@ async function ensureAdminWorkspaceProject(adminEmail: string) {
   };
   await db.insert(projects).values({
     id: created.id,
-    workspaceId: ws.id,
+    organizationId: org.id,
     slug: "e2e-demo",
     name: created.name,
     status: "active",
     updatedAt: new Date(),
   });
-  console.log(`Created E2E demo project in admin workspace: ${created.name}`);
+  console.log(
+    `Created E2E demo project in admin organization: ${created.name}`
+  );
   return created;
 }
 
@@ -114,9 +149,11 @@ async function main() {
     .where(eq(adminUsers.email, adminEmail))
     .limit(1);
 
+  const adminId = existingAdmin?.id ?? randomUUID();
+
   if (!existingAdmin) {
     await db.insert(adminUsers).values({
-      id: randomUUID(),
+      id: adminId,
       email: adminEmail,
       passwordHash: await hashPassword(adminPassword),
     });
@@ -178,7 +215,7 @@ async function main() {
     console.log("Client already has project access");
   }
 
-  const e2eProject = await ensureAdminWorkspaceProject(adminEmail);
+  const e2eProject = await ensureAdminOrganizationProject(adminId, adminEmail);
   const [clientAccess] = await db
     .select({ id: projectClients.id })
     .from(projectClients)

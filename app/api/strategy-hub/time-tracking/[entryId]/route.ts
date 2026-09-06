@@ -7,7 +7,10 @@ import {
   badRequest,
   notFound,
 } from "@/lib/strategy-hub/api-helpers";
-import { getOrCreateWorkspaceForAdmin } from "@/lib/strategy-hub/context";
+import {
+  getOrganizationRole,
+  getProjectForAdmin,
+} from "@/lib/strategy-hub/context";
 import {
   computeDurationMinutes,
   isWorkType,
@@ -51,8 +54,12 @@ function mapEntry(
   };
 }
 
+/**
+ * Wpis widoczny dla admina: projekt wpisu musi należeć do KTÓREJKOLWIEK
+ * organizacji, w której admin ma członkostwo (`organizationMembers`).
+ * `null` = brak wpisu albo brak dostępu — celowo nie rozróżniamy.
+ */
 async function getEntryForUser(entryId: string, email: string) {
-  const ws = await getOrCreateWorkspaceForAdmin(email);
   const rows = await db
     .select({
       entry: timeEntries,
@@ -60,7 +67,7 @@ async function getEntryForUser(entryId: string, email: string) {
       projectIcon: projects.icon,
       hourlyRateDevelopment: projects.hourlyRateDevelopment,
       hourlyRateMaintenance: projects.hourlyRateMaintenance,
-      workspaceId: projects.workspaceId,
+      organizationId: projects.organizationId,
     })
     .from(timeEntries)
     .innerJoin(projects, eq(timeEntries.projectId, projects.id))
@@ -68,7 +75,11 @@ async function getEntryForUser(entryId: string, email: string) {
     .limit(1);
 
   const row = rows[0];
-  if (!row || row.workspaceId !== ws.id) return null;
+  if (!row) return null;
+
+  const role = await getOrganizationRole(email, row.organizationId);
+  if (!role) return null;
+
   return row;
 }
 
@@ -109,6 +120,28 @@ export async function PATCH(
     durationMinutes = null;
   }
 
+  let projectName = row.projectName;
+  let projectIcon = row.projectIcon;
+  let hourlyRateDevelopment = row.hourlyRateDevelopment;
+  let hourlyRateMaintenance = row.hourlyRateMaintenance;
+
+  // Przeniesienie wpisu do innego projektu walidujemy PRZED zapisem — projekt
+  // docelowy musi leżeć w organizacji admina, inaczej wpis wyciekłby do cudzego
+  // tenanta mimo zwróconego 400.
+  if (parsed.data.projectId && parsed.data.projectId !== row.entry.projectId) {
+    const project = await getProjectForAdmin(
+      parsed.data.projectId,
+      auth.access.session.email
+    );
+    if (!project) {
+      return badRequest("Nieprawidłowy projekt.");
+    }
+    projectName = project.name;
+    projectIcon = project.icon;
+    hourlyRateDevelopment = project.hourlyRateDevelopment;
+    hourlyRateMaintenance = project.hourlyRateMaintenance;
+  }
+
   const [updated] = await db
     .update(timeEntries)
     .set({
@@ -125,40 +158,6 @@ export async function PATCH(
     })
     .where(eq(timeEntries.id, entryId))
     .returning();
-
-  let projectName = row.projectName;
-  let projectIcon = row.projectIcon;
-  let hourlyRateDevelopment = row.hourlyRateDevelopment;
-  let hourlyRateMaintenance = row.hourlyRateMaintenance;
-
-  if (parsed.data.projectId && parsed.data.projectId !== row.entry.projectId) {
-    const projectRows = await db
-      .select({
-        name: projects.name,
-        icon: projects.icon,
-        hourlyRateDevelopment: projects.hourlyRateDevelopment,
-        hourlyRateMaintenance: projects.hourlyRateMaintenance,
-        workspaceId: projects.workspaceId,
-      })
-      .from(projects)
-      .where(
-        and(
-          eq(projects.id, parsed.data.projectId),
-          isNull(projects.deletedAt)
-        )
-      )
-      .limit(1);
-
-    const project = projectRows[0];
-    const ws = await getOrCreateWorkspaceForAdmin(auth.access.session.email);
-    if (!project || project.workspaceId !== ws.id) {
-      return badRequest("Nieprawidłowy projekt.");
-    }
-    projectName = project.name;
-    projectIcon = project.icon;
-    hourlyRateDevelopment = project.hourlyRateDevelopment;
-    hourlyRateMaintenance = project.hourlyRateMaintenance;
-  }
 
   return NextResponse.json({
     entry: mapEntry({

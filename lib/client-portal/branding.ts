@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/db";
-import { projects, workspaceBranding } from "@/db/schema";
+import { projects, organizationBranding } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 interface BrandColor {
@@ -10,7 +10,7 @@ interface BrandColor {
   role: string;
 }
 
-export interface WorkspaceBranding {
+export interface OrganizationBranding {
   logoUrl: string | null;
   colors: BrandColor[];
   customDomain: string | null;
@@ -18,22 +18,28 @@ export interface WorkspaceBranding {
 
 /**
  * White-label (Faza 15/17): branding portalu klienta pobierany po projekcie,
- * bo layout klienta zna tylko `slug` -> `projectId`, nigdy `workspaceId`
- * bezpośrednio. `logoFileId` przechowuje pełny URL (brak infrastruktury
- * uploadu plików w repo — patrz ADR w komentarzu do settings/branding).
+ * bo layout klienta zna tylko `slug` -> `projectId`, nigdy `organizationId`
+ * bezpośrednio. Ścieżka: projekt -> `projects.organizationId` ->
+ * `organizationBranding`. Dzięki temu każda organizacja (klient) ma własny
+ * branding, a nie jeden wspólny dla całej agencji. `logoFileId` przechowuje
+ * pełny URL (brak infrastruktury uploadu plików w repo — patrz ADR
+ * w komentarzu do settings/branding).
  */
-export async function getWorkspaceBrandingForProject(
+export async function getOrganizationBrandingForProject(
   projectId: string
-): Promise<WorkspaceBranding | null> {
+): Promise<OrganizationBranding | null> {
   const [row] = await db
     .select({
-      logoFileId: workspaceBranding.logoFileId,
-      colors: workspaceBranding.colors,
-      customDomain: workspaceBranding.customDomain,
-      status: workspaceBranding.status,
+      logoFileId: organizationBranding.logoFileId,
+      colors: organizationBranding.colors,
+      customDomain: organizationBranding.customDomain,
+      status: organizationBranding.status,
     })
     .from(projects)
-    .innerJoin(workspaceBranding, eq(workspaceBranding.workspaceId, projects.workspaceId))
+    .innerJoin(
+      organizationBranding,
+      eq(organizationBranding.organizationId, projects.organizationId)
+    )
     .where(eq(projects.id, projectId))
     .limit(1);
 
@@ -49,13 +55,14 @@ export async function getWorkspaceBrandingForProject(
   };
 }
 
-export async function getWorkspaceBrandingForWorkspace(
-  workspaceId: string
-): Promise<WorkspaceBranding & { status: string }> {
+/** Branding jednej organizacji (panel ustawień) — brak wiersza = wartości domyślne. */
+export async function getOrganizationBranding(
+  organizationId: string
+): Promise<OrganizationBranding & { status: string }> {
   const [row] = await db
     .select()
-    .from(workspaceBranding)
-    .where(eq(workspaceBranding.workspaceId, workspaceId))
+    .from(organizationBranding)
+    .where(eq(organizationBranding.organizationId, organizationId))
     .limit(1);
 
   return {

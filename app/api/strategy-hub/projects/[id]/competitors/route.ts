@@ -3,7 +3,12 @@ import { db } from "@/db";
 import { competitors } from "@/db/schema";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
-import { requireProjectAccess, badRequest } from "@/lib/strategy-hub/api-helpers";
+import {
+  requireProjectAccess,
+  requireOwnFoundation,
+  badRequest,
+} from "@/lib/strategy-hub/api-helpers";
+import { resolveFoundationSource } from "@/lib/strategy-hub/scope";
 
 const TYPES = ["direct", "indirect", "none"] as const;
 const coord = z.number().min(-1).max(1);
@@ -30,6 +35,9 @@ export async function GET(
   const { id } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+  // Konkurencja to fundament (W0): czytamy z projektu-źródła, ale autoryzacja
+  // została wykonana na `id` pytającego — nigdy na projekcie źródłowym.
+  const readId = (await resolveFoundationSource(id)).projectId;
   const pathId = new URL(req.url).searchParams.get("pathId");
   const pathFilter = pathId
     ? or(eq(competitors.pathId, pathId), isNull(competitors.pathId))
@@ -40,7 +48,7 @@ export async function GET(
     .from(competitors)
     .where(
       and(
-        eq(competitors.projectId, id),
+        eq(competitors.projectId, readId),
         isNull(competitors.deletedAt),
         pathFilter
       )
@@ -57,6 +65,9 @@ export async function POST(
   const { id } = await params;
   const auth = await requireProjectAccess(id);
   if (!auth.ok) return auth.response;
+  // Zapis wyłącznie do własnego fundamentu — patrz JSDoc requireOwnFoundation.
+  const own = await requireOwnFoundation(id);
+  if (!own.ok) return own.response;
 
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) return badRequest("Invalid input", parsed.error.flatten());

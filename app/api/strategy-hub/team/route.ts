@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminSession } from "@/lib/auth";
-import { getAdminRole } from "@/lib/strategy-hub/context";
 import { badRequest } from "@/lib/strategy-hub/api-helpers";
 import {
   TeamAccessError,
+  getTeamOverview,
   inviteMember,
-  listWorkspaceMembers,
 } from "@/lib/strategy-hub/team";
 
 const inviteSchema = z.object({ email: z.email().max(255) });
@@ -15,11 +14,17 @@ export async function GET() {
   const session = await getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const [members, role] = await Promise.all([
-    listWorkspaceMembers(session.email),
-    getAdminRole(session.email),
-  ]);
-  return NextResponse.json({ members, currentEmail: session.email, currentRole: role });
+  const overview = await getTeamOverview(session.email);
+  return NextResponse.json({
+    members: overview.members,
+    currentEmail: session.email,
+    currentRole: overview.currentRole,
+    // Zespół jest zespołem konkretnej organizacji — klient musi wiedzieć której.
+    organization: {
+      id: overview.organizationId,
+      name: overview.organizationName,
+    },
+  });
 }
 
 export async function POST(req: NextRequest) {

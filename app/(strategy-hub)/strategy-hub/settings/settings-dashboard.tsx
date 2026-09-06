@@ -218,7 +218,7 @@ export function SettingsDashboard() {
           <div>
             <h2 className="text-sm font-semibold text-foreground">Zespół</h2>
             <p className="text-xs text-muted-foreground">
-              Zaproś współpracowników do wspólnego workspace
+              Zaproś współpracowników do wspólnej organizacji
             </p>
           </div>
         </div>

@@ -32,6 +32,7 @@ import { resolveStatusesFromContext, type ModuleState } from "./rules/state";
 import { projectModuleHref } from "./area-routes";
 import { computeProjectCoverage, coverageRatio } from "./journey-coverage";
 import { pluralCount } from "./pluralize";
+import { resolveFoundationSource } from "./scope";
 
 interface ModuleHealth {
   key: string;
@@ -102,10 +103,18 @@ export async function computeProjectHealth(
 ): Promise<ProjectHealth> {
   // Gap engine podróży zakupowej — jedno źródło prawdy o kompletności maszyny
   // (Journey/Canvas/Pipeline liczą z tego samego; audyt 2026-07-17).
-  const [rules, journey] = await Promise.all([
+  const [rules, journey, foundation] = await Promise.all([
     resolveRules(projectId),
     computeProjectCoverage(projectId),
+    resolveFoundationSource(projectId),
   ]);
+
+  // Projekt w trybie `dziedziczona` czyta encje FUNDAMENTU (W0) z przodka.
+  // Bez tego moduły `brand` i `fundament` liczyłyby się z pustych tabel
+  // lokalnych i pokazywały 0%, mimo kompletnej strategii u rodzica.
+  // Wszystko poza W0 (segmenty, lejek, kanały, strony, KPI, coverage) jest
+  // zawsze lokalne i zostaje na `projectId`.
+  const fundamentId = foundation.projectId;
 
   // Kontekst kryteriów — te same tabele i filtry co `strategy-map.ts`
   // (jedna taksonomia = health i mapa liczą z tych samych danych).
@@ -137,20 +146,20 @@ export async function computeProjectHealth(
     db
       .select()
       .from(brandIdentity)
-      .where(eq(brandIdentity.projectId, projectId))
+      .where(eq(brandIdentity.projectId, fundamentId))
       .limit(1)
       .then((r) => r[0]),
     db
       .select()
       .from(brandVisual)
-      .where(eq(brandVisual.projectId, projectId))
+      .where(eq(brandVisual.projectId, fundamentId))
       .limit(1)
       .then((r) => r[0]),
-    db.select().from(uvp).where(eq(uvp.projectId, projectId)).limit(1).then((r) => r[0]),
+    db.select().from(uvp).where(eq(uvp.projectId, fundamentId)).limit(1).then((r) => r[0]),
     db
       .select()
       .from(copyGuidelines)
-      .where(eq(copyGuidelines.projectId, projectId))
+      .where(eq(copyGuidelines.projectId, fundamentId))
       .limit(1)
       .then((r) => r[0]),
     db
@@ -160,7 +169,7 @@ export async function computeProjectHealth(
         antiIcpMd: brandPositioning.antiIcpMd,
       })
       .from(brandPositioning)
-      .where(eq(brandPositioning.projectId, projectId))
+      .where(eq(brandPositioning.projectId, fundamentId))
       .limit(1)
       .then((r) => r[0]),
     db
@@ -218,7 +227,7 @@ export async function computeProjectHealth(
       .from(businessProblems)
       .where(
         and(
-          eq(businessProblems.projectId, projectId),
+          eq(businessProblems.projectId, fundamentId),
           isNull(businessProblems.deletedAt)
         )
       ),
@@ -226,7 +235,7 @@ export async function computeProjectHealth(
       .select({ count: count() })
       .from(competitors)
       .where(
-        and(eq(competitors.projectId, projectId), isNull(competitors.deletedAt))
+        and(eq(competitors.projectId, fundamentId), isNull(competitors.deletedAt))
       ),
     db
       .select({ count: count() })
