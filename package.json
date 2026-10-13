@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx scripts/test-rules.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-relations.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-embeddings.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-undo.ts && tsx scripts/test-constellation-layout.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-constellation-scenes.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-thread.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-blueprint.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-journey.ts",
+    "test": "tsx scripts/test-wektoryzator.ts && tsx scripts/test-rules.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-relations.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-embeddings.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-undo.ts && tsx scripts/test-constellation-layout.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-constellation-scenes.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-thread.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-blueprint.ts && node --require ./scripts/stub-server-only.cjs --import tsx --env-file=.env.local scripts/test-journey.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "db:seed": "npx tsx --env-file=.env.local scripts/seed-local-accounts.ts",
@@ -19,7 +19,8 @@
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:migrate": "drizzle-kit migrate",
     "drizzle:push": "drizzle-kit push",
-    "drizzle:studio": "drizzle-kit studio"
+    "drizzle:studio": "drizzle-kit studio",
+    "sync:vtracer": "node scripts/sync-vtracer.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
@@ -41,6 +42,7 @@
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
+    "fflate": "0.8.3",
     "html-to-image": "^1.11.13",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.577.0",
@@ -57,7 +59,8 @@
     "shadcn": "^4.8.1",
     "tailwind-merge": "^3.6.0",
     "tw-animate-css": "^1.4.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "zustand": "5.0.15"
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^16.2.9",
@@ -69,6 +72,7 @@
     "@types/pg": "^8.18.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@visioncortex/vtracer": "1.0.0-alpha.4",
     "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.7",

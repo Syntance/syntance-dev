@@ -21,6 +21,7 @@ import {
   Sparkles,
   LayoutDashboard,
   Clock,
+  PenTool,
   Stethoscope,
   MessageSquare,
   Network,
@@ -274,6 +275,13 @@ function CommandPalette({
               >
                 <Clock />
                 <span>Liczenie godzin</span>
+              </CommandItem>
+              <CommandItem
+                value="wektoryzator wektoryzacja svg vector png jpg"
+                onSelect={() => go("/strategy-hub/apps/wektoryzator")}
+              >
+                <PenTool />
+                <span>Wektoryzator</span>
               </CommandItem>
             </CommandGroup>
 

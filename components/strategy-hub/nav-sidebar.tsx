@@ -22,6 +22,7 @@ import {
   Orbit,
   LogOut,
   Clock,
+  PenTool,
   Puzzle,
   ChevronRight,
   SlidersHorizontal,
@@ -78,6 +79,12 @@ const customAppItems = [
     description: "Timer · wpisy · rozliczenia",
     href: "/strategy-hub/apps/time-tracking",
     icon: Clock,
+  },
+  {
+    label: "Wektoryzator",
+    description: "PNG/JPG → SVG · warstwy · eksport",
+    href: "/strategy-hub/apps/wektoryzator",
+    icon: PenTool,
   },
 ];
 

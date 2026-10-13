@@ -1,0 +1,107 @@
+/* Płótno wektoryzatora. Kolory kształtów przychodzą z dynamicznego <style> (klasy .sN). */
+
+.canvas {
+  --wkz-checker-a: color-mix(in oklch, var(--muted) 92%, var(--foreground) 8%);
+  --wkz-checker-b: color-mix(in oklch, var(--muted) 70%, var(--background) 30%);
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.checker {
+  background-color: var(--wkz-checker-b);
+  background-image: conic-gradient(var(--wkz-checker-a) 25%, transparent 0 50%, var(--wkz-checker-a) 0 75%, transparent 0);
+  background-size: 20px 20px;
+}
+
+.light {
+  background-color: oklch(0.97 0.004 90);
+}
+
+.dark {
+  background-color: oklch(0.2 0.01 265);
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.stage path {
+  stroke-width: 0;
+}
+
+.stage[data-gap="on"] path {
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+}
+
+.stage[data-outline="on"] path {
+  fill: none !important;
+  stroke: var(--primary) !important;
+  stroke-width: 1px !important;
+  vector-effect: non-scaling-stroke;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  transition:
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease-out;
+}
+
+.layer[data-locked="true"] {
+  pointer-events: none;
+}
+
+.layer[data-dim="true"] {
+  opacity: 0.18;
+}
+
+.selection path {
+  fill: color-mix(in oklch, var(--primary) 22%, transparent);
+  stroke: var(--primary);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.explodable {
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.layerLabel {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  margin-right: 0.75em;
+  white-space: nowrap;
+  border-radius: 0.4em;
+  padding: 0.15em 0.5em;
+  background: color-mix(in oklch, var(--card) 88%, transparent);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  pointer-events: none;
+}
+
+.dropzone[data-active="true"] {
+  border-color: var(--primary);
+  background-color: color-mix(in oklch, var(--primary) 7%, transparent);
+}
+
+.traceLine {
+  position: absolute;
+  inset-block: 0;
+  width: 2px;
+  background: var(--primary);
+  box-shadow: 0 0 18px 2px color-mix(in oklch, var(--primary) 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layer,
+  .explodable {
+    transition: none;
+  }
+}
